@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import time
 import xml.etree.ElementTree as ET
 import requests
@@ -72,61 +73,102 @@ class YoutubeDownloader(BaseDownloader):
             endpoint = f"/api/v1/youtube/web/get_video_info"
             params = {"video_id": video_id}
             
+            logger.info(f"调用TikHub API获取YouTube视频信息: video_id={video_id}")
             response = self.make_api_request(endpoint, params)
             
+            # 记录API响应摘要，帮助调试
+            if isinstance(response, dict):
+                response_code = response.get("code")
+                response_msg = response.get("message", "无消息")
+                logger.info(f"API响应状态: {response_code}, 消息: {response_msg}")
+                
+                # 保存完整响应到文件，用于调试
+                debug_file = f"debug_youtube_{video_id}.json"
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    json.dump(response, f, ensure_ascii=False, indent=2)
+                logger.debug(f"API完整响应已保存到: {debug_file}")
+            
+            # 检查响应格式并提供详细错误信息
+            if not isinstance(response, dict):
+                logger.error(f"API返回格式错误，预期字典，实际: {type(response)}")
+                raise ValueError("API返回格式错误，无法解析响应")
+            
+            # TikHub API成功响应时返回code=200
+            if response.get("code") != 200:
+                error_msg = response.get("message", "未知错误")
+                logger.error(f"API返回错误代码: {response.get('code')}, 错误信息: {error_msg}")
+                raise ValueError(f"获取YouTube视频信息失败: {error_msg}")
+            
+            # 检查data字段
+            if not response.get("data"):
+                logger.error("API响应中缺少data字段或格式不正确")
+                raise ValueError("API响应数据格式错误，缺少必要字段")
+            
             # 提取必要信息
-            if response.get("status") and response.get("data"):
-                data = response["data"]
+            data = response.get("data", {})
+            
+            # 视频标题
+            video_title = data.get("title", "")
+            if not video_title or video_title.strip() == "":
+                video_title = f"youtube_{video_id}"
+                logger.warning(f"未找到视频标题，使用ID作为标题: {video_title}")
+            
+            # 视频作者
+            author = data.get("channel", {}).get("name", "未知作者")
+            
+            logger.info(f"获取到视频信息: 标题='{video_title}', 作者='{author}'")
+            
+            # 尝试获取音频下载地址
+            download_url = None
+            file_ext = "mp4"  # 默认扩展名
+            
+            audio_items = data.get("audios", {}).get("items", [])
+            
+            if audio_items and len(audio_items) > 0:
+                download_url = audio_items[0].get("url")
+                file_ext = "m4a"  # YouTube音频通常为m4a格式
+                logger.info(f"找到音频下载URL: {download_url[:50]}...")
+            
+            if not download_url:
+                logger.error("无法获取YouTube视频音频下载地址")
+                raise ValueError(f"无法获取Youtube视频音频下载地址: {url}")
+            
+            # 清理文件名中的非法字符
+            safe_title = re.sub(r'[\\/*?:"<>|]', "_", video_title)
+            filename = f"youtube_{video_id}_{int(time.time())}.{file_ext}"
+            
+            # 获取字幕信息
+            subtitles = data.get("subtitles", {})
+            subtitle_info = None
+            
+            # 检查字幕数据
+            if subtitles and subtitles.get("items"):
+                subtitle_items = subtitles.get("items", [])
                 
-                # 视频标题
-                video_title = data.get("title", f"youtube_{video_id}")
+                # 优先选择中文字幕，其次是英文字幕
+                zh_subtitle = next((item for item in subtitle_items if item.get("code") == "zh"), None)
+                en_subtitle = next((item for item in subtitle_items if item.get("code") == "en"), None)
                 
-                # 视频作者
-                author = data.get("channel", {}).get("name", "未知作者")
+                subtitle_info = zh_subtitle or en_subtitle
                 
-                # 尝试获取音频下载地址
-                audio_items = data.get("audios", {}).get("items", [])
-                
-                download_url = None
-                if audio_items and len(audio_items) > 0:
-                    download_url = audio_items[0].get("url")
-                    file_ext = "m4a"  # YouTube音频通常为m4a格式
-                
-                if not download_url:
-                    raise ValueError(f"无法获取Youtube视频音频下载地址: {url}")
-                
-                # 清理文件名中的非法字符
-                safe_title = re.sub(r'[\\/*?:"<>|]', "_", video_title)
-                filename = f"youtube_{video_id}_{int(time.time())}.{file_ext}"
-                
-                # 获取字幕信息
-                subtitles = data.get("subtitles", {})
-                subtitle_info = None
-                
-                if subtitles and subtitles.get("status") and subtitles.get("items"):
-                    subtitle_items = subtitles["items"]
-                    
-                    # 优先选择中文字幕，其次是英文字幕
-                    zh_subtitle = next((item for item in subtitle_items if item.get("code") == "zh"), None)
-                    en_subtitle = next((item for item in subtitle_items if item.get("code") == "en"), None)
-                    
-                    subtitle_info = zh_subtitle or en_subtitle
-                
-                return {
-                    "video_id": video_id,
-                    "video_title": video_title,
-                    "author": author,
-                    "download_url": download_url,
-                    "filename": filename,
-                    "platform": "youtube",
-                    "subtitle_info": subtitle_info
-                }
-            else:
-                logger.error(f"获取Youtube视频信息失败: {response.get('message', '未知错误')}")
-                raise ValueError(f"获取Youtube视频信息失败: {response.get('message', '未知错误')}")
+                if subtitle_info:
+                    logger.info(f"找到字幕: 语言={subtitle_info.get('code', '未知')}")
+            
+            result = {
+                "video_id": video_id,
+                "video_title": video_title,
+                "author": author,
+                "download_url": download_url,
+                "filename": filename,
+                "platform": "youtube",
+                "subtitle_info": subtitle_info
+            }
+            
+            logger.info(f"成功获取YouTube视频信息: ID={video_id}, 文件类型={file_ext}")
+            return result
                 
         except Exception as e:
-            logger.exception(f"获取Youtube视频信息异常: {str(e)}")
+            logger.exception(f"获取YouTube视频信息异常: {str(e)}")
             raise
     
     def get_subtitle(self, url):
@@ -149,6 +191,8 @@ class YoutubeDownloader(BaseDownloader):
             
             # 下载字幕XML
             subtitle_url = subtitle_info["url"]
+            
+            logger.info(f"下载YouTube字幕: {subtitle_url[:50]}...")
             response = requests.get(subtitle_url, timeout=30)
             response.raise_for_status()
             
@@ -195,6 +239,7 @@ class YoutubeDownloader(BaseDownloader):
                 if text["content"]:
                     merged_text += text["content"] + " "
             
+            logger.info(f"成功解析YouTube字幕，共{len(texts)}段")
             return merged_text.strip()
         except Exception as e:
             logger.exception(f"解析Youtube字幕XML异常: {str(e)}")

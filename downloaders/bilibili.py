@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import time
 from downloaders.base import BaseDownloader
 from utils import setup_logger
@@ -63,64 +64,130 @@ class BilibiliDownloader(BaseDownloader):
             endpoint = f"/api/v1/bilibili/web/fetch_one_video"
             params = {"bv_id": bv_id}
             
+            logger.info(f"调用TikHub API获取Bilibili视频信息: bv_id={bv_id}")
             response = self.make_api_request(endpoint, params)
             
+            # 记录API响应摘要，帮助调试
+            if isinstance(response, dict):
+                response_code = response.get("code")
+                response_msg = response.get("message", "无消息")
+                logger.info(f"API响应状态: {response_code}, 消息: {response_msg}")
+                
+                # 保存完整响应到文件，用于调试
+                debug_file = f"debug_bilibili_{bv_id}.json"
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    json.dump(response, f, ensure_ascii=False, indent=2)
+                logger.debug(f"API完整响应已保存到: {debug_file}")
+            
+            # 检查响应格式并提供详细错误信息
+            if not isinstance(response, dict):
+                logger.error(f"API返回格式错误，预期字典，实际: {type(response)}")
+                raise ValueError("API返回格式错误，无法解析响应")
+            
+            # TikHub API成功响应时返回code=200
+            if response.get("code") != 200:
+                error_msg = response.get("message", "未知错误")
+                logger.error(f"API返回错误代码: {response.get('code')}, 错误信息: {error_msg}")
+                raise ValueError(f"获取Bilibili视频信息失败: {error_msg}")
+            
+            # 检查data字段
+            if not response.get("data") or not isinstance(response.get("data"), dict):
+                logger.error("API响应中缺少data字段或格式不正确")
+                raise ValueError("API响应数据格式错误，缺少必要字段")
+            
             # 提取必要信息
-            if response.get("status") and response.get("data"):
-                data = response["data"]["data"]
+            data = response.get("data", {}).get("data", {})
+            
+            if not data:
+                logger.error("无法获取视频详情数据")
+                logger.debug(f"API完整响应: {json.dumps(response, ensure_ascii=False)[:500]}...")
+                raise ValueError("获取视频详情失败，API返回数据结构不符合预期")
+            
+            # 视频标题
+            video_title = data.get("title", "")
+            if not video_title or video_title.strip() == "":
+                video_title = f"bilibili_{bv_id}"
+                logger.warning(f"未找到视频标题，使用ID作为标题: {video_title}")
+            
+            # 视频作者
+            author = data.get("owner", {}).get("name", "未知作者")
+            
+            logger.info(f"获取到视频信息: 标题='{video_title}', 作者='{author}'")
+            
+            # 获取cid
+            cid = data.get("cid")
+            if not cid:
+                logger.error("无法获取Bilibili视频CID")
+                raise ValueError(f"无法获取Bilibili视频CID: {url}")
+            
+            # 调用API获取视频流地址
+            endpoint = f"/api/v1/bilibili/web/fetch_video_playurl"
+            params = {"bv_id": bv_id, "cid": cid}
+            
+            logger.info(f"调用TikHub API获取Bilibili视频播放地址: bv_id={bv_id}, cid={cid}")
+            playurl_response = self.make_api_request(endpoint, params)
+            
+            # 记录API响应摘要
+            if isinstance(playurl_response, dict):
+                response_code = playurl_response.get("code")
+                response_msg = playurl_response.get("message", "无消息")
+                logger.info(f"播放地址API响应状态: {response_code}, 消息: {response_msg}")
                 
-                # 视频标题
-                video_title = data.get("title", f"bilibili_{bv_id}")
-                
-                # 视频作者
-                author = data.get("owner", {}).get("name", "未知作者")
-                
-                # 获取cid
-                cid = data.get("cid")
-                if not cid:
-                    raise ValueError(f"无法获取Bilibili视频CID: {url}")
-                
-                # 调用API获取视频流地址
-                endpoint = f"/api/v1/bilibili/web/fetch_video_playurl"
-                params = {"bv_id": bv_id, "cid": cid}
-                
-                playurl_response = self.make_api_request(endpoint, params)
-                
-                # 提取音频下载地址
-                if (playurl_response.get("status") and 
-                    playurl_response.get("data") and 
-                    playurl_response["data"].get("data") and 
-                    playurl_response["data"]["data"].get("dash") and 
-                    playurl_response["data"]["data"]["dash"].get("audio")):
-                    
-                    audio_list = playurl_response["data"]["data"]["dash"]["audio"]
-                    if audio_list and len(audio_list) > 0:
-                        download_url = audio_list[0].get("baseUrl")
-                        file_ext = "m4s"  # B站音频格式通常为m4s
-                    else:
-                        raise ValueError(f"无法获取Bilibili视频音频地址: {url}")
-                else:
-                    raise ValueError(f"无法获取Bilibili视频播放地址: {url}")
-                
-                if not download_url:
-                    raise ValueError(f"无法获取Bilibili视频下载地址: {url}")
-                
-                # 清理文件名中的非法字符
-                safe_title = re.sub(r'[\\/*?:"<>|]', "_", video_title)
-                filename = f"bilibili_{bv_id}_{int(time.time())}.{file_ext}"
-                
-                return {
-                    "video_id": bv_id,
-                    "cid": cid,
-                    "video_title": video_title,
-                    "author": author,
-                    "download_url": download_url,
-                    "filename": filename,
-                    "platform": "bilibili"
-                }
-            else:
-                logger.error(f"获取Bilibili视频信息失败: {response.get('message', '未知错误')}")
-                raise ValueError(f"获取Bilibili视频信息失败: {response.get('message', '未知错误')}")
+                # 保存完整响应到文件
+                debug_file = f"debug_bilibili_playurl_{bv_id}.json"
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    json.dump(playurl_response, f, ensure_ascii=False, indent=2)
+                logger.debug(f"播放地址API完整响应已保存到: {debug_file}")
+            
+            # 检查响应格式
+            if not isinstance(playurl_response, dict):
+                logger.error(f"播放地址API返回格式错误，预期字典，实际: {type(playurl_response)}")
+                raise ValueError("播放地址API返回格式错误，无法解析响应")
+            
+            # 检查响应状态
+            if playurl_response.get("code") != 200:
+                error_msg = playurl_response.get("message", "未知错误")
+                logger.error(f"获取播放地址API返回错误代码: {playurl_response.get('code')}, 错误信息: {error_msg}")
+                raise ValueError(f"获取Bilibili视频播放地址失败: {error_msg}")
+            
+            # 提取音频下载地址
+            playurl_data = playurl_response.get("data", {}).get("data", {})
+            
+            if not playurl_data:
+                logger.error("播放地址API响应中缺少data.data字段")
+                raise ValueError("播放地址API响应数据格式错误，缺少必要字段")
+            
+            # 尝试获取音频下载地址
+            download_url = None
+            file_ext = "mp4"  # 默认扩展名
+            
+            if playurl_data.get("dash") and playurl_data["dash"].get("audio"):
+                audio_list = playurl_data["dash"]["audio"]
+                if audio_list and len(audio_list) > 0:
+                    download_url = audio_list[0].get("baseUrl")
+                    file_ext = "m4s"  # B站音频格式通常为m4s
+                    logger.info(f"找到音频下载URL: {download_url[:50]}...")
+            
+            if not download_url:
+                logger.error("无法获取Bilibili视频下载地址")
+                raise ValueError(f"无法获取Bilibili视频下载地址: {url}")
+            
+            # 清理文件名中的非法字符
+            safe_title = re.sub(r'[\\/*?:"<>|]', "_", video_title)
+            filename = f"bilibili_{bv_id}_{int(time.time())}.{file_ext}"
+            
+            result = {
+                "video_id": bv_id,
+                "cid": cid,
+                "video_title": video_title,
+                "author": author,
+                "download_url": download_url,
+                "filename": filename,
+                "platform": "bilibili"
+            }
+            
+            logger.info(f"成功获取Bilibili视频信息: ID={bv_id}, 文件类型={file_ext}")
+            return result
                 
         except Exception as e:
             logger.exception(f"获取Bilibili视频信息异常: {str(e)}")

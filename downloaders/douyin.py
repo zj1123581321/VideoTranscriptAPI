@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import time
 from downloaders.base import BaseDownloader
 from utils import setup_logger
@@ -35,12 +36,24 @@ class DouyinDownloader(BaseDownloader):
         """
         # 解析短链接
         if "v.douyin.com" in url:
+            logger.info(f"解析抖音短链接: {url}")
             url = self.resolve_short_url(url)
+            logger.info(f"解析后的完整链接: {url}")
         
-        # 提取视频ID
-        match = re.search(r'video/(\d+)', url)
-        if match:
-            return match.group(1)
+        # 尝试多种模式提取视频ID
+        patterns = [
+            r'video/(\d+)',      # 标准URL模式
+            r'note/(\d+)',       # 笔记模式
+            r'aweme_id=(\d+)',   # 查询参数模式
+            r'/(\d+)(?:\?|$)'    # 路径末尾模式
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                aweme_id = match.group(1)
+                logger.info(f"从URL中提取到抖音视频ID: {aweme_id}")
+                return aweme_id
         
         logger.error(f"无法从URL中提取抖音视频ID: {url}")
         raise ValueError(f"无法从URL中提取抖音视频ID: {url}")
@@ -63,59 +76,134 @@ class DouyinDownloader(BaseDownloader):
             endpoint = f"/api/v1/douyin/web/fetch_one_video"
             params = {"aweme_id": aweme_id}
             
+            logger.info(f"调用TikHub API获取抖音视频信息: aweme_id={aweme_id}")
             response = self.make_api_request(endpoint, params)
             
-            # 提取必要信息
-            if response.get("status") and response.get("data"):
-                data = response["data"]["aweme_detail"]
+            # 记录API响应摘要，帮助调试
+            if isinstance(response, dict):
+                response_code = response.get("code")
+                response_msg = response.get("message", "无消息")
+                logger.info(f"API响应状态: {response_code}, 消息: {response_msg}")
                 
-                # 视频标题
-                video_title = data.get("item_title", f"douyin_{aweme_id}")
-                
-                # 视频作者
-                author = data.get("author", {}).get("nickname", "未知作者")
-                
-                # 尝试获取音频下载地址
-                download_url = None
-                audio_items = data.get("video", {}).get("bit_rate_audio", [])
-                
-                if audio_items and len(audio_items) > 0:
-                    # 优先使用音频文件
-                    audio_url = (audio_items[0].get("audio_meta", {})
-                                 .get("url_list", {})
-                                 .get("main_url"))
-                    if audio_url:
-                        download_url = audio_url
-                        file_ext = "mp3"
-                
-                if not download_url:
-                    # 没有音频文件，尝试使用视频文件
-                    video_items = data.get("video", {}).get("bit_rate", [])
+                # 保存完整响应到文件，用于调试
+                debug_file = f"debug_douyin_{aweme_id}.json"
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    json.dump(response, f, ensure_ascii=False, indent=2)
+                logger.debug(f"API完整响应已保存到: {debug_file}")
+            
+            # 检查响应格式并提供详细错误信息
+            if not isinstance(response, dict):
+                logger.error(f"API返回格式错误，预期字典，实际: {type(response)}")
+                raise ValueError("API返回格式错误，无法解析响应")
+            
+            # TikHub API成功响应时返回code=200
+            if response.get("code") != 200:
+                error_msg = response.get("message", "未知错误")
+                logger.error(f"API返回错误代码: {response.get('code')}, 错误信息: {error_msg}")
+                raise ValueError(f"获取抖音视频信息失败: {error_msg}")
+            
+            # 检查data字段
+            if not response.get("data") or not isinstance(response.get("data"), dict):
+                logger.error("API响应中缺少data字段或格式不正确")
+                raise ValueError("API响应数据格式错误，缺少必要字段")
+            
+            # 获取视频详情数据
+            data = response.get("data", {}).get("aweme_detail", {})
+            
+            if not data:
+                logger.error("无法获取视频详情数据: aweme_detail为空")
+                # 记录完整响应以帮助调试
+                logger.debug(f"API完整响应: {json.dumps(response, ensure_ascii=False)[:500]}...")
+                raise ValueError("获取视频详情失败，API返回数据结构不符合预期")
+            
+            # 视频标题
+            video_title = data.get("desc", "")
+            if not video_title or video_title.strip() == "":
+                video_title = f"douyin_{aweme_id}"
+                logger.warning(f"未找到视频标题，使用ID作为标题: {video_title}")
+            
+            # 视频作者
+            author = data.get("author", {}).get("nickname", "未知作者")
+            
+            logger.info(f"获取到视频信息: 标题='{video_title}', 作者='{author}'")
+            
+            # 尝试获取音频下载地址
+            download_url = None
+            file_ext = "mp4"  # 默认扩展名
+            
+            # 首先尝试获取音频文件
+            try:
+                audio_url = data.get("music", {}).get("play_url", {}).get("uri")
+                if audio_url:
+                    download_url = audio_url
+                    file_ext = "mp3"
+                    logger.info(f"找到音频下载URL (music.play_url.uri): {audio_url[:50]}...")
+            except Exception as audio_error:
+                logger.warning(f"获取音频URL时出现异常: {str(audio_error)}")
+            
+            # 如果没有音频，尝试获取视频文件
+            if not download_url:
+                logger.info("未找到音频下载URL，尝试获取视频URL")
+                try:
+                    # 尝试获取play_addr
+                    play_addr = data.get("video", {}).get("play_addr", {})
+                    url_list = play_addr.get("url_list", [])
                     
-                    if video_items and len(video_items) > 0:
-                        # 按码率排序，选择码率最低的视频
-                        video_items.sort(key=lambda x: x.get("bit_rate", float("inf")))
-                        download_url = video_items[0].get("play_addr", {}).get("url_list", [None])[0]
+                    if url_list and len(url_list) > 0:
+                        download_url = url_list[0]
                         file_ext = "mp4"
+                        logger.info(f"找到视频下载URL (video.play_addr.url_list): {download_url[:50]}...")
+                except Exception as video_error:
+                    logger.warning(f"获取视频URL时出现异常: {str(video_error)}")
+            
+            # 最后尝试获取任何可用的下载URL
+            if not download_url:
+                logger.warning("无法从常规字段获取下载URL，尝试获取任何可用URL")
                 
-                if not download_url:
-                    raise ValueError(f"无法获取抖音视频下载地址: {url}")
+                # 尝试从其他可能的位置获取URL
+                possible_paths = [
+                    ("video", "download_addr", "url_list"),
+                    ("video", "origin_cover", "url_list"),
+                    ("video", "dynamic_cover", "url_list")
+                ]
                 
-                # 清理文件名中的非法字符
-                safe_title = re.sub(r'[\\/*?:"<>|]', "_", video_title)
-                filename = f"douyin_{aweme_id}_{int(time.time())}.{file_ext}"
-                
-                return {
-                    "video_id": aweme_id,
-                    "video_title": video_title,
-                    "author": author,
-                    "download_url": download_url,
-                    "filename": filename,
-                    "platform": "douyin"
-                }
-            else:
-                logger.error(f"获取抖音视频信息失败: {response.get('message', '未知错误')}")
-                raise ValueError(f"获取抖音视频信息失败: {response.get('message', '未知错误')}")
+                for path in possible_paths:
+                    try:
+                        current = data
+                        for key in path:
+                            if key in current:
+                                current = current[key]
+                            else:
+                                current = None
+                                break
+                        
+                        if current and isinstance(current, list) and len(current) > 0:
+                            download_url = current[0]
+                            file_ext = "mp4"
+                            logger.info(f"从备选路径 {'.'.join(path)} 找到下载URL: {download_url[:50]}...")
+                            break
+                    except Exception:
+                        continue
+            
+            if not download_url:
+                logger.error("尝试所有方法后仍无法获取下载URL")
+                raise ValueError(f"无法获取抖音视频下载地址: {url}")
+            
+            # 清理文件名中的非法字符
+            safe_title = re.sub(r'[\\/*?:"<>|]', "_", video_title)
+            filename = f"douyin_{aweme_id}_{int(time.time())}.{file_ext}"
+            
+            result = {
+                "video_id": aweme_id,
+                "video_title": video_title,
+                "author": author,
+                "download_url": download_url,
+                "filename": filename,
+                "platform": "douyin"
+            }
+            
+            logger.info(f"成功获取抖音视频信息: ID={aweme_id}, 文件类型={file_ext}")
+            return result
                 
         except Exception as e:
             logger.exception(f"获取抖音视频信息异常: {str(e)}")
