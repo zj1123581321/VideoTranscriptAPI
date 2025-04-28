@@ -2,11 +2,14 @@ import os
 import re
 import json
 import time
+import datetime
 from downloaders.base import BaseDownloader
-from utils import setup_logger
+from utils import setup_logger, create_debug_dir
 
 # 创建日志记录器
 logger = setup_logger("douyin_downloader")
+# 创建调试目录
+DEBUG_DIR = create_debug_dir()
 
 class DouyinDownloader(BaseDownloader):
     """
@@ -79,6 +82,9 @@ class DouyinDownloader(BaseDownloader):
             logger.info(f"调用TikHub API获取抖音视频信息: aweme_id={aweme_id}")
             response = self.make_api_request(endpoint, params)
             
+            # 生成时间戳前缀
+            timestamp_prefix = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+            
             # 记录API响应摘要，帮助调试
             if isinstance(response, dict):
                 response_code = response.get("code")
@@ -86,7 +92,7 @@ class DouyinDownloader(BaseDownloader):
                 logger.info(f"API响应状态: {response_code}, 消息: {response_msg}")
                 
                 # 保存完整响应到文件，用于调试
-                debug_file = f"debug_douyin_{aweme_id}.json"
+                debug_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_debug_douyin_{aweme_id}.json")
                 with open(debug_file, 'w', encoding='utf-8') as f:
                     json.dump(response, f, ensure_ascii=False, indent=2)
                 logger.debug(f"API完整响应已保存到: {debug_file}")
@@ -100,6 +106,13 @@ class DouyinDownloader(BaseDownloader):
             if response.get("code") != 200:
                 error_msg = response.get("message", "未知错误")
                 logger.error(f"API返回错误代码: {response.get('code')}, 错误信息: {error_msg}")
+                
+                # 保存错误响应到文件
+                error_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_error_douyin_{aweme_id}.json")
+                with open(error_file, 'w', encoding='utf-8') as f:
+                    json.dump(response, f, ensure_ascii=False, indent=2)
+                logger.debug(f"错误响应已保存到: {error_file}")
+                
                 raise ValueError(f"获取抖音视频信息失败: {error_msg}")
             
             # 检查data字段
@@ -114,6 +127,12 @@ class DouyinDownloader(BaseDownloader):
                 logger.error("无法获取视频详情数据: aweme_detail为空")
                 # 记录完整响应以帮助调试
                 logger.debug(f"API完整响应: {json.dumps(response, ensure_ascii=False)[:500]}...")
+                
+                # 保存错误响应到文件
+                error_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_error_data_douyin_{aweme_id}.json")
+                with open(error_file, 'w', encoding='utf-8') as f:
+                    json.dump(response, f, ensure_ascii=False, indent=2)
+                    
                 raise ValueError("获取视频详情失败，API返回数据结构不符合预期")
             
             # 视频标题
@@ -187,6 +206,12 @@ class DouyinDownloader(BaseDownloader):
             
             if not download_url:
                 logger.error("尝试所有方法后仍无法获取下载URL")
+                
+                # 保存错误数据到文件
+                error_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_error_url_douyin_{aweme_id}.json")
+                with open(error_file, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                    
                 raise ValueError(f"无法获取抖音视频下载地址: {url}")
             
             # 清理文件名中的非法字符

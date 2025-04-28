@@ -2,11 +2,14 @@ import os
 import re
 import json
 import time
+import datetime
 from downloaders.base import BaseDownloader
-from utils import setup_logger
+from utils import setup_logger, create_debug_dir
 
 # 创建日志记录器
 logger = setup_logger("xiaohongshu_downloader")
+# 创建调试目录
+DEBUG_DIR = create_debug_dir()
 
 class XiaohongshuDownloader(BaseDownloader):
     """
@@ -36,12 +39,29 @@ class XiaohongshuDownloader(BaseDownloader):
         """
         # 解析短链接
         if "xhslink.com" in url:
+            logger.info(f"解析小红书短链接: {url}")
             url = self.resolve_short_url(url)
+            logger.info(f"解析后的完整链接: {url}")
         
-        # 提取笔记ID
-        match = re.search(r'explore/(\w+)', url)
-        if match:
-            return match.group(1)
+        # 尝试多种模式提取笔记ID
+        patterns = [
+            r'explore/(\w+)',          # 旧版URL格式
+            r'discovery/item/(\w+)',   # 新版URL格式
+            r'items/(\w+)',            # 另一种可能的格式
+            r'/(\w{24})'               # 通用格式，匹配24位的ID
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                note_id = match.group(1)
+                logger.info(f"从URL中提取到小红书笔记ID: {note_id}")
+                return note_id
+        
+        # 如果用户直接提供了ID，尝试验证其格式
+        if re.match(r'^\w{24}$', url):
+            logger.info(f"用户直接提供了小红书笔记ID: {url}")
+            return url
         
         logger.error(f"无法从URL中提取小红书笔记ID: {url}")
         raise ValueError(f"无法从URL中提取小红书笔记ID: {url}")
@@ -67,6 +87,9 @@ class XiaohongshuDownloader(BaseDownloader):
             logger.info(f"调用TikHub API获取小红书笔记信息: note_id={note_id}")
             response = self.make_api_request(endpoint, params)
             
+            # 生成时间戳前缀
+            timestamp_prefix = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+            
             # 记录API响应摘要，帮助调试
             if isinstance(response, dict):
                 response_code = response.get("code")
@@ -74,7 +97,7 @@ class XiaohongshuDownloader(BaseDownloader):
                 logger.info(f"API响应状态: {response_code}, 消息: {response_msg}")
                 
                 # 保存完整响应到文件，用于调试
-                debug_file = f"debug_xiaohongshu_{note_id}.json"
+                debug_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_debug_xiaohongshu_{note_id}.json")
                 with open(debug_file, 'w', encoding='utf-8') as f:
                     json.dump(response, f, ensure_ascii=False, indent=2)
                 logger.debug(f"API完整响应已保存到: {debug_file}")
@@ -88,6 +111,13 @@ class XiaohongshuDownloader(BaseDownloader):
             if response.get("code") != 200:
                 error_msg = response.get("message", "未知错误")
                 logger.error(f"API返回错误代码: {response.get('code')}, 错误信息: {error_msg}")
+                
+                # 保存错误响应到文件
+                error_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_error_xiaohongshu_{note_id}.json")
+                with open(error_file, 'w', encoding='utf-8') as f:
+                    json.dump(response, f, ensure_ascii=False, indent=2)
+                logger.debug(f"错误响应已保存到: {error_file}")
+                
                 raise ValueError(f"获取小红书笔记信息失败: {error_msg}")
             
             # 检查data字段
@@ -95,37 +125,103 @@ class XiaohongshuDownloader(BaseDownloader):
                 logger.error("API响应中缺少data字段或格式不正确")
                 raise ValueError("API响应数据格式错误，缺少必要字段")
             
-            # 获取笔记详情数据
+            # 获取笔记详情数据 - 小红书API响应结构已变更
             data = response.get("data", {})
-            note_list = data.get("data", [{}])[0].get("note_list", [{}])[0]
             
-            if not note_list:
-                logger.error("无法获取笔记详情数据")
-                # 记录完整响应以帮助调试
+            # 检查内层data字段
+            inner_data = data.get("data", {})
+            if not inner_data:
+                logger.error("API响应中缺少内层data字段")
+                
+                # 保存错误响应到文件
+                error_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_error_data_xiaohongshu_{note_id}.json")
+                with open(error_file, 'w', encoding='utf-8') as f:
+                    json.dump(response, f, ensure_ascii=False, indent=2)
+                    
                 logger.debug(f"API完整响应: {json.dumps(response, ensure_ascii=False)[:500]}...")
                 raise ValueError("获取笔记详情失败，API返回数据结构不符合预期")
             
+            # 获取data.data.data[0]
+            data_list = inner_data.get("data", [])
+            if not data_list or len(data_list) == 0:
+                logger.error("API响应中data.data.data字段为空数组")
+                
+                # 保存错误响应到文件
+                error_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_error_data_list_xiaohongshu_{note_id}.json")
+                with open(error_file, 'w', encoding='utf-8') as f:
+                    json.dump(response, f, ensure_ascii=False, indent=2)
+                    
+                logger.debug(f"API完整响应: {json.dumps(response, ensure_ascii=False)[:500]}...")
+                raise ValueError("获取笔记详情失败，API返回数据结构不符合预期")
+            
+            # 获取第一个笔记数据
+            note_data = data_list[0]
+            
+            # 获取note_list字段
+            note_list_data = note_data.get("note_list", [])
+            if not note_list_data or len(note_list_data) == 0:
+                logger.error("API响应中note_list字段为空数组")
+                
+                # 保存错误响应到文件
+                error_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_error_note_list_xiaohongshu_{note_id}.json")
+                with open(error_file, 'w', encoding='utf-8') as f:
+                    json.dump(note_data, f, ensure_ascii=False, indent=2)
+                    
+                logger.debug(f"API完整响应: {json.dumps(response, ensure_ascii=False)[:500]}...")
+                raise ValueError("获取笔记详情失败，API返回数据结构不符合预期")
+            
+            # 获取第一个笔记
+            note = note_list_data[0]
+            
             # 视频标题
-            video_title = note_list.get("title", "")
+            video_title = note.get("title", "")
             if not video_title or video_title.strip() == "":
                 video_title = f"xiaohongshu_{note_id}"
                 logger.warning(f"未找到视频标题，使用ID作为标题: {video_title}")
             
             # 视频作者
-            author = data.get("data", [{}])[0].get("user", {}).get("name", "未知作者")
+            author = note_data.get("user", {}).get("name", "未知作者")
             
             logger.info(f"获取到视频信息: 标题='{video_title}', 作者='{author}'")
             
-            # 视频下载地址
-            video_info = note_list.get("video", {})
-            download_url = video_info.get("url")
+            # 检查笔记类型
+            note_type = note.get("type", "")
+            if note_type != "video":
+                logger.warning(f"笔记类型不是视频，而是: {note_type}")
             
-            if not download_url:
-                # 检查是否是视频笔记
-                logger.error(f"小红书笔记可能不是视频类型: {url}")
-                raise ValueError(f"小红书笔记可能不是视频类型: {url}")
+            # 解析视频信息
+            video_url = None
             
-            logger.info(f"找到视频下载URL: {download_url[:50]}...")
+            # 1. 从widgets_context中解析视频信息
+            widgets_context = note.get("widgets_context", "{}")
+            try:
+                widgets_data = json.loads(widgets_context)
+                if widgets_data.get("video") and widgets_data.get("note_sound_info"):
+                    sound_info = widgets_data.get("note_sound_info", {})
+                    video_url = sound_info.get("url")
+                    if video_url:
+                        logger.info(f"从widgets_context中找到视频URL: {video_url[:50]}...")
+            except Exception as e:
+                logger.warning(f"解析widgets_context失败: {str(e)}")
+            
+            # 2. 尝试从video字段获取
+            if not video_url:
+                video = note.get("video", {})
+                if video:
+                    video_url = video.get("url")
+                    if video_url:
+                        logger.info(f"从video字段找到视频URL: {video_url[:50]}...")
+            
+            # 3. 检查是否有可用的视频URL
+            if not video_url:
+                logger.error(f"小红书笔记可能不是视频类型或无法获取视频链接: {url}")
+                
+                # 保存错误数据到文件
+                error_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_error_video_url_xiaohongshu_{note_id}.json")
+                with open(error_file, 'w', encoding='utf-8') as f:
+                    json.dump(note, f, ensure_ascii=False, indent=2)
+                    
+                raise ValueError(f"小红书笔记可能不是视频类型或无法获取视频链接: {url}")
             
             # 清理文件名中的非法字符
             safe_title = re.sub(r'[\\/*?:"<>|]', "_", video_title)
@@ -135,7 +231,7 @@ class XiaohongshuDownloader(BaseDownloader):
                 "video_id": note_id,
                 "video_title": video_title,
                 "author": author,
-                "download_url": download_url,
+                "download_url": video_url,
                 "filename": filename,
                 "platform": "xiaohongshu"
             }

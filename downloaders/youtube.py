@@ -2,13 +2,16 @@ import os
 import re
 import json
 import time
+import datetime
 import xml.etree.ElementTree as ET
 import requests
 from downloaders.base import BaseDownloader
-from utils import setup_logger
+from utils import setup_logger, create_debug_dir
 
 # 创建日志记录器
 logger = setup_logger("youtube_downloader")
+# 创建调试目录
+DEBUG_DIR = create_debug_dir()
 
 class YoutubeDownloader(BaseDownloader):
     """
@@ -76,6 +79,9 @@ class YoutubeDownloader(BaseDownloader):
             logger.info(f"调用TikHub API获取YouTube视频信息: video_id={video_id}")
             response = self.make_api_request(endpoint, params)
             
+            # 生成时间戳前缀
+            timestamp_prefix = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+            
             # 记录API响应摘要，帮助调试
             if isinstance(response, dict):
                 response_code = response.get("code")
@@ -83,7 +89,7 @@ class YoutubeDownloader(BaseDownloader):
                 logger.info(f"API响应状态: {response_code}, 消息: {response_msg}")
                 
                 # 保存完整响应到文件，用于调试
-                debug_file = f"debug_youtube_{video_id}.json"
+                debug_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_debug_youtube_{video_id}.json")
                 with open(debug_file, 'w', encoding='utf-8') as f:
                     json.dump(response, f, ensure_ascii=False, indent=2)
                 logger.debug(f"API完整响应已保存到: {debug_file}")
@@ -97,11 +103,24 @@ class YoutubeDownloader(BaseDownloader):
             if response.get("code") != 200:
                 error_msg = response.get("message", "未知错误")
                 logger.error(f"API返回错误代码: {response.get('code')}, 错误信息: {error_msg}")
+                
+                # 保存错误响应到文件
+                error_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_error_youtube_{video_id}.json")
+                with open(error_file, 'w', encoding='utf-8') as f:
+                    json.dump(response, f, ensure_ascii=False, indent=2)
+                logger.debug(f"错误响应已保存到: {error_file}")
+                
                 raise ValueError(f"获取YouTube视频信息失败: {error_msg}")
             
             # 检查data字段
             if not response.get("data"):
                 logger.error("API响应中缺少data字段或格式不正确")
+                
+                # 保存错误响应到文件
+                error_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_error_data_youtube_{video_id}.json")
+                with open(error_file, 'w', encoding='utf-8') as f:
+                    json.dump(response, f, ensure_ascii=False, indent=2)
+                
                 raise ValueError("API响应数据格式错误，缺少必要字段")
             
             # 提取必要信息
@@ -131,6 +150,12 @@ class YoutubeDownloader(BaseDownloader):
             
             if not download_url:
                 logger.error("无法获取YouTube视频音频下载地址")
+                
+                # 保存错误数据到文件
+                error_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_error_no_audio_youtube_{video_id}.json")
+                with open(error_file, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                
                 raise ValueError(f"无法获取Youtube视频音频下载地址: {url}")
             
             # 清理文件名中的非法字符
@@ -197,6 +222,16 @@ class YoutubeDownloader(BaseDownloader):
             response.raise_for_status()
             
             xml_content = response.text
+            
+            # 生成时间戳前缀
+            timestamp_prefix = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+            
+            # 保存字幕XML到文件，用于调试
+            video_id = video_info.get("video_id")
+            subtitle_file = os.path.join(DEBUG_DIR, f"{timestamp_prefix}_subtitle_youtube_{video_id}.xml")
+            with open(subtitle_file, 'w', encoding='utf-8') as f:
+                f.write(xml_content)
+            logger.debug(f"字幕内容已保存到: {subtitle_file}")
             
             # 解析XML字幕
             return self._parse_youtube_subtitle_xml(xml_content)
