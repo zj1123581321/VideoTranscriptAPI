@@ -244,5 +244,5 @@ class BilibiliDownloader(BaseDownloader):
         返回:
             str: 字幕文本，B站API目前返回None
         """
-        logger.info(f"Bilibili视频通过API无法获取字幕: {url}")
+        # 直接返回None，跳过尝试获取字幕步骤
         return None 

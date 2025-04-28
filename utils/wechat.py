@@ -1,5 +1,7 @@
 import json
 import requests
+import datetime
+import re
 from utils.logger import setup_logger, load_config
 
 # 创建日志记录器
@@ -60,7 +62,21 @@ class WechatNotifier:
             logger.exception(f"企业微信通知发送异常: {str(e)}")
             return False
 
-    def notify_task_status(self, url, status, error=None):
+    def _clean_url(self, url):
+        """
+        清洗URL，移除问号后的追踪参数
+        
+        参数:
+            url: 原始URL
+            
+        返回:
+            str: 清洗后的URL
+        """
+        if "?" in url:
+            return url.split("?")[0]
+        return url
+
+    def notify_task_status(self, url, status, error=None, title=None, author=None, transcript=None):
         """
         通知任务状态
         
@@ -68,13 +84,37 @@ class WechatNotifier:
             url: 视频URL
             status: 当前状态
             error: 错误信息，如果有的话
+            title: 视频标题，如果有的话
+            author: 视频作者，如果有的话
+            transcript: 转录文本，如果有的话
             
         返回:
             bool: 发送是否成功
         """
-        content = f"视频转录任务状态更新:\n链接: {url}\n状态: {status}"
+        # 添加时间戳前缀
+        timestamp = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+        
+        # 清洗URL
+        clean_url = self._clean_url(url)
+        
+        # 构建通知内容
+        content = f"{timestamp}\n视频转录任务状态更新:\n链接: {clean_url}\n状态: {status}"
+        
+        # 添加标题和作者信息（如果有）
+        if title:
+            content += f"\n标题: {title}"
+        if author:
+            content += f"\n作者: {author}"
+            
+        # 添加错误信息（如果有）
         if error:
             content += f"\n错误: {error}"
+            
+        # 添加转录文本预览（如果有）
+        if transcript and status == "转录完成":
+            # 最多显示前400个字符
+            preview = transcript[:400] + ("..." if len(transcript) > 400 else "")
+            content += f"\n\n{preview}"
             
         return self.send_text(content)
 

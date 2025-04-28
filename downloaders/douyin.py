@@ -244,5 +244,5 @@ class DouyinDownloader(BaseDownloader):
         返回:
             str: 字幕文本，抖音通常返回None
         """
-        logger.info(f"抖音视频没有可获取的字幕: {url}")
+        # 直接返回None，跳过尝试获取字幕步骤
         return None 

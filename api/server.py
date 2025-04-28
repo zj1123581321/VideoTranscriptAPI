@@ -165,18 +165,21 @@ def process_transcription(task_id, url):
         
         # 获取视频信息
         logger.info(f"获取视频信息: {url}")
-        wechat_notifier.notify_task_status(url, "正在获取视频信息")
         video_info = downloader.get_video_info(url)
         
-        # 尝试获取字幕
-        logger.info(f"尝试获取字幕: {url}")
-        wechat_notifier.notify_task_status(url, "尝试获取字幕")
-        subtitle = downloader.get_subtitle(url)
+        # 提取视频标题和作者
+        video_title = video_info.get("video_title", "")
+        author = video_info.get("author", "")
+        
+        # 尝试获取字幕 - 只有YouTube等特定平台才需要尝试
+        subtitle = None
+        if downloader.__class__.__name__ == "YoutubeDownloader":
+            logger.info(f"尝试获取字幕: {url}")
+            subtitle = downloader.get_subtitle(url)
         
         if subtitle:
             # 如果有字幕，直接使用
             logger.info(f"使用平台提供的字幕: {url}")
-            wechat_notifier.notify_task_status(url, "使用平台字幕")
             
             # 保存字幕文件
             output_dir = config.get("storage", {}).get("output_dir", "./output")
@@ -187,12 +190,21 @@ def process_transcription(task_id, url):
             with open(subtitle_path, "w", encoding="utf-8") as f:
                 f.write(subtitle)
             
+            # 通知转录完成，包含标题、作者和转录文本
+            wechat_notifier.notify_task_status(
+                url, 
+                "转录完成", 
+                title=video_title, 
+                author=author, 
+                transcript=subtitle
+            )
+            
             result = {
                 "status": "success",
                 "message": "使用平台字幕成功",
                 "data": {
-                    "video_title": video_info.get("video_title", ""),
-                    "author": video_info.get("author", ""),
+                    "video_title": video_title,
+                    "author": author,
                     "transcript": subtitle,
                     "subtitle_path": subtitle_path
                 }
@@ -200,7 +212,7 @@ def process_transcription(task_id, url):
         else:
             # 没有字幕，需要下载音视频并转录
             logger.info(f"下载视频进行转录: {url}")
-            wechat_notifier.notify_task_status(url, "正在下载视频")
+            wechat_notifier.notify_task_status(url, "正在下载视频", title=video_title, author=author)
             
             # 下载视频
             download_url = video_info.get("download_url")
@@ -209,7 +221,7 @@ def process_transcription(task_id, url):
             if not download_url or not filename:
                 error_msg = f"无法获取下载信息: {url}"
                 logger.error(error_msg)
-                wechat_notifier.notify_task_status(url, "下载失败", error_msg)
+                wechat_notifier.notify_task_status(url, "下载失败", error_msg, title=video_title, author=author)
                 return {
                     "status": "failed",
                     "message": error_msg
@@ -220,7 +232,7 @@ def process_transcription(task_id, url):
             if not local_file:
                 error_msg = f"下载文件失败: {url}"
                 logger.error(error_msg)
-                wechat_notifier.notify_task_status(url, "下载失败", error_msg)
+                wechat_notifier.notify_task_status(url, "下载失败", error_msg, title=video_title, author=author)
                 return {
                     "status": "failed",
                     "message": error_msg
@@ -229,7 +241,7 @@ def process_transcription(task_id, url):
             try:
                 # 开始转录
                 logger.info(f"开始转录音视频: {local_file}")
-                wechat_notifier.notify_task_status(url, "正在转录音视频")
+                wechat_notifier.notify_task_status(url, "正在转录音视频", title=video_title, author=author)
                 
                 # 转录文件名
                 output_base = f"{video_info.get('platform')}_{video_info.get('video_id')}"
@@ -238,14 +250,26 @@ def process_transcription(task_id, url):
                 transcriber = Transcriber()
                 transcription_result = transcriber.transcribe(local_file, output_base)
                 
+                # 获取转录文本
+                transcript = transcription_result.get("transcript", "")
+                
+                # 通知转录完成，包含转录文本预览
+                wechat_notifier.notify_task_status(
+                    url, 
+                    "转录完成", 
+                    title=video_title, 
+                    author=author, 
+                    transcript=transcript
+                )
+                
                 # 返回结果
                 result = {
                     "status": "success",
                     "message": "转录成功",
                     "data": {
-                        "video_title": video_info.get("video_title", ""),
-                        "author": video_info.get("author", ""),
-                        "transcript": transcription_result.get("transcript", ""),
+                        "video_title": video_title,
+                        "author": author,
+                        "transcript": transcript,
                         "srt_path": transcription_result.get("srt_path", ""),
                         "lrc_path": transcription_result.get("lrc_path", ""),
                         "json_path": transcription_result.get("json_path", "")
@@ -255,9 +279,6 @@ def process_transcription(task_id, url):
                 # 清理下载的文件
                 logger.info(f"清理下载的文件: {local_file}")
                 downloader.clean_up(local_file)
-        
-        # 通知任务完成
-        wechat_notifier.notify_task_status(url, "转录完成")
         
         return result
     except Exception as e:
