@@ -102,6 +102,7 @@ class Transcriber:
             # 准备输出文件路径
             output_base_path = os.path.join(self.output_dir, output_base)
             merge_txt_path = f"{output_base_path}.merge.txt"
+            final_txt_path = f"{output_base_path}.txt"
             
             # 确保音频文件存在
             if not os.path.exists(audio_path):
@@ -154,6 +155,19 @@ class Transcriber:
                                     logger.info(f"已从合并文本文件提取转录文本")
                                 except Exception as e:
                                     logger.warning(f"读取转录文本失败: {str(e)}")
+                                
+                                # 自动重命名为 .txt 作为主输出
+                                if os.path.exists(target_path):
+                                    try:
+                                        shutil.copy2(target_path, final_txt_path)
+                                        logger.info(f"主输出文件已重命名为: {final_txt_path}")
+                                        result["txt_path"] = final_txt_path
+                                        # 删除 .merge.txt 文件
+                                        if os.path.exists(target_path):
+                                            os.remove(target_path)
+                                            logger.info(f"已删除中间文件: {target_path}")
+                                    except Exception as e:
+                                        logger.warning(f"重命名主输出文件失败: {str(e)}")
                         
                         # 确保找到了merge.txt文件
                         if not result["merge_txt_path"]:

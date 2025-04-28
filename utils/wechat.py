@@ -113,7 +113,7 @@ class WechatNotifier:
         # 添加转录文本预览（如果有）
         if transcript and status == "转录完成":
             # 最多显示前400个字符
-            preview = transcript[:400] + ("..." if len(transcript) > 400 else "")
+            preview = transcript[:200] + ("..." if len(transcript) > 200 else "")
             content += f"\n\n{preview}"
             
         return self.send_text(content)
@@ -134,4 +134,29 @@ def wechat_notify(message, webhook=None, config=None):
         webhook = config.get("wechat", {}).get("webhook")
         
     notifier = WechatNotifier(webhook)
-    return notifier.send_text(message) 
+    return notifier.send_text(message)
+
+def send_long_text_wechat(title, url, text, is_summary=False, webhook=None):
+    """
+    分段发送长文本到企业微信，自动按2048字节分割，格式为：标题、url、正文
+    """
+    max_bytes = 4000
+    clean_url = WechatNotifier()._clean_url(url)
+    prefix = f"标题：{title or ''}\nurl：{clean_url}\n{'总结文本' if is_summary else '校对文本'}\n"
+    prefix_bytes = len(prefix.encode('utf-8'))
+    max_content_bytes = max_bytes - prefix_bytes
+    start = 0
+    text_len = len(text)
+    while start < text_len:
+        end = start
+        curr_bytes = 0
+        # 按字符递增，保证utf-8分割安全
+        while end < text_len:
+            char_bytes = len(text[end].encode('utf-8'))
+            if curr_bytes + char_bytes > max_content_bytes:
+                break
+            curr_bytes += char_bytes
+            end += 1
+        content = prefix + text[start:end]
+        WechatNotifier(webhook).send_text(content)
+        start = end 
