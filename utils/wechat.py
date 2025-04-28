@@ -66,15 +66,33 @@ class WechatNotifier:
         """
         清洗URL，移除问号后的追踪参数
         
+        对于小红书链接，保留 xsec_token 参数，其他参数去除。
+        
         参数:
             url: 原始URL
             
         返回:
             str: 清洗后的URL
         """
-        if "?" in url:
-            return url.split("?")[0]
-        return url
+        if "xiaohongshu.com" in url or "xhslink.com" in url:
+            # 只保留 xsec_token 参数
+            if "?" in url:
+                base, query = url.split("?", 1)
+                params = query.split("&")
+                kept = []
+                for p in params:
+                    if p.startswith("xsec_token="):
+                        kept.append(p)
+                if kept:
+                    return base + "?" + "&".join(kept)
+                else:
+                    return base
+            else:
+                return url
+        else:
+            if "?" in url:
+                return url.split("?")[0]
+            return url
 
     def notify_task_status(self, url, status, error=None, title=None, author=None, transcript=None):
         """
@@ -113,7 +131,7 @@ class WechatNotifier:
         # 添加转录文本预览（如果有）
         if transcript and status == "转录完成":
             # 最多显示前400个字符
-            preview = transcript[:200] + ("..." if len(transcript) > 200 else "")
+            preview = transcript[:100] + ("..." if len(transcript) > 100 else "")
             content += f"\n\n{preview}"
             
         return self.send_text(content)
