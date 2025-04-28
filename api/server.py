@@ -4,6 +4,7 @@ import uvicorn
 import asyncio
 import concurrent.futures
 import datetime
+import glob
 from fastapi import FastAPI, HTTPException, Depends, Header, BackgroundTasks, Request
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
@@ -164,108 +165,98 @@ def process_transcription(task_id, url):
                 "message": error_msg
             }
         
-        # 获取视频信息
-        logger.info(f"获取视频信息: {url}")
-        video_info = downloader.get_video_info(url)
+        # 先用 downloader 的 ID 提取方法获取 videoid/platform
+        video_id, platform = None, None
+        try:
+            if hasattr(downloader, '_extract_video_id'):
+                video_id = downloader._extract_video_id(url)
+                platform = 'bilibili'
+            elif hasattr(downloader, '_extract_aweme_id'):
+                video_id = downloader._extract_aweme_id(url)
+                platform = 'douyin'
+            elif hasattr(downloader, '_extract_note_id'):
+                video_id = downloader._extract_note_id(url)
+                platform = 'xiaohongshu'
+            elif hasattr(downloader, '_extract_video_id_youtube'):
+                video_id = downloader._extract_video_id_youtube(url)
+                platform = 'youtube'
+        except Exception as e:
+            logger.warning(f"仅提取ID失败，尝试 get_video_info: {str(e)}")
         
-        # 提取视频标题和作者
-        video_title = video_info.get("video_title", "")
-        author = video_info.get("author", "")
-        
-        # 尝试获取字幕 - 只有YouTube等特定平台才需要尝试
-        subtitle = None
-        if downloader.__class__.__name__ == "YoutubeDownloader":
-            logger.info(f"尝试获取字幕: {url}")
-            subtitle = downloader.get_subtitle(url)
-        
-        if subtitle:
-            # 如果有字幕，直接使用
-            logger.info(f"使用平台提供的字幕: {url}")
-            
-            # 保存字幕文件，文件名格式为yyMMdd-hhmmss_平台_videoid.txt
-            output_dir = config.get("storage", {}).get("output_dir", "./output")
-            timestamp_prefix = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
-            subtitle_filename = f"{timestamp_prefix}_{video_info.get('platform')}_{video_info.get('video_id')}.txt"
-            subtitle_path = os.path.join(output_dir, subtitle_filename)
-            
-            os.makedirs(os.path.dirname(subtitle_path), exist_ok=True)
-            with open(subtitle_path, "w", encoding="utf-8") as f:
-                f.write(subtitle)
-            
-            # 通知转录完成，包含标题、作者和转录文本
-            # wechat_notifier.notify_task_status(
-            #     url, 
-            #     "转录完成", 
-            #     title=video_title, 
-            #     author=author, 
-            #     transcript=subtitle
-            # )
-            
-            # ======= 新增：调用大模型API进行校对和总结 =======
-            try:
-                from utils.llm import call_llm_api
-                from utils.wechat import send_long_text_wechat
-                config_llm = config.get("llm", {})
-                api_key = config_llm.get("api_key")
-                base_url = config_llm.get("base_url")
-                calibrate_model = config_llm.get("calibrate_model")
-                summary_model = config_llm.get("summary_model")
-                transcript_text = subtitle
-                calibrate_prompt = (
-                    "你将收到一段音频的转录文本。你的任务是对这段文本进行校对,提高其可读性,但不改变原意。 "
-                    "请按照以下指示进行校对: "
-                    "1. 适当分段,使文本结构更清晰。每个自然段落应该是一个完整的思想单元。 "
-                    "2. 修正明显的错别字和语法错误。 "
-                    "3. 调整标点符号的使用,确保其正确性和一致性。 "
-                    "4. 如有必要,可以轻微调整词序以提高可读性,但不要改变原意。 "
-                    "5. 保留原文中的口语化表达和说话者的语气特点。 "
-                    "6. 不要添加或删除任何实质性内容。 "
-                    "7. 不要解释或评论文本内容。 "
-                    "只返回校对后的文本,不要包含任何其他解释或评论。 "
-                    "以下是需要校对的转录文本: <transcript>  " + transcript_text + "  </transcript>"
-                )
-                summary_prompt = (
-                    "请以回车换行为分割，逐段地将正文内容，高度归纳提炼总结为凝炼的一句话，需涵盖主要内容，不能丢失关键信息和想表达的核心意思。用中文。然后将归纳总结的，用无序列表，挨个排列出来。\n"
-                    + transcript_text
-                )
-                import threading
-                result_dict = {}
-                def run_calibrate():
-                    result_dict['校对文本'] = call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url)
-                def run_summary():
-                    result_dict['内容总结'] = call_llm_api(summary_model, summary_prompt, api_key, base_url)
-                t1 = threading.Thread(target=run_calibrate)
-                t2 = threading.Thread(target=run_summary)
-                t1.start(); t2.start(); t1.join(); t2.join()
-                # 校对文本分段发送
-                send_long_text_wechat(
-                    title=video_title,
-                    url=url,
-                    text=result_dict['校对文本'],
-                    is_summary=False
-                )
-                # 总结文本直接发送
-                send_long_text_wechat(
-                    title=video_title,
-                    url=url,
-                    text=result_dict['内容总结'],
-                    is_summary=True
-                )
-            except Exception as e:
-                logger.exception(f"大模型API调用异常: {str(e)}")
-                wechat_notifier.send_text(f"【大模型API调用异常】{str(e)}")
-            # ======= END =======
-            
-            result = {
-                "status": "success",
-                "message": "使用平台字幕成功",
-                "data": {
-                    "video_title": video_title,
-                    "author": author,
-                    "transcript": subtitle,
-                    "subtitle_path": subtitle_path
+        output_dir = config.get("storage", {}).get("output_dir", "./output")
+        if video_id and platform:
+            pattern = f"*_{platform}_{video_id}.txt"
+            matches = glob.glob(os.path.join(output_dir, pattern))
+            if matches:
+                txt_path = matches[0]
+                logger.info(f"检测到历史转录文本，直接复用: {txt_path}")
+                with open(txt_path, "r", encoding="utf-8") as f:
+                    transcript = f.read()
+                # 直接走AI校对和总结
+                video_title, author = '', ''
+                try:
+                    from utils.llm import call_llm_api
+                    from utils.wechat import send_long_text_wechat
+                    config_llm = config.get("llm", {})
+                    api_key = config_llm.get("api_key")
+                    base_url = config_llm.get("base_url")
+                    calibrate_model = config_llm.get("calibrate_model")
+                    summary_model = config_llm.get("summary_model")
+                    transcript_text = transcript
+                    calibrate_prompt = (
+                        "你将收到一段音频的转录文本。你的任务是对这段文本进行校对,提高其可读性,但不改变原意。 "
+                        "请按照以下指示进行校对: "
+                        "1. 适当分段,使文本结构更清晰。每个自然段落应该是一个完整的思想单元。 "
+                        "2. 修正明显的错别字和语法错误。 "
+                        "3. 调整标点符号的使用,确保其正确性和一致性。 "
+                        "4. 如有必要,可以轻微调整词序以提高可读性,但不要改变原意。 "
+                        "5. 保留原文中的口语化表达和说话者的语气特点。 "
+                        "6. 不要添加或删除任何实质性内容。 "
+                        "7. 不要解释或评论文本内容。 "
+                        "只返回校对后的文本,不要包含任何其他解释或评论。 "
+                        "以下是需要校对的转录文本: <transcript>  " + transcript_text + "  </transcript>"
+                    )
+                    summary_prompt = (
+                        "请以回车换行为分割，逐段地将正文内容，高度归纳提炼总结为凝炼的一句话，需涵盖主要内容，不能丢失关键信息和想表达的核心意思。用中文。然后将归纳总结的，用无序列表，挨个排列出来。\n"
+                        + transcript_text
+                    )
+                    import threading
+                    result_dict = {}
+                    def run_calibrate():
+                        result_dict['校对文本'] = call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url)
+                    def run_summary():
+                        result_dict['内容总结'] = call_llm_api(summary_model, summary_prompt, api_key, base_url)
+                    t1 = threading.Thread(target=run_calibrate)
+                    t2 = threading.Thread(target=run_summary)
+                    t1.start(); t2.start(); t1.join(); t2.join()
+                    # 校对文本分段发送
+                    send_long_text_wechat(
+                        title=video_title,
+                        url=url,
+                        text=result_dict['校对文本'],
+                        is_summary=False
+                    )
+                    # 总结文本直接发送
+                    send_long_text_wechat(
+                        title=video_title,
+                        url=url,
+                        text=result_dict['内容总结'],
+                        is_summary=True
+                    )
+                except Exception as e:
+                    logger.exception(f"大模型API调用异常: {str(e)}")
+                    wechat_notifier.send_text(f"【大模型API调用异常】{str(e)}")
+                return {
+                    "status": "success",
+                    "message": "已复用历史转录文本并完成AI处理",
+                    "data": {
+                        "video_title": video_title,
+                        "author": author,
+                        "transcript": transcript,
+                        "txt_path": txt_path
+                    }
                 }
-            }
+        # 没有历史文本，才继续获取视频信息和后续流程
         else:
             # 没有字幕，需要下载音视频并转录
             logger.info(f"下载视频进行转录: {url}")
