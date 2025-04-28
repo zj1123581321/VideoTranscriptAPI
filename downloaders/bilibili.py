@@ -49,6 +49,17 @@ class BilibiliDownloader(BaseDownloader):
         logger.error(f"无法从URL中提取Bilibili视频BV号: {url}")
         raise ValueError(f"无法从URL中提取Bilibili视频BV号: {url}")
     
+    def extract_video_id(self, url):
+        """
+        从URL中提取视频ID的公共方法
+        
+        参数:
+            url: 视频URL
+        返回:
+            str: 视频ID
+        """
+        return self._extract_video_id(url)
+    
     def get_video_info(self, url):
         """
         获取视频信息

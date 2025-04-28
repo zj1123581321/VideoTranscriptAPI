@@ -27,6 +27,18 @@ class XiaohongshuDownloader(BaseDownloader):
         """
         return "xiaohongshu.com" in url or "xhslink.com" in url
     
+    def extract_note_id(self, url):
+        """
+        从URL中提取笔记ID的公共方法
+        
+        参数:
+            url: 视频URL
+            
+        返回:
+            str: 笔记ID
+        """
+        return self._extract_note_id(url)
+    
     def _extract_note_id(self, url):
         """
         从URL中提取笔记ID

@@ -27,6 +27,17 @@ class DouyinDownloader(BaseDownloader):
         """
         return "douyin.com" in url or "v.douyin.com" in url
     
+    def extract_video_id(self, url):
+        """
+        从URL中提取视频ID的公共方法
+        
+        参数:
+            url: 视频URL
+        返回:
+            str: 视频ID
+        """
+        return self._extract_aweme_id(url)
+    
     def _extract_aweme_id(self, url):
         """
         从URL中提取视频ID

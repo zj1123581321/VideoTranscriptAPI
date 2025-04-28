@@ -58,6 +58,17 @@ class YoutubeDownloader(BaseDownloader):
         logger.error(f"无法从URL中提取Youtube视频ID: {url}")
         raise ValueError(f"无法从URL中提取Youtube视频ID: {url}")
     
+    def extract_video_id(self, url):
+        """
+        从URL中提取视频ID的公共方法
+        
+        参数:
+            url: 视频URL
+        返回:
+            str: 视频ID
+        """
+        return self._extract_video_id(url)
+    
     def get_video_info(self, url):
         """
         获取视频信息
