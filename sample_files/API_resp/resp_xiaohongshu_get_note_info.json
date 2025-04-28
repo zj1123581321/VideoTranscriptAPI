@@ -1,0 +1,392 @@
+{
+    "code": 200,
+    "router": "/api/v1/xiaohongshu/web/get_note_info",
+    "params": {
+      "note_id": "67e7beb7000000000f03adfe"
+    },
+    "data": {
+      "code": 0,
+      "data": {
+        "data": [
+          {
+            "model_type": "note",
+            "user": {
+              "userid": "63100da6000000001200c44a",
+              "name": "会说笑喜剧蔡蔡",
+              "image": "https://sns-avatar-qc.xhscdn.com/avatar/1040g2jo30s9m9qvuig005oog1mj4hh2a9druge8?imageView2/2/w/120/format/jpg",
+              "followed": false,
+              "red_id": "1599326654",
+              "red_official_verify_type": 0,
+              "show_red_official_verify_icon": false,
+              "id": "63100da6000000001200c44a",
+              "nickname": "会说笑喜剧蔡蔡",
+              "red_official_verified": false,
+              "track_duration": 0,
+              "level": {
+                "image": ""
+              }
+            },
+            "note_list": [
+              {
+                "has_music": false,
+                "hash_tag": [
+                  {
+                    "record_count": 0,
+                    "record_unit": "",
+                    "current_score": 0,
+                    "tag_hint": "",
+                    "name": "阿那亚",
+                    "type": "topic",
+                    "link": "xhsdiscover://rn/sns-discover/topic?id=5be86f83878aa900017621ce&page_source=note_feed.click_new_big&topic_name=%E9%98%BF%E9%82%A3%E4%BA%9A&source=video&pre_source=explore",
+                    "id": "5be86f8379d44e0001d8d9fa",
+                    "record_emoji": "",
+                    "bizId": ""
+                  },
+                  {
+                    "record_count": 0,
+                    "bizId": "",
+                    "tag_hint": "",
+                    "id": "5f0ff80f00000000010032cc",
+                    "name": "单立人",
+                    "link": "xhsdiscover://rn/sns-discover/topic?id=5f0ff80f487de40001ef4a42&page_source=note_feed.click_new_big&topic_name=%E5%8D%95%E7%AB%8B%E4%BA%BA&source=video&pre_source=explore",
+                    "current_score": 0,
+                    "type": "topic",
+                    "record_emoji": "",
+                    "record_unit": ""
+                  },
+                  {
+                    "name": "单立人喜剧节",
+                    "type": "topic",
+                    "link": "xhsdiscover://rn/sns-discover/topic?id=67a3299b0048000000000001&page_source=note_feed.click_new_big&topic_name=%E5%8D%95%E7%AB%8B%E4%BA%BA%E5%96%9C%E5%89%A7%E8%8A%82&source=video&pre_source=explore",
+                    "record_emoji": "",
+                    "current_score": 0,
+                    "tag_hint": "",
+                    "id": "67a3299b00000000040217b1",
+                    "record_count": 0,
+                    "record_unit": "",
+                    "bizId": ""
+                  },
+                  {
+                    "tag_hint": "",
+                    "id": "5d36bd32000000000e012398",
+                    "name": "吃早饭",
+                    "link": "xhsdiscover://rn/sns-discover/topic?id=5d36bd32dfd0ca0001a153d4&page_source=note_feed.click_new_big&topic_name=%E5%90%83%E6%97%A9%E9%A5%AD&source=video&pre_source=explore",
+                    "current_score": 0,
+                    "bizId": "",
+                    "type": "topic",
+                    "record_emoji": "",
+                    "record_count": 0,
+                    "record_unit": ""
+                  },
+                  {
+                    "record_count": 0,
+                    "record_unit": "",
+                    "bizId": "",
+                    "type": "topic",
+                    "record_emoji": "",
+                    "link": "xhsdiscover://rn/sns-discover/topic?id=61177e1e9325e30001f1f63d&page_source=note_feed.click_new_big&topic_name=%E8%84%B1%E5%8F%A3%E7%A7%80&source=video&pre_source=explore",
+                    "current_score": 0,
+                    "tag_hint": "",
+                    "id": "61177e1e000000000100a752",
+                    "name": "脱口秀"
+                  },
+                  {
+                    "bizId": "",
+                    "id": "5bea6954a6da940001b8d461",
+                    "type": "topic",
+                    "record_emoji": "",
+                    "record_count": 0,
+                    "record_unit": "",
+                    "current_score": 0,
+                    "name": "朋友",
+                    "link": "xhsdiscover://rn/sns-discover/topic?id=5bea695475bd31000192f615&page_source=note_feed.click_new_big&topic_name=%E6%9C%8B%E5%8F%8B&source=video&pre_source=explore",
+                    "tag_hint": ""
+                  }
+                ],
+                "liked_count": 198,
+                "shared_count": 30,
+                "mini_program_info": {
+                  "desc": "#阿那亚  #单立人  #单立人喜剧节  #吃早饭  #脱口秀  #朋友",
+                  "webpage_url": "https://www.xiaohongshu.com/discovery/item/67e7beb7000000000f03adfe?xsec_source=app_share",
+                  "thumb": "http://sns-na-i1.xhscdn.com/1040g00831fk08m2eg6005oog1mj4hh2adii743g?imageView2/2/w/540/format/jpg/q/75",
+                  "share_title": "@会说笑喜剧蔡蔡 发了一篇笔记，快点来看吧！",
+                  "user_name": "gh_52be748ce5b7",
+                  "title": "@会说笑喜剧蔡蔡 发了一篇笔记，快点来看吧！"
+                },
+                "has_co_produce": false,
+                "model_type": "note",
+                "type": "video",
+                "user": {
+                  "red_official_verified": false,
+                  "userid": "63100da6000000001200c44a",
+                  "name": "会说笑喜剧蔡蔡",
+                  "nickname": "会说笑喜剧蔡蔡",
+                  "red_official_verify_type": 0,
+                  "show_red_official_verify_icon": false,
+                  "track_duration": 0,
+                  "level": {
+                    "image": ""
+                  },
+                  "id": "63100da6000000001200c44a",
+                  "image": "https://sns-avatar-qc.xhscdn.com/avatar/1040g2jo30s9m9qvuig005oog1mj4hh2a9druge8?imageView2/2/w/120/format/jpg",
+                  "followed": false,
+                  "red_id": "1599326654"
+                },
+                "view_count": 0,
+                "may_have_red_packet": false,
+                "api_upgrade": -1,
+                "comments_count": 64,
+                "sticky": false,
+                "enable_fls_bridge_cards": false,
+                "enable_fls_related_cards": false,
+                "enable_co_produce": false,
+                "liked_users": [],
+                "widgets_context": "{\"video\":true,\"origin_video_key\":\"\",\"flags\":{\"sound_track\":true},\"author_id\":\"63100da6000000001200c44a\",\"author_name\":\"会说笑喜剧蔡蔡\",\"note_sound_info\":{\"sound_id\":\"1146139436490750929\",\"name\":\"会说笑喜剧蔡蔡的原声\",\"desc\":\"@会说笑喜剧蔡蔡创作的原声\",\"duration\":34039,\"url\":\"http://sns-video-al.xhscdn.com/audio/1/02e7e7beb825b7730103700395e1410934_0.m4a\",\"use_count\":1,\"subtitle\":\"会说笑喜剧...的原声\",\"sound_bg_music_type\":3,\"cover\":\"https://picasso-static.xiaohongshu.com/fe-platform/b598691aefe712c51cbe29af0ddbe732937bc965.png\",\"creator\":\"63100da6000000001200c44a\"},\"video_duration\":35,\"q_task_id\":\"\",\"video_rec_bar_info\":\"\"}",
+                "ip_location": "Hebei",
+                "head_tags": [],
+                "need_next_step": false,
+                "countdown": 0,
+                "video": {
+                  "avg_bitrate": 2979152,
+                  "volume": 0,
+                  "can_super_resolution": true,
+                  "id": "137333119944302622",
+                  "url": "http://sns-video-qc.xhscdn.com/stream/1/110/258/01e7e7beb62d201e0103700195e14168eb_258.mp4?sign=1bd2e2417fd37e1e0854189770ef8c5e&t=680fa4d4&v=2",
+                  "vmaf": -1,
+                  "played_count": 0,
+                  "frame_ts": 0,
+                  "adaptive_streaming_url_set": [],
+                  "height": 1280,
+                  "url_info_list": [
+                    {
+                      "desc": "h265-RedH265",
+                      "url": "http://sns-video-qc.xhscdn.com/stream/1/110/49/01e7e7beb62d201e0103700395e35f8007_49.mp4?sign=0b69b41ac1b2b6ae20462dd77046c63d&t=680fa4d4&v=2",
+                      "avg_bitrate": 854320,
+                      "width": 720,
+                      "height": 1280,
+                      "vmaf": -1
+                    },
+                    {
+                      "desc": "h264-RedH264",
+                      "url": "http://sns-video-qc.xhscdn.com/stream/1/110/258/01e7e7beb62d201e0103700195e14168eb_258.mp4?sign=1bd2e2417fd37e1e0854189770ef8c5e&t=680fa4d4&v=2",
+                      "avg_bitrate": 2979152,
+                      "width": 720,
+                      "height": 1280,
+                      "vmaf": -1
+                    }
+                  ],
+                  "duration": 35,
+                  "is_user_select": false,
+                  "is_upload": false,
+                  "first_frame": "http://sns-na-i1.xhscdn.com/110/0/01e7e7beb62d201e00100000000195e1410556_0.jpg?imageView2/2/w/1080/format/webp",
+                  "width": 720,
+                  "preload_size": 1048576,
+                  "thumbnail": "110/0/01e7e7beb62d201e00100000000195e14115b8_0.webp",
+                  "thumbnail_dim": "110/0/01e7e7beb62d201e00100000000195e14115b8_0.webp?imageView2/2/w/720/h/720/format/webp"
+                },
+                "collected_count": 8,
+                "seeded": false,
+                "widgets_groups": [
+                  [
+                    "guos_test",
+                    "note_next_step",
+                    "second_jump_bar",
+                    "cooperate_binds",
+                    "note_collection",
+                    "rec_next_infos",
+                    "image_stickers",
+                    "image_filters",
+                    "product_review",
+                    "related_search",
+                    "cooperate_comment_component",
+                    "image_goods_cards",
+                    "ads_goods_cards",
+                    "ads_comment_component",
+                    "goods_card_v2",
+                    "image_template",
+                    "buyable_goods_card_v2",
+                    "ads_engage_bar",
+                    "challenge_card",
+                    "cooperate_engage_bar",
+                    "guide_post",
+                    "pgy_comment_component",
+                    "pgy_engage_bar",
+                    "bar_below_image",
+                    "aigc_collection",
+                    "co_produce",
+                    "widgets_ndb",
+                    "next_note_guide",
+                    "pgy_bbc_exp",
+                    "async_group",
+                    "super_activity",
+                    "widgets_enhance",
+                    "music_player",
+                    "soundtrack_player"
+                  ],
+                  [
+                    "guos_test",
+                    "vote_stickers",
+                    "bullet_comment_lead",
+                    "note_search_box",
+                    "interact_pk",
+                    "interact_vote",
+                    "guide_heuristic",
+                    "share_to_msg",
+                    "follow_guide",
+                    "note_share_prompt_v1",
+                    "sync_group",
+                    "group_share",
+                    "share_guide_bubble",
+                    "widgets_share",
+                    "guide_navigator"
+                  ]
+                ],
+                "seeded_count": 0,
+                "has_related_goods": false,
+                "share_code_flag": 0,
+                "foot_tags": [],
+                "privacy": {
+                  "type": 0,
+                  "show_tips": false,
+                  "nick_names": ""
+                },
+                "native_voice_info": {
+                  "name": "会说笑喜剧蔡蔡的原声",
+                  "desc": "@会说笑喜剧蔡蔡创作的原声",
+                  "duration": 34039,
+                  "md5sum": "449ed0319f1084b4083677ffeb817d46",
+                  "use_count": 1,
+                  "cover": "https://picasso-static.xiaohongshu.com/fe-platform/b598691aefe712c51cbe29af0ddbe732937bc965.png",
+                  "sound_id": "1146139436490750929",
+                  "url": "http://sns-video-al.xhscdn.com/audio/1/02e7e7beb825b7730103700395e1410934_0.m4a",
+                  "subtitle": "会说笑喜剧...的原声",
+                  "sound_bg_music_type": 3,
+                  "optimize_exp_in_use_count": 0
+                },
+                "note_text_press_options": [
+                  {
+                    "key": "copy",
+                    "extra": ""
+                  }
+                ],
+                "desc": "#阿那亚[话题]# #单立人[话题]# #单立人喜剧节[话题]# #吃早饭[话题]# #脱口秀[话题]# #朋友[话题]#",
+                "liked": false,
+                "red_envelope_note": false,
+                "last_update_time": 0,
+                "in_censor": false,
+                "media_save_config": {
+                  "disable_save": false,
+                  "disable_watermark": false,
+                  "disable_weibo_cover": false
+                },
+                "time": 1743240887,
+                "share_info": {
+                  "image": "http://sns-na-i1.xhscdn.com/1040g00831fk08m2eg6005oog1mj4hh2adii743g?imageView2/2/w/360/format/jpg/q/75",
+                  "link": "https://www.xiaohongshu.com/discovery/item/67e7beb7000000000f03adfe?ignoreEngage=true&share_from_user_hidden=true&xsec_source=app_share&type=video&author_share=1",
+                  "title": "我来看看吃早饭碰到哪些朋友",
+                  "block_private_msg": false,
+                  "function_entries": [
+                    {
+                      "type": "video_download"
+                    },
+                    {
+                      "type": "generate_image"
+                    },
+                    {
+                      "type": "copy_link"
+                    },
+                    {
+                      "type": "native_voice"
+                    },
+                    {
+                      "type": "video_speed"
+                    },
+                    {
+                      "type": "dislike"
+                    },
+                    {
+                      "type": "report"
+                    },
+                    {
+                      "type": "video_feedback"
+                    }
+                  ],
+                  "guide_audited": true,
+                  "content": "#阿那亚  #单立人  #单立人喜剧节  #吃早饭  #脱口秀  #朋友",
+                  "is_star": false,
+                  "show_wechat_tag": false
+                },
+                "topics": [
+                  {
+                    "id": "5be86f8379d44e0001d8d9fa",
+                    "name": "阿那亚",
+                    "image": "http://ci.xiaohongshu.com/fd75707a-37f8-45ad-b7a7-0feaf36e9cad@r_120w_120h.jpg",
+                    "link": "xhsdiscover://topic/v2/5be86f83878aa900017621ce?page_source=note_feed.click_new_big",
+                    "activity_online": false,
+                    "style": 0,
+                    "discuss_num": 0,
+                    "business_type": 0
+                  }
+                ],
+                "cooperate_binds": [],
+                "use_water_color": false,
+                "long_press_share_info": {
+                  "show_wechat_tag": false,
+                  "function_entries": [
+                    {
+                      "type": "image_download"
+                    }
+                  ],
+                  "guide_audited": false,
+                  "content": "",
+                  "title": "",
+                  "is_star": false,
+                  "block_private_msg": false
+                },
+                "need_product_review": false,
+                "goods_info": {},
+                "id": "67e7beb7000000000f03adfe",
+                "qq_mini_program_info": {
+                  "desc": "#阿那亚  #单立人  #单立人喜剧节  #吃早饭  #脱口秀  #朋友",
+                  "webpage_url": "https://www.xiaohongshu.com/discovery/item/67e7beb7000000000f03adfe?xsec_source=app_share",
+                  "thumb": "http://sns-na-i1.xhscdn.com/1040g00831fk08m2eg6005oog1mj4hh2adii743g?imageView2/2/w/540/format/jpg/q/75",
+                  "share_title": "@会说笑喜剧蔡蔡 发了一篇超赞的笔记，快点来看！",
+                  "user_name": "gh_66c53d495417",
+                  "title": "@会说笑喜剧蔡蔡 发了一篇超赞的笔记，快点来看！"
+                },
+                "ats": [],
+                "collected": false,
+                "enable_brand_lottery": false,
+                "title": "我来看看吃早饭碰到哪些朋友",
+                "images_list": [
+                  {
+                    "index": 0,
+                    "longitude": 0,
+                    "scale_to_large": 4,
+                    "url": "http://sns-na-i1.xhscdn.com/1040g00831fk08m2eg6005oog1mj4hh2adii743g?imageView2/2/w/540/format/heif/q/46|imageMogr2/strip&redImage/frame/0&ap=1&sc=V_PRV",
+                    "original": "http://sns-na-i1.xhscdn.com/1040g00831fk08m2eg6005oog1mj4hh2adii743g?ap=1&sc=V_ORG",
+                    "url_multi_level": {
+                      "low": "http://sns-na-i1.xhscdn.com/1040g00831fk08m2eg6005oog1mj4hh2adii743g?imageView2/2/w/540/format/heif/q/75|imageMogr2/strip&redImage/frame/0&ap=1&sc=V_PRV",
+                      "medium": "http://sns-na-i1.xhscdn.com/1040g00831fk08m2eg6005oog1mj4hh2adii743g?imageView2/2/w/540/format/heif/q/75|imageMogr2/strip&redImage/frame/0&ap=1&sc=V_PRV",
+                      "high": "http://sns-na-i1.xhscdn.com/1040g00831fk08m2eg6005oog1mj4hh2adii743g?imageView2/2/w/540/format/heif/q/75|imageMogr2/strip&redImage/frame/0&ap=1&sc=V_PRV"
+                    },
+                    "latitude": 0,
+                    "trace_id": "1040g00831fk08m2eg6005oog1mj4hh2adii743g",
+                    "need_load_original_image": true,
+                    "fileid": "1040g00831fk08m2eg6005oog1mj4hh2adii743g",
+                    "height": 1440,
+                    "width": 1080
+                  }
+                ],
+                "text_language_code": "zh"
+              }
+            ],
+            "comment_list": [],
+            "track_id": ""
+          }
+        ]
+      },
+      "message": null,
+      "recordTime": "2025-04-27T18:17:17.205997384"
+    }
+  }

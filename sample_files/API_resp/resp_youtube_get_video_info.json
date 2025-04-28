@@ -1,0 +1,1259 @@
+{
+    "code": 200,
+    "router": "/api/v1/youtube/web/get_video_info",
+    "params": {
+      "video_id": "AMCUqgu_cTM"
+    },
+    "data": {
+      "status": true,
+      "errorId": "Success",
+      "type": "video",
+      "id": "AMCUqgu_cTM",
+      "title": "一口气了解迪拜经济和它奢华表面的背后...",
+      "description": "朋友们，咱们今天来一口气了解迪拜经济，它怎么能依靠非常少量的石油，做到中东土豪中最\"壕\"的存在？这背后的代价又是什么？",
+      "channel": {
+        "type": "channel",
+        "id": "UCilwQlk62k1z7aUEZPOB6yw",
+        "name": "小Lin说",
+        "handle": "@xiao_lin_shuo",
+        "isVerified": false,
+        "isVerifiedArtist": false,
+        "subscriberCountText": "2.41M subscribers",
+        "avatar": [
+          {
+            "url": "https://yt3.ggpht.com/dDOuCyzkVBwGapJot3mAGqq1_2_sng7pgnPtkGF1uSmcleO4p6O4Ox6flFzwF7vYDiuNv2I_mA=s48-c-k-c0x00ffffff-no-rj",
+            "width": 48,
+            "height": 48
+          },
+          {
+            "url": "https://yt3.ggpht.com/dDOuCyzkVBwGapJot3mAGqq1_2_sng7pgnPtkGF1uSmcleO4p6O4Ox6flFzwF7vYDiuNv2I_mA=s88-c-k-c0x00ffffff-no-rj",
+            "width": 88,
+            "height": 88
+          },
+          {
+            "url": "https://yt3.ggpht.com/dDOuCyzkVBwGapJot3mAGqq1_2_sng7pgnPtkGF1uSmcleO4p6O4Ox6flFzwF7vYDiuNv2I_mA=s176-c-k-c0x00ffffff-no-rj",
+            "width": 176,
+            "height": 176
+          }
+        ]
+      },
+      "lengthSeconds": 1639,
+      "viewCount": 3097380,
+      "likeCount": 43395,
+      "publishedTime": "2024-09-08T18:00:09-07:00",
+      "publishedTimeText": "Sep 8, 2024",
+      "isLiveStream": false,
+      "isLiveNow": false,
+      "isRegionRestricted": false,
+      "isUnlisted": false,
+      "isCommentDisabled": false,
+      "commentCountText": "2.4K",
+      "thumbnails": [
+        {
+          "url": "https://i.ytimg.com/vi/AMCUqgu_cTM/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLAEEXoTDW8mRc1M4RjbX5mv1EHnqA",
+          "width": 168,
+          "height": 94
+        },
+        {
+          "url": "https://i.ytimg.com/vi/AMCUqgu_cTM/hqdefault.jpg?sqp=-oaymwEbCMQBEG5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBp5a_qn0rfm5v_6yllgNGIK_KD_Q",
+          "width": 196,
+          "height": 110
+        },
+        {
+          "url": "https://i.ytimg.com/vi/AMCUqgu_cTM/hqdefault.jpg?sqp=-oaymwEcCPYBEIoBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLACZjRVRzy4WfzUdymLpC-tu_gTgA",
+          "width": 246,
+          "height": 138
+        },
+        {
+          "url": "https://i.ytimg.com/vi/AMCUqgu_cTM/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLCjOL2_8C4IuRFovnpaR5BpAs40-w",
+          "width": 336,
+          "height": 188
+        },
+        {
+          "url": "https://i.ytimg.com/vi_webp/AMCUqgu_cTM/maxresdefault.webp",
+          "width": 1920,
+          "height": 1080
+        }
+      ],
+      "musicCredits": [],
+      "videos": {
+        "status": true,
+        "errorId": "Success",
+        "expiration": 1745828645,
+        "items": [
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAZ1eLtN8IOU0kOEJbl77tREzHMH7f6mcernyKg7wHRJe2DzTWfai9tSQl4-Un-SR7WvMBiDyIDS&spc=wk1kZvlN5h-orrhv7uya2Kh3gKuyc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXIuYt_FklNQ&vprv=1&svpuc=1&mime=video%2Fmp4&ns=CpfeuyfnJKzbL_3ipJZmR28Q&rqh=1&gir=yes&clen=113921095&ratebypass=yes&dur=1638.632&lmt=1729420950135377&mt=1745806639&fvip=1&fexp=51355912&c=WEB&sefc=1&txp=5538434&n=ocSz3ngnzYhmmQ&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cratebypass%2Cdur%2Clmt&sig=AJfQdSswRQIhAPLFKXMFmOrB5q0u1nGtMWXx--hBghEJb11FTuZZruSUAiAR99hPF6fyUFx4jgyZyIuHMC5oeXf9btn5XfVoBSeTbQ%3D%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638632,
+            "mimeType": "video/mp4; codecs=\"avc1.42001E, mp4a.40.2\"",
+            "extension": "mp4",
+            "lastModified": 1729420950135377,
+            "size": 113921095,
+            "sizeText": "108.6MB",
+            "hasAudio": true,
+            "quality": "360p",
+            "width": 640,
+            "height": 360
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=137&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=364421651&dur=1638.566&lmt=1729441752710427&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5535434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIgX7wt16v5kv5iHthKZq0ZVoFYXFK4VQgWMWgLzr1SGV8CIQCTrdm5z_z3UyTDe8HbK1qa_vd76n6DFINCTJpilvgx-A%3D%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/mp4; codecs=\"avc1.640028\"",
+            "extension": "mp4",
+            "lastModified": 1729441752710427,
+            "size": 364421651,
+            "sizeText": "347.5MB",
+            "hasAudio": false,
+            "quality": "1080p",
+            "width": 1920,
+            "height": 1080
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=248&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fwebm&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=280944417&dur=1638.566&lmt=1729444085324241&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5535434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRAIgLCpupXGeZhbv-vx7-PvZqVR5wZXSi0aFXw_ylreo9Q0CIAZ9Hvh3c9HGa2Pl6TVdJ2VLlppAUPGgyNZS41pA-7iY&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/webm; codecs=\"vp9\"",
+            "extension": "webm",
+            "lastModified": 1729444085324241,
+            "size": 280944417,
+            "sizeText": "267.9MB",
+            "hasAudio": false,
+            "quality": "1080p",
+            "width": 1920,
+            "height": 1080
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=399&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=215772127&dur=1638.566&lmt=1741255921031221&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5537534&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRgIhALtes_0LmLtxHGvFUbilQ-xtOAMEtkc-mWuJRjwJGDjPAiEA7wHOmNetWI1htwGFqfxWSKtztVn8KU72aXckRLp61jc%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/mp4; codecs=\"av01.0.08M.08\"",
+            "extension": "mp4",
+            "lastModified": 1741255921031221,
+            "size": 215772127,
+            "sizeText": "205.8MB",
+            "hasAudio": false,
+            "quality": "1080p",
+            "width": 1920,
+            "height": 1080
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=136&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=102983314&dur=1638.566&lmt=1729438939961391&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5535434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIgTZHrt56tehigDD_FWATFeXekGs-Wvl_2BUo_8wZ1E_UCIQCBfvV1700DKZ2en66pnvnqFVa6kr9KNKniO8xMhR_cAQ%3D%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/mp4; codecs=\"avc1.4d401f\"",
+            "extension": "mp4",
+            "lastModified": 1729438939961391,
+            "size": 102983314,
+            "sizeText": "98.2MB",
+            "hasAudio": false,
+            "quality": "720p",
+            "width": 1280,
+            "height": 720
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=247&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fwebm&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=121904324&dur=1638.566&lmt=1729456303572483&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5535434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRgIhAPtuH9BiCzKmDGJQtcfheUuSsoKvHT9q5KiTjhdmz23aAiEAjoW-KmPsSi7Ot7_cPjtPfCWaseuQCBA3yNl7-9h_fYw%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/webm; codecs=\"vp9\"",
+            "extension": "webm",
+            "lastModified": 1729456303572483,
+            "size": 121904324,
+            "sizeText": "116.3MB",
+            "hasAudio": false,
+            "quality": "720p",
+            "width": 1280,
+            "height": 720
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=398&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=127972711&dur=1638.566&lmt=1741248530861039&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5537534&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIhAOCBP79tSTPMV07oA9-6QMvwYjgOJUinpmtBvQftluPMAiARrujBuAjCJe95YGJXAjjgrR6EahBAeRsXp09sNH-tlw%3D%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/mp4; codecs=\"av01.0.05M.08\"",
+            "extension": "mp4",
+            "lastModified": 1741248530861039,
+            "size": 127972711,
+            "sizeText": "122MB",
+            "hasAudio": false,
+            "quality": "720p",
+            "width": 1280,
+            "height": 720
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=135&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=57125877&dur=1638.566&lmt=1729438703640638&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5535434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIhAK4br7F0EpGSTMOjaE9FVF3UFQcnwfy-tT5rcuqQGkqoAiBzyR5Blq2gWTCQj2CPp1dlhGPPQNlfhM5okobXCmkjoQ%3D%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/mp4; codecs=\"avc1.4d401f\"",
+            "extension": "mp4",
+            "lastModified": 1729438703640638,
+            "size": 57125877,
+            "sizeText": "54.5MB",
+            "hasAudio": false,
+            "quality": "480p",
+            "width": 854,
+            "height": 480
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=244&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fwebm&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=77936228&dur=1638.566&lmt=1729456438752836&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5535434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIgKphAqo0cjyqPkObKx4UGr6cSVnihTuCi0bIOrDlG7ioCIQDxWvO58DyM44P3KaisqlksIUEQ0ULefZJwfiWixb1SgA%3D%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/webm; codecs=\"vp9\"",
+            "extension": "webm",
+            "lastModified": 1729456438752836,
+            "size": 77936228,
+            "sizeText": "74.3MB",
+            "hasAudio": false,
+            "quality": "480p",
+            "width": 854,
+            "height": 480
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=397&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=73400264&dur=1638.566&lmt=1741249541018688&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5537534&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRgIhAMRFuSWPevR6kfMT4Tsf6KuzPhTzLgHbtkuMrDPjKGi0AiEAkEpN0O1A37pESkR-mg1hRN1C4-VH_j2etEi4EXDCcqI%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/mp4; codecs=\"av01.0.04M.08\"",
+            "extension": "mp4",
+            "lastModified": 1741249541018688,
+            "size": 73400264,
+            "sizeText": "70MB",
+            "hasAudio": false,
+            "quality": "480p",
+            "width": 854,
+            "height": 480
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=134&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=38179501&dur=1638.566&lmt=1729438616689866&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5535434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRgIhANOkvRYRWrMomBA2uPRg0V7TuT6voq1gItq89UiasvmcAiEAw0i40e27GdR6s7eu_WGTy5ogDMDRMtcli198xTvhaus%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/mp4; codecs=\"avc1.4d401e\"",
+            "extension": "mp4",
+            "lastModified": 1729438616689866,
+            "size": 38179501,
+            "sizeText": "36.4MB",
+            "hasAudio": false,
+            "quality": "360p",
+            "width": 640,
+            "height": 360
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=243&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fwebm&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=52580682&dur=1638.566&lmt=1729456079919751&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5535434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRAIgYCYUI07bIFfo_zGlX7nIx4NleUsDl0HEx66yiw1BPkoCIEGwFl_5yfhv2teObPKJbWaoedOxAB4WSLfi55HwH_0j&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/webm; codecs=\"vp9\"",
+            "extension": "webm",
+            "lastModified": 1729456079919751,
+            "size": 52580682,
+            "sizeText": "50.1MB",
+            "hasAudio": false,
+            "quality": "360p",
+            "width": 640,
+            "height": 360
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=396&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=43305715&dur=1638.566&lmt=1741246140657882&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5537534&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIgXw4vLC0tjlNvriqtA7S6v2foBsdnyCEwv9AHeEBOszwCIQDJSEvDM5X_K0Y2c_p45xySWGt7rQ2YF1M6c38ReVr6fg%3D%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/mp4; codecs=\"av01.0.01M.08\"",
+            "extension": "mp4",
+            "lastModified": 1741246140657882,
+            "size": 43305715,
+            "sizeText": "41.3MB",
+            "hasAudio": false,
+            "quality": "360p",
+            "width": 640,
+            "height": 360
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=133&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=20849764&dur=1638.566&lmt=1729439564521450&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5535434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIhAKH82zmSEIbzY64_YY4t8vA_EjmW05WJdG8rC58yNLmrAiAmJn74_LgBuvqf_kds1ib7--5c0p7qI39qHxo1EB3rAQ%3D%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/mp4; codecs=\"avc1.4d4015\"",
+            "extension": "mp4",
+            "lastModified": 1729439564521450,
+            "size": 20849764,
+            "sizeText": "19.9MB",
+            "hasAudio": false,
+            "quality": "240p",
+            "width": 426,
+            "height": 240
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=242&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fwebm&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=29750546&dur=1638.566&lmt=1729456094731893&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5535434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRgIhANhPH10LNFYbs4iDfwNDz9iRdjZQbmmtYJxdPEd7gYp_AiEAgXPyolkv99uaTCELHtnqnW9CmDksauEugD7l0H_uSkI%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/webm; codecs=\"vp9\"",
+            "extension": "webm",
+            "lastModified": 1729456094731893,
+            "size": 29750546,
+            "sizeText": "28.4MB",
+            "hasAudio": false,
+            "quality": "240p",
+            "width": 426,
+            "height": 240
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=395&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=21409921&dur=1638.566&lmt=1741245785518287&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5537534&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRgIhALQqmtX9o-dw6_3qEAr6SagskIUWe8qimZo6ldDO9JJoAiEA3DGNONTRoyWhdsi-26J3RGB8VNSs8E9uqJ25QoIQIBk%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/mp4; codecs=\"av01.0.00M.08\"",
+            "extension": "mp4",
+            "lastModified": 1741245785518287,
+            "size": 21409921,
+            "sizeText": "20.4MB",
+            "hasAudio": false,
+            "quality": "240p",
+            "width": 426,
+            "height": 240
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=160&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=13000875&dur=1638.566&lmt=1729438957838808&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5535434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRgIhANW6tCu1H4bCxt7_3g7lug-M9pchEpAIf3OXqcHnfO_fAiEAuXYXSaDb2K9vKKdaeWyOYBg1oof8hcP_t0veYwF8sT8%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/mp4; codecs=\"avc1.4d400c\"",
+            "extension": "mp4",
+            "lastModified": 1729438957838808,
+            "size": 13000875,
+            "sizeText": "12.4MB",
+            "hasAudio": false,
+            "quality": "144p",
+            "width": 256,
+            "height": 144
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=278&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fwebm&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=18659891&dur=1638.566&lmt=1729456325155767&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5535434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRgIhAIZAjjy_YoXDTCLRIqmBupIIBmsf9rhWbvRNgLaksFopAiEAkgCoUMqz7Aiaw1_r_ltfICi2iZFtD_TPc9VkIQb5mcc%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/webm; codecs=\"vp9\"",
+            "extension": "webm",
+            "lastModified": 1729456325155767,
+            "size": 18659891,
+            "sizeText": "17.8MB",
+            "hasAudio": false,
+            "quality": "144p",
+            "width": 256,
+            "height": 144
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=394&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=video%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=13181588&dur=1638.566&lmt=1741244053280612&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5537534&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRgIhAL1BsQEEaa1y_AFLxBkn3C2YIP7tr5jJs-RIJug4Mku9AiEAtug5uBhRWnrVH6uHliX7geoxAvrZsFialycsbhYJVsc%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638566,
+            "mimeType": "video/mp4; codecs=\"av01.0.00M.08\"",
+            "extension": "mp4",
+            "lastModified": 1741244053280612,
+            "size": 13181588,
+            "sizeText": "12.6MB",
+            "hasAudio": false,
+            "quality": "144p",
+            "width": 256,
+            "height": 144
+          }
+        ]
+      },
+      "audios": {
+        "status": true,
+        "errorId": "Success",
+        "expiration": 1745828645,
+        "items": [
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=140&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=audio%2Fmp4&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=26520290&dur=1638.632&lmt=1729418204622422&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5532434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRAIgLNVOCaNhgtmu6fvjiwOAIQA0-Wu9syMwp9z6IDAoJHgCIDlfL4rE7Gbe6ING1UXeb_B09jzqJa6eotu197n_9HPP&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638632,
+            "mimeType": "audio/mp4; codecs=\"mp4a.40.2\"",
+            "extension": "m4a",
+            "lastModified": 1729418204622422,
+            "size": 26520290,
+            "sizeText": "25.3MB"
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=249&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=audio%2Fwebm&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=10553784&dur=1638.601&lmt=1729418367932411&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5532434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRAIgQkKeMMF9BH62sWwDWwsdS0KbDN9mwmdHWpgKMIJEQa8CID-BTlJ1i-uc-wOKoSpEsw75UTPYEoiYn4PO6-qtFqb0&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638601,
+            "mimeType": "audio/webm; codecs=\"opus\"",
+            "extension": "weba",
+            "lastModified": 1729418367932411,
+            "size": 10553784,
+            "sizeText": "10.1MB"
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=250&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=audio%2Fwebm&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=13629272&dur=1638.601&lmt=1729418368026248&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5532434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIgb4k9HrtTnb0Fc8mvpPwQU1IrrvAZjHhH6B2dJYtNg_oCIQDjfvSxywDaOMhc3vt4AUQPXGUjkaR4pFC_glTi-wxlYQ%3D%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638601,
+            "mimeType": "audio/webm; codecs=\"opus\"",
+            "extension": "weba",
+            "lastModified": 1729418368026248,
+            "size": 13629272,
+            "sizeText": "13MB"
+          },
+          {
+            "url": "https://rr2---sn-gjo-qj5l.googlevideo.com/videoplayback?expire=1745828645&ei=xeYOaN_bIvSKkucPp67p2A0&ip=45.203.15.206&id=o-AEC3YI4j92sMEfOQN-2Q4noeIfyonPSH3NEDItIth-0C&itag=251&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745807045%2C&mh=LJ&mm=31%2C29&mn=sn-gjo-qj5l%2Csn-p5qddn7r&ms=au%2Crdu&mv=u&mvi=2&pl=22&rms=au%2Cau&bui=AecWEAamXCy4H19e_HPkpORWZg1zA_RoOTY2fOXpywjZhH2R58DP-tcY-fpcXLMcfF5ry1CmQ1HrBoNE&spc=wk1kZvlO5h-orrhv7uya2Kh3gKuzc2nVzGLC8SDoSbxP9SPWfZFlgFLsmAgXEuPF_ME&vprv=1&svpuc=1&mime=audio%2Fwebm&ns=wQA_lniHUx42k96bhdSirMAQ&rqh=1&gir=yes&clen=25792450&dur=1638.601&lmt=1729418367974020&mt=1745806639&fvip=1&keepalive=yes&fexp=51355912&c=WEB&sefc=1&txp=5532434&n=VjNjEe8_nsYZ_g&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRAIgS7LVMoLjdkXA_XTDMO7PJbiHC7ZvfXZpoM8szdwWou4CIALL5IpwtEsJmxvGuSxtTbpa_8vcPWRFerlIUEijDIT9&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms&lsig=ACuhMU0wRgIhAIWZOt5NIjRtzLbR32Z4q_LM1lyMe5WL82iSSfBFEhewAiEApHxKJFTCedN_uxjf-qCHXBHf51i-QTGW_Frskid-Q0I%3D&pot=MnR73xISGWciB3vnxlZNeQ3ACMiLCpHEuOARR--CPlPL8QugkYHYP3JliwHy_EYyJp9A0R7GXxfjTWJrM0owWyt109EzHLb2YYEwqXx1hdS9SJDxK4sBVMLPFG1CP0oglepQhShs-XhgxhgL96-MKoFFTnwzKw%3D%3D&range=0-",
+            "lengthMs": 1638601,
+            "mimeType": "audio/webm; codecs=\"opus\"",
+            "extension": "weba",
+            "lastModified": 1729418367974020,
+            "size": 25792450,
+            "sizeText": "24.6MB"
+          }
+        ]
+      },
+      "subtitles": {
+        "status": true,
+        "errorId": "Success",
+        "expiration": 1745832245,
+        "items": [
+          {
+            "url": "https://www.youtube.com/api/timedtext?v=AMCUqgu_cTM&ei=xeYOaN_bIvSKkucPp67p2A0&caps=asr&opi=112496729&exp=xpo&xoaf=7&hl=en&ip=0.0.0.0&ipbits=0&expire=1745832245&sparams=ip,ipbits,expire,v,ei,caps,opi,exp,xoaf&signature=1EF9185C6FCC876C2D3DA5D3B24C8E803D7EDA66.696C417AC60350CC0146E7912128FFC9025403F9&key=yt8&lang=zh",
+            "code": "zh",
+            "text": "Chinese"
+          },
+          {
+            "url": "https://www.youtube.com/api/timedtext?v=AMCUqgu_cTM&ei=xeYOaN_bIvSKkucPp67p2A0&caps=asr&opi=112496729&exp=xpo&xoaf=7&hl=en&ip=0.0.0.0&ipbits=0&expire=1745832245&sparams=ip,ipbits,expire,v,ei,caps,opi,exp,xoaf&signature=1EF9185C6FCC876C2D3DA5D3B24C8E803D7EDA66.696C417AC60350CC0146E7912128FFC9025403F9&key=yt8&lang=zh-Hant",
+            "code": "zh-Hant",
+            "text": "Chinese (Traditional)"
+          }
+        ]
+      },
+      "related": {
+        "nextToken": "video-related.CBQSExILQU1DVXFndV9jVE3AAQHIAQEYACqnBk1nb0k2OXp4c2JxbDk1MWsyczZMNnd6S0JBckhCQW9EOGo0QUNnM0NQZ29JNjVlRHY2Nlpzc1FIQ2dQeVBnQUtEY0ktQ2dqeXctZmNvS25ZNWpRS0FfSS1BQW9EOGo0QUNnN0NQZ3NJZ01qQmpieWwtdUNNQVFvRDhqNEFDZzdDUGdzSThNT2R3SmFwMmNXWEFRb0Q4ajRBQ2c3Q1Bnc0l4UDJVMmRXZG83eXpBUW9EOGo0QUNnN0NQZ3NJdXMzRHpJSG43TG40QVFvRDhqNEFDZzNDUGdvSW84ZjNfcS1lLTk1RENnUHlQZ0FLRHNJLUN3akNvdXpzaTY2SWk4SUJDZ1B5UGdBS0RjSS1DZ2pIODZ1b2lyU2Fxd1FLQV9JLUFBb053ajRLQ0lydDZZVEczY0RRV3dvRDhqNEFDZzdDUGdzSWtvbks2X2Y2djV2cEFRb0Q4ajRBQ2czQ1Bnb0ktc2E3dkoydWljdFNDZ1B5UGdBS0RzSS1Dd2l1aHEzNS05cWM3ZDRCQ2dQeVBnQUtEc0ktQ3dqSzhkLUluZmplcXF3QkNnUHlQZ0FLRHNJLUN3aXRvcl9IbXJ6MjRld0JDZ1B5UGdBS0RzSS1Dd2lrLTVYTi1KT3NnTGdCQ2dQeVBnQUtEc0ktQ3dqRW9ZR2lpTDZyOGNvQkNnUHlQZ0FLRHNJLUN3aWR4LVhnbm91Tm11Y0JDZ1B5UGdBS0RjSS1DZ2l2bnJhVWlZRzcxeHNLQV9JLUFBb053ajRLQ092YzhiRzZwZmVkWkJJVkFBSUVCUWNKQ3cwUEVSTVZGeGtiSFI4aEl5VW5HZ1FJQUJBQkdnUUlBaEFER2dRSUJSQUdHZ1FJQnhBSUdnUUlDUkFLR2dRSUN4QU1HZ1FJRFJBT0dnUUlEeEFRR2dRSUVSQVNHZ1FJRXhBVUdnUUlGUkFXR2dRSUZ4QVlHZ1FJR1JBYUdnUUlHeEFjR2dRSUhSQWVHZ1FJSHhBZ0dnUUlJUkFpR2dRSUl4QWtHZ1FJSlJBbUdnUUlKeEFvS2hVQUFnUUZCd2tMRFE4UkV4VVhHUnNkSHlFakpTY2oPd2F0Y2gtbmV4dC1mZWVk.7Sv2moVJYQtSsaiO1wVjeDcWItgwOFWXkEZ4yg7AgVU",
+        "items": [
+          {
+            "type": "video",
+            "id": "B4jIyufgy-s",
+            "title": "【硬核】一口气了解黄金 | 为什么暴涨? 投资黄金需要注意什么?",
+            "channel": {
+              "type": "channel",
+              "id": "UCilwQlk62k1z7aUEZPOB6yw",
+              "name": "小Lin说",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/dDOuCyzkVBwGapJot3mAGqq1_2_sng7pgnPtkGF1uSmcleO4p6O4Ox6flFzwF7vYDiuNv2I_mA=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "29:14",
+            "viewCountText": "2,491,829 views",
+            "publishedTimeText": "11 months ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/B4jIyufgy-s/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBYoX3N77lJLaZLPQzqPF332M875g",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/B4jIyufgy-s/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLAIGzZjmNWzWL3TxtuU2Q4lhDNbaQ",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/B4jIyufgy-s/mqdefault_6s.webp?du=3000&sqp=CKubu8AG&rs=AOn4CLAuENinRMUwnVAIdi-cGgE0SrCoNA",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "NM1hSguZ4fI",
+            "title": "【硬核】一口气了解外汇 | Everything You Need To Know About Foreign Exchange",
+            "channel": {
+              "type": "channel",
+              "id": "UCilwQlk62k1z7aUEZPOB6yw",
+              "name": "小Lin说",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/dDOuCyzkVBwGapJot3mAGqq1_2_sng7pgnPtkGF1uSmcleO4p6O4Ox6flFzwF7vYDiuNv2I_mA=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "26:36",
+            "viewCountText": "2,042,640 views",
+            "publishedTimeText": "8 months ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/NM1hSguZ4fI/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBbd0_rT5O2qaqdrgcWruMK39fcMA",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/NM1hSguZ4fI/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLAJJbQzLimsQahvaGGmj7dGx6FPOg",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/NM1hSguZ4fI/mqdefault_6s.webp?du=3000&sqp=CKqbu8AG&rs=AOn4CLArN77umsEBQqkbmUO7I69d4jXiAQ",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "jMHpK8GwZAA",
+            "title": "一口气了解韩国经济",
+            "channel": {
+              "type": "channel",
+              "id": "UCilwQlk62k1z7aUEZPOB6yw",
+              "name": "小Lin说",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/dDOuCyzkVBwGapJot3mAGqq1_2_sng7pgnPtkGF1uSmcleO4p6O4Ox6flFzwF7vYDiuNv2I_mA=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "24:04",
+            "viewCountText": "2,727,339 views",
+            "publishedTimeText": "1 year ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/jMHpK8GwZAA/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLCAoXwKLAQhzRfDLUdRx3hXUod6ow",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/jMHpK8GwZAA/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLBBvmvwjgFNJ3GEsabBMcbELaqfCA",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/jMHpK8GwZAA/mqdefault_6s.webp?du=3000&sqp=CICru8AG&rs=AOn4CLDLMJgoyMqtihycUVJgL-10hViNzA",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "l4tlSWgHYfA",
+            "title": "华国锋（上集）：领袖为何造反？怀仁堂事变始末",
+            "channel": {
+              "type": "channel",
+              "id": "UCapPWG_ppEuYvelriReTcOA",
+              "name": "二爷故事",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/12j5RU6u6Y0dVp-OdHng4QAEHWnNxzlpmDU7Hlpz5K2w3YZcg45UsvWwX8QKzISTmYN7999o=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "27:16",
+            "viewCountText": "1,193,134 views",
+            "publishedTimeText": "10 months ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/l4tlSWgHYfA/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLAZLR4Mi8xWPQSBzgsGQeGwtioaXg",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/l4tlSWgHYfA/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLCK9DntwdfdBCGgjhTMqp3SPjARMQ",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/l4tlSWgHYfA/mqdefault_6s.webp?du=3000&sqp=CIC8u8AG&rs=AOn4CLAUJM34x1W77BHtR7KwlidIB8BBEg",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "s3iM7VslPsQ",
+            "title": "一口气了解洗钱 它能玩得有多花",
+            "channel": {
+              "type": "channel",
+              "id": "UCilwQlk62k1z7aUEZPOB6yw",
+              "name": "小Lin说",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/dDOuCyzkVBwGapJot3mAGqq1_2_sng7pgnPtkGF1uSmcleO4p6O4Ox6flFzwF7vYDiuNv2I_mA=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "33:34",
+            "viewCountText": "3,417,312 views",
+            "publishedTimeText": "6 months ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/s3iM7VslPsQ/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLAitDo0TNp2O6CguadTC_Q2LoMjFw",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/s3iM7VslPsQ/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLAomLp1woPlHQBCEhTUyE6wh5OO0Q",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/s3iM7VslPsQ/mqdefault_6s.webp?du=3000&sqp=COC5u8AG&rs=AOn4CLCsNBtuy2GHgVhLsUBNCf4GXmqA1g",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "-HOzOBmQ5ro",
+            "title": "一口气了解瑞士经济",
+            "channel": {
+              "type": "channel",
+              "id": "UCilwQlk62k1z7aUEZPOB6yw",
+              "name": "小Lin说",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/dDOuCyzkVBwGapJot3mAGqq1_2_sng7pgnPtkGF1uSmcleO4p6O4Ox6flFzwF7vYDiuNv2I_mA=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "35:20",
+            "viewCountText": "1,009,388 views",
+            "publishedTimeText": "7 days ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/-HOzOBmQ5ro/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLClrjfMy3JfrZhoxvgd6kg2FqE2VQ",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/-HOzOBmQ5ro/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLBk02nJJ4eD5lFav9WUwKlc4XFw-w",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/-HOzOBmQ5ro/mqdefault_6s.webp?du=3000&sqp=CNiOu8AG&rs=AOn4CLBuPrK5DADBxWAEK7ao0XHcwTwaSA",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "Q73s8v_d46M",
+            "title": "汇率为什么涨跌 | 美元跌宕50年",
+            "channel": {
+              "type": "channel",
+              "id": "UCilwQlk62k1z7aUEZPOB6yw",
+              "name": "小Lin说",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/dDOuCyzkVBwGapJot3mAGqq1_2_sng7pgnPtkGF1uSmcleO4p6O4Ox6flFzwF7vYDiuNv2I_mA=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "34:35",
+            "viewCountText": "2,201,222 views",
+            "publishedTimeText": "8 months ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/Q73s8v_d46M/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLADXGxAZelVebpwd5zY6QWN6R5sGw",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/Q73s8v_d46M/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDMicExRAm3_7_PAWpB5k0ib61K3Q",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/Q73s8v_d46M/mqdefault_6s.webp?du=3000&sqp=CIq8u8AG&rs=AOn4CLAiJFQBw1aaocKl07vdN_Q_MRc91Q",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "whYhcL2bEUI",
+            "title": "當保母年薪破 300 萬！但她卻說：這工作讓我崩潰！ /  她以為自己超會帶小孩…結果發現媽媽當年更狂！ | 青茶說",
+            "channel": {
+              "type": "channel",
+              "id": "UC5NWyoFpsSG0qKCGIx1_4Pg",
+              "name": "青茶說",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/gIrtgLR3WkNAkl7Kq0Hpjq6YlzqGemEBfgohCeotK4sFdBcStYgJ_15WrA8-DruQBEf-ZfjkNA=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "27:18",
+            "viewCountText": "339,211 views",
+            "publishedTimeText": "1 month ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/whYhcL2bEUI/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLAnU8qPXuWmBD-beFkKzJRGE9qVGA",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/whYhcL2bEUI/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLADXRb0NsXPvDz9uU851QaPw6GAKw",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/whYhcL2bEUI/mqdefault_6s.webp?du=3000&sqp=CLzGu8AG&rs=AOn4CLC1ZnjkR3xAVbCpN8kQNCK4gxYCqg",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "BFZpoKUK-cc",
+            "title": "大漏洞，被他發現，成功進入美國大學醫學院，經歷比電影情節曲折｜啾啾哥｜Mindy｜Almost Black",
+            "channel": {
+              "type": "channel",
+              "id": "UC9HOOTENXN_Q2AJ7eozWBXA",
+              "name": "M2档案",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/mcpp8FXBJU3KStF_QBqPBMqogmoMK4OlOhyHx8xbsDlvPQ72QZoQcrlQetGuA1qoLtYhvqlVVCc=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "30:08",
+            "viewCountText": "306,771 views",
+            "publishedTimeText": "2 days ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/BFZpoKUK-cc/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLCmAH3WM3p6WaoPs3s0WN3RA8hESQ",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/BFZpoKUK-cc/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLCh_ZPrcf1gbXD0A8ZEOyGSgFXaCg",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/BFZpoKUK-cc/mqdefault_6s.webp?du=3000&sqp=CNevu8AG&rs=AOn4CLDGlT5qQbLn_AkA5WlmcV0V3aCN4g",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "W6EC7GCadoo",
+            "title": "全球唯一能在「髒亂差」上全面碾壓印度的國家！盛产美女，靠女性以「獨特」方式拉動全國GDP，孟加拉國的經濟有多魔幻 [She's Xiaowu 小烏]",
+            "channel": {
+              "type": "channel",
+              "id": "UC2tQpW0dPiyWPebwBSksJ_g",
+              "name": "脑洞乌托邦",
+              "isVerified": true,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/ytc/AIdro_nmwWFAxp4DcY6Lw28aaIn-eCofr3MNaX1zC0uazESV_Q=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "31:37",
+            "viewCountText": "966,894 views",
+            "publishedTimeText": "2 weeks ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/W6EC7GCadoo/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLDrMF--gK19DfFoUUAwGGU2NAUtUw",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/W6EC7GCadoo/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLC2AkE5XRzIITA18u1wuVsH78yEbQ",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/W6EC7GCadoo/mqdefault_6s.webp?du=3000&sqp=CPCUu8AG&rs=AOn4CLBunHKKr5hMy3YX0C0jQYSyyL75JQ",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "6Tb_131yhJI",
+            "title": "一口气了解阿拉伯语！这门语言到底有多魔幻？",
+            "channel": {
+              "type": "channel",
+              "id": "UCWOokvWthjS6TtI_QBKH22A",
+              "name": "Zoe的中文频道",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/2uYznLPeDQV2Uevw5zeSi9w8Cfpu22V59CXVxNfZ3EjIK4nxPfnusxkh932Z5wtVF256hXgtXw=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "17:19",
+            "viewCountText": "258,348 views",
+            "publishedTimeText": "3 weeks ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/6Tb_131yhJI/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBm5v0U5UiM1D3EkxlIPYfQOtFSIQ",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/6Tb_131yhJI/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLCIZB_i9SDu3kr7aWGLxur4bb9gLQ",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/6Tb_131yhJI/mqdefault_6s.webp?du=3000&sqp=CKCNu8AG&rs=AOn4CLBRhWZFiILhrLbcP4aeVc3ToU0oYQ",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "UpYlcdeO43o",
+            "title": "這樣一個江湖騙子，何以把有錢有勢高智商的精英群體玩得團團轉",
+            "channel": {
+              "type": "channel",
+              "id": "UC9HOOTENXN_Q2AJ7eozWBXA",
+              "name": "M2档案",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/mcpp8FXBJU3KStF_QBqPBMqogmoMK4OlOhyHx8xbsDlvPQ72QZoQcrlQetGuA1qoLtYhvqlVVCc=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "29:19",
+            "viewCountText": "1,362,185 views",
+            "publishedTimeText": "1 year ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/UpYlcdeO43o/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBKkv4vlfXm9OUuh6AZLwKM5yzBpw",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/UpYlcdeO43o/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLB0ZGmZabkttFhY43Ps1y5LOZTMtg",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/UpYlcdeO43o/mqdefault_6s.webp?du=3000&sqp=CNawu8AG&rs=AOn4CLCsA0ctIsqZxMctUzKpjcv9BA1OVQ",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "3tpy178rQy4",
+            "title": "【柴静】邓小平如何评价毛泽东，文革和华国锋？与记者法拉奇激烈交锋 （Deng Xiaoping interviewed by Fallaci 中/英完整版）",
+            "channel": {
+              "type": "channel",
+              "id": "UCjuNibFJ21MiSNpu8LZyV4w",
+              "name": "柴静 Chai Jing",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/4e_pjkZw-BrxdMxhHfeYcZp1iffeX8i-lvuf4q6la6aU9Yb-bNr196d_9Q-Jpk8BT0roCAXQT00=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "44:18",
+            "viewCountText": "1,913,358 views",
+            "publishedTimeText": "7 months ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/3tpy178rQy4/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBVGkkrD4_xd4eBwiALwU6HA11J6Q",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/3tpy178rQy4/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLBGHGpKaF5NO0EIhpzoQ_vpso-1uw",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/3tpy178rQy4/mqdefault_6s.webp?du=3000&sqp=CLzGu8AG&rs=AOn4CLAQ7fPQ4UgB_hpFjD0N88qwGdUHCg",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "rFV7wdEX-Mo",
+            "title": "经济机器是怎样运行的 (时长30分钟) Ray Dalio",
+            "channel": {
+              "type": "channel",
+              "id": "UCqvaXJ1K3HheTPNjH-KpwXQ",
+              "name": "Principles by Ray Dalio",
+              "isVerified": true,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/ytc/AIdro_lxaAsZ4k5Kqc5qVrsvghvEWOpjmE0lnRY9arYSYVy4vMo=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "31:00",
+            "viewCountText": "12,962,056 views",
+            "publishedTimeText": "10 years ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/rFV7wdEX-Mo/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLB0CthKg0QI_kRZLx8E6VsOcBrwGw",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/rFV7wdEX-Mo/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDrz__qt-ovI-Y9ThEA13o0KbN-lw",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/rFV7wdEX-Mo/mqdefault_6s.webp?du=3000&sqp=CJqnu8AG&rs=AOn4CLC8lPDBhA8C6TKceBrh8b-BocCQkQ",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "7MPZ4ajv0S0",
+            "title": "賓·拉登（本·拉登）人間蒸發：美國如何耗時10年，將他從茫茫人海中揪出，最後一擊又將如何抓捕拉登……|自說自話的總裁",
+            "channel": {
+              "type": "channel",
+              "id": "UCgo_-fjJxnLwwwq5dSY72rg",
+              "name": "自说自话的总裁",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/ytc/AIdro_mZjrrtTv-US7XX4HNmQIw1TIkNtcUmP47PLqo90fKQOzU=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "26:30",
+            "viewCountText": "1,937,084 views",
+            "publishedTimeText": "9 months ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/7MPZ4ajv0S0/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBEO-OWPGhkRbYW34PZb30GKf5Jhg",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/7MPZ4ajv0S0/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLCicvVxZUNQNUg1Uu0p9nXlnwRr1Q",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/7MPZ4ajv0S0/mqdefault_6s.webp?du=3000&sqp=CPPBu8AG&rs=AOn4CLDsFxw0GNNjrX46JtUPjwmzfOiYBg",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "uACwn4mlfaQ",
+            "title": "【一刀未剪 全程字幕】直言美國40年來都在拱火發動戰爭 並妖魔化中國大陸?!薩克斯1.5小時演說揭驚人內幕...全場震撼!",
+            "channel": {
+              "type": "channel",
+              "id": "UCpu3bemTQwAU8PqM4kJdoEQ",
+              "name": "中天新聞",
+              "isVerified": true,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/HajrUjhJTUZVTJhqsCkJxHocaB0R8TwxApCiOG6h_rgF6KyGwV6g2KMD6FTX_IMRGS8WPR4s=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "1:40:19",
+            "viewCountText": "132,092 views",
+            "publishedTimeText": "11 hours ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/uACwn4mlfaQ/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBZyjQolu_s9dd99y1U5w6myeDeeg",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/uACwn4mlfaQ/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLAEDIza_Z_Eq39R9IHXU9MkHfNO1w",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/uACwn4mlfaQ/mqdefault_6s.webp?du=3000&sqp=CMS2u8AG&rs=AOn4CLA_08W_zVPvq7k01TqbrsDDePgBiQ",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "yuKt8IRAUMQ",
+            "title": "宗教片也能拍得這麼炸裂！？教皇選舉，上演神級權謀博弈｜2024年高分口碑之作《秘密會議》",
+            "channel": {
+              "type": "channel",
+              "id": "UCI6JZbv41E8csobYsXKobBQ",
+              "name": "哇萨比抓马 WasabiDrama",
+              "isVerified": true,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/EzluP_vlGyZq5sctRbfVCC4GIaSfA-cFXQPOVQO_oOOC5wXOo0L-2D0VGvVrUDurjS53aAJP=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "30:04",
+            "viewCountText": "402,342 views",
+            "publishedTimeText": "3 months ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/yuKt8IRAUMQ/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLDb-iJgrUYyHbp8tpreCMIWfnRZSA",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/yuKt8IRAUMQ/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDC3_u_OASLcVDoAihrPQx9pAfGUg",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/yuKt8IRAUMQ/mqdefault_6s.webp?du=3000&sqp=CMysu8AG&rs=AOn4CLAIZ5F_q-6l0vvoOKWxolxpBFkQZA",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "5zQ0WewZY50",
+            "title": "Trump & Tariffs: Last Week Tonight with John Oliver (HBO)",
+            "channel": {
+              "type": "channel",
+              "id": "UC3XTzVzaHQEd30rQbuvCtTQ",
+              "name": "LastWeekTonight",
+              "isVerified": true,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/Cz7P29Wuh5PaH8MhEA-I2MBPmOGjyCMr9QOHj-fyuXXzoe85gm-P6C8tmuUzZj23JzyvcbuIdA=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "27:06",
+            "viewCountText": "8,154,315 views",
+            "publishedTimeText": "13 days ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/5zQ0WewZY50/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBDAVRHSfBqWQBtmYL_uW2Ct6gV_Q",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/5zQ0WewZY50/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLAfr_a-AcPRwGVdDMC_0zPZEr5HXg",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/5zQ0WewZY50/mqdefault_6s.webp?du=3000&sqp=CPe_u8AG&rs=AOn4CLC1WwLZ6TzXhgdkvfkfLCkAHB24pw",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "G67sCJKNjy8",
+            "title": "20分钟详解日本经济泡沫",
+            "channel": {
+              "type": "channel",
+              "id": "UCilwQlk62k1z7aUEZPOB6yw",
+              "name": "小Lin说",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/dDOuCyzkVBwGapJot3mAGqq1_2_sng7pgnPtkGF1uSmcleO4p6O4Ox6flFzwF7vYDiuNv2I_mA=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "25:53",
+            "viewCountText": "2,720,185 views",
+            "publishedTimeText": "2 years ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/G67sCJKNjy8/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBi3NlnmltZdzZBgx30j2blq_cTow",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/G67sCJKNjy8/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLAh4tTIAwSbzxlHMdx7IrQgrSqxDQ",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/G67sCJKNjy8/mqdefault_6s.webp?du=3000&sqp=CPybu8AG&rs=AOn4CLDqB_ztbptxmUbD75SZLoRQeMimuQ",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          },
+          {
+            "type": "video",
+            "id": "ZDvdK6Y8bms",
+            "title": "NVIDIA：AI軍火商，從0到3萬億的瘋狂真相，他已掌控未來？|自說自話的總裁",
+            "channel": {
+              "type": "channel",
+              "id": "UCgo_-fjJxnLwwwq5dSY72rg",
+              "name": "自说自话的总裁",
+              "isVerified": false,
+              "isVerifiedArtist": false,
+              "avatar": [
+                {
+                  "url": "https://yt3.ggpht.com/ytc/AIdro_mZjrrtTv-US7XX4HNmQIw1TIkNtcUmP47PLqo90fKQOzU=s68-c-k-c0x00ffffff-no-rj",
+                  "width": 68,
+                  "height": 68
+                }
+              ]
+            },
+            "isLiveNow": false,
+            "lengthText": "29:20",
+            "viewCountText": "615,709 views",
+            "publishedTimeText": "8 days ago",
+            "thumbnails": [
+              {
+                "url": "https://i.ytimg.com/vi/ZDvdK6Y8bms/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBqC7qQ7T7E-JYPQUhbnZkUI7mS5A",
+                "width": 168,
+                "height": 94,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/vi/ZDvdK6Y8bms/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLCkT9gKzQB0OwVQ009OAblQseCEZg",
+                "width": 336,
+                "height": 188,
+                "moving": false
+              },
+              {
+                "url": "https://i.ytimg.com/an_webp/ZDvdK6Y8bms/mqdefault_6s.webp?du=3000&sqp=CL-4u8AG&rs=AOn4CLC8lz0-K9fqf70EN_eTMgu3vxhJnQ",
+                "width": 320,
+                "height": 180,
+                "moving": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
