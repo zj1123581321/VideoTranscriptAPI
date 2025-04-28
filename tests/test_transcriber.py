@@ -70,7 +70,7 @@ class TestSRTConverter(unittest.TestCase):
         self.assertEqual(text_content, expected_text)
 
 
-@patch('transcriber.transcriber.WhisperModel')
+@patch('transcriber.transcriber.client_transcriber')
 class TestTranscriber(unittest.TestCase):
     """测试转录器"""
     
@@ -78,11 +78,8 @@ class TestTranscriber(unittest.TestCase):
         """设置测试环境"""
         # 创建临时配置
         self.test_config = {
-            "transcription": {
-                "model_path": "./models/test-model",
-                "device": "cpu",
-                "compute_type": "int8",
-                "language": "zh"
+            "capswriter": {
+                "server_url": "ws://localhost:6006"
             },
             "storage": {
                 "output_dir": "./test_output"
@@ -91,9 +88,27 @@ class TestTranscriber(unittest.TestCase):
         
         # 创建临时输出目录
         os.makedirs("./test_output", exist_ok=True)
+        
+        # 创建测试文件
+        self.test_merge_txt_content = "这是测试的转录文本，包含一些句子。这是第二句。"
+        self.test_audio_file = "test_audio.mp3"
+        self.test_merge_txt = "test_audio.merge.txt"
+        
+        # 写入merge.txt测试文件
+        with open(self.test_merge_txt, "w", encoding="utf-8") as f:
+            f.write(self.test_merge_txt_content)
+        
+        # 创建空的测试音频文件
+        with open(self.test_audio_file, "w", encoding="utf-8") as f:
+            f.write("模拟音频文件")
     
     def tearDown(self):
         """清理测试环境"""
+        # 删除测试文件
+        for file in [self.test_audio_file, self.test_merge_txt]:
+            if os.path.exists(file):
+                os.remove(file)
+        
         # 删除测试输出目录中的文件
         for file in os.listdir("./test_output"):
             os.remove(os.path.join("./test_output", file))
@@ -102,58 +117,44 @@ class TestTranscriber(unittest.TestCase):
         if os.path.exists("./test_output"):
             os.rmdir("./test_output")
     
-    def test_transcribe(self, mock_whisper_model):
+    def test_transcribe(self, mock_client_transcriber):
         """测试转录功能"""
-        # 创建模拟WhisperModel和转录结果
-        mock_model_instance = mock_whisper_model.return_value
-        
-        # 模拟segments生成器返回的内容
-        mock_segment1 = MagicMock()
-        mock_segment1.start = 0.0
-        mock_segment1.end = 5.0
-        mock_segment1.text = "这是第一段语音"
-        
-        mock_segment2 = MagicMock()
-        mock_segment2.start = 5.5
-        mock_segment2.end = 10.0
-        mock_segment2.text = "这是第二段语音"
-        
-        # 模拟info对象
-        mock_info = MagicMock()
-        mock_info.language = "zh"
-        mock_info.language_probability = 0.99
-        
-        # 设置transcribe方法的返回值
-        mock_model_instance.transcribe.return_value = ([mock_segment1, mock_segment2], mock_info)
+        # 设置模拟客户端的返回值
+        mock_client_transcriber.transcribe.return_value = (True, [self.test_merge_txt])
         
         # 创建转录器实例
         transcriber = Transcriber(config=self.test_config)
         
-        # 模拟SRTConverter类
-        with patch('transcriber.transcriber.SRTConverter') as mock_converter:
-            mock_converter_instance = mock_converter.return_value
-            mock_converter_instance.to_lrc.return_value = "[00:00:00]这是第一段语音\n[00:00:05]这是第二段语音"
-            
-            # 调用转录方法
-            result = transcriber.transcribe("test_audio.mp3", "test_output")
-            
-            # 验证结果
-            self.assertIn("srt_path", result)
-            self.assertIn("lrc_path", result)
-            self.assertIn("json_path", result)
-            self.assertIn("transcript", result)
-            self.assertEqual(result["transcript"], "这是第一段语音 这是第二段语音")
-            
-            # 验证SRT文件内容是否写入
-            srt_path = result["srt_path"]
-            self.assertTrue(os.path.exists(srt_path))
-            
-            # 验证JSON文件内容是否写入
-            json_path = result["json_path"]
-            self.assertTrue(os.path.exists(json_path))
-            
-            # 验证模型是否正确调用
-            mock_model_instance.transcribe.assert_called_once()
+        # 调用转录方法
+        result = transcriber.transcribe(self.test_audio_file, "test_output")
+        
+        # 验证客户端转录方法被调用
+        mock_client_transcriber.transcribe.assert_called_once_with(self.test_audio_file)
+        
+        # 验证结果
+        self.assertIn("transcript", result)
+        self.assertEqual(result["transcript"], self.test_merge_txt_content)
+        
+        # 验证文件路径存在于结果中
+        self.assertIn("merge_txt_path", result)
+        
+        # 验证转录结果是否包含merge.txt内容
+        self.assertEqual(result["transcript"], self.test_merge_txt_content)
+    
+    def test_transcribe_error(self, mock_client_transcriber):
+        """测试转录失败的情况"""
+        # 设置模拟客户端的返回值为失败
+        mock_client_transcriber.transcribe.return_value = (False, [])
+        
+        # 创建转录器实例
+        transcriber = Transcriber(config=self.test_config)
+        
+        # 调用转录方法应该抛出异常
+        with self.assertRaises(RuntimeError):
+            transcriber.transcribe(self.test_audio_file, "test_output")
+        
+        # 验证客户端转录方法被调用
+        mock_client_transcriber.transcribe.assert_called_once_with(self.test_audio_file)
 
 
 if __name__ == '__main__':

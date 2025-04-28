@@ -125,10 +125,9 @@ data.subtitles 里存放着平台的字幕信息。有的视频有字幕，就�
 ```
 
 ## 音视频转文字方法
-参考 \CapsWriter-Offline 这个项目里的 client 模式转录文本的方法，在主项目里精简改造出项目里需要的代码，使转录功能可以脱离 \CapsWriter-Offline 这个文件夹内的所有文件运行。
-- CapsWriter-Offline 的 server 相关配置一并迁移到本项目的 config 文件里。
-- 当前转录生成的案例文件已经放在 sample_files\转录案例\bilibili_m4s 文件夹里了
-- 原始转录项目的逻辑是先生成 srt 文本，然后将 srt 文本转换成 txt 和 json 格式。在我们的项目里，逻辑应该修改为在保留先生成 srt 的文本基础上，再将 srt 转换成 lrc 格式文本作为最后的 transcript 文本返回。
+参考 Client_Only 这个项目里的 client 模式转录文本的方法
+- 传入音视频路径，等待该模块转写完毕会在原始文件同文件夹下面生成转录文本的地址（在原始文件夹下面）。提取 merge.txt 文本作为 transcript
+- 这一步的转录时长和原始音视频时长有关系，请注意超时的问题。
 
 
 

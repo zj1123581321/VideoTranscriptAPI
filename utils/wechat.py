@@ -76,4 +76,22 @@ class WechatNotifier:
         if error:
             content += f"\n错误: {error}"
             
-        return self.send_text(content) 
+        return self.send_text(content)
+
+def wechat_notify(message, webhook=None, config=None):
+    """
+    发送企业微信通知的简便函数
+    
+    参数:
+        message: 要发送的通知内容
+        webhook: 企业微信webhook地址，如果为None则从config或配置文件加载
+        config: 配置字典，如果提供则从中获取webhook
+        
+    返回:
+        bool: 发送是否成功
+    """
+    if config and not webhook:
+        webhook = config.get("wechat", {}).get("webhook")
+        
+    notifier = WechatNotifier(webhook)
+    return notifier.send_text(message) 
