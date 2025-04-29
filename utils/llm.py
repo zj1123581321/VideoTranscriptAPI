@@ -15,7 +15,7 @@ def call_llm_api(model, prompt, api_key, base_url):
         "stream": False
     }
     try:
-        resp = requests.post(base_url, json=data, headers=headers, timeout=60)
+        resp = requests.post(base_url, json=data, headers=headers, timeout=180)
         resp.raise_for_status()
         result = resp.json()
         return result["choices"][0]["message"]["content"].strip()
