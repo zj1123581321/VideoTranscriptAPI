@@ -179,7 +179,13 @@ def process_transcription(task_id, url):
             video_id = downloader.extract_video_id(url)
         elif downloader_class_name == "XiaohongshuDownloader":
             platform = "xiaohongshu"
-            video_id = downloader.extract_note_id(url)
+            # 小红书链接不再预先解析ID，而是在下载器内部处理
+            try:
+                video_id = downloader.extract_note_id(url)
+            except:
+                # 如果提取ID失败，不影响后续流程
+                logger.warning(f"预先提取小红书笔记ID失败，将在下载器中处理: {url}")
+                video_id = None
         elif downloader_class_name == "YoutubeDownloader":
             platform = "youtube"
             video_id = downloader.extract_video_id(url)
@@ -307,6 +313,8 @@ def process_transcription(task_id, url):
         
         # 如果没有找到缓存，则获取完整的视频信息
         logger.info(f"未找到缓存文件，获取视频信息: {url}")
+        
+        # 小红书链接使用原始URL直接获取视频信息
         video_info = downloader.get_video_info(url)
         
         # 提取视频标题和作者
