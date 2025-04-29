@@ -3,6 +3,9 @@ import re
 import json
 import time
 import datetime
+import subprocess
+import platform
+import shutil
 from downloaders.base import BaseDownloader
 from utils import setup_logger, create_debug_dir
 
@@ -60,9 +63,191 @@ class BilibiliDownloader(BaseDownloader):
         """
         return self._extract_video_id(url)
     
-    def get_video_info(self, url):
+    def _get_video_info_bbdown(self, url):
         """
-        获取视频信息
+        使用BBDown获取视频信息并下载
+        
+        参数:
+            url: 视频URL
+            
+        返回:
+            dict: 包含视频信息的字典
+        """
+        try:
+            # 提取视频BV号
+            bv_id = self._extract_video_id(url)
+            logger.info(f"使用BBDown下载Bilibili视频: bv_id={bv_id}, url={url}")
+            
+            # 确定BBDown可执行文件路径
+            bbdown_config = self.config.get("bbdown", {})
+            system_platform = platform.system().lower()
+            
+            # 获取当前工作目录
+            current_dir = os.path.abspath(os.getcwd())
+            
+            if system_platform == "windows":
+                bbdown_path = bbdown_config.get("executable", "BBDown/BBDown.exe")
+                # 将相对路径转换为绝对路径
+                if not os.path.isabs(bbdown_path):
+                    bbdown_path = os.path.join(current_dir, bbdown_path)
+            else:
+                bbdown_path = bbdown_config.get("executable_linux", "BBDown/BBDown")
+                # 将相对路径转换为绝对路径
+                if not os.path.isabs(bbdown_path):
+                    bbdown_path = os.path.join(current_dir, bbdown_path)
+            
+            # 检查BBDown可执行文件是否存在
+            if not os.path.exists(bbdown_path):
+                logger.error(f"BBDown可执行文件不存在: {bbdown_path}")
+                raise FileNotFoundError(f"BBDown可执行文件不存在: {bbdown_path}")
+            
+            # 准备下载参数
+            audio_only = bbdown_config.get("audio_only", True)
+            
+            # 创建临时工作目录
+            temp_dir = os.path.join(self.temp_dir, f"bbdown_{bv_id}_{int(time.time())}")
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            # 在Windows上，使用完整的命令字符串
+            if system_platform == "windows":
+                cmd = f'"{bbdown_path}" "{url}"'
+                if audio_only:
+                    cmd += " --audio-only"
+                logger.info(f"执行BBDown命令: {cmd}")
+                
+                # 在Windows上使用shell=True执行命令
+                timeout = bbdown_config.get("timeout", 300)
+                try:
+                    process = subprocess.run(
+                        cmd,
+                        cwd=temp_dir,
+                        shell=True,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        encoding='utf-8',  # 显式指定UTF-8编码
+                        errors='replace',  # 替换无法解码的字符
+                        timeout=timeout
+                    )
+                    
+                    # 记录BBDown输出
+                    logger.debug(f"BBDown输出: {process.stdout}")
+                    if process.stderr:
+                        logger.warning(f"BBDown错误输出: {process.stderr}")
+                    
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"BBDown执行失败: {str(e)}")
+                    logger.error(f"BBDown输出: {e.stdout}")
+                    logger.error(f"BBDown错误: {e.stderr}")
+                    raise ValueError(f"BBDown执行失败: {str(e)}")
+                except subprocess.TimeoutExpired as e:
+                    logger.error(f"BBDown执行超时: {str(e)}")
+                    raise ValueError(f"BBDown执行超时，超过{timeout}秒")
+            else:
+                # 在Linux系统下使用列表参数执行命令
+                download_args = [bbdown_path, url]
+                if audio_only:
+                    download_args.append("--audio-only")
+                
+                logger.info(f"执行BBDown命令: {' '.join(download_args)}")
+                timeout = bbdown_config.get("timeout", 300)
+                
+                try:
+                    process = subprocess.run(
+                        download_args,
+                        cwd=temp_dir,
+                        shell=False,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        encoding='utf-8',  # 显式指定UTF-8编码
+                        errors='replace',  # 替换无法解码的字符
+                        timeout=timeout
+                    )
+                    
+                    # 记录BBDown输出
+                    logger.debug(f"BBDown输出: {process.stdout}")
+                    if process.stderr:
+                        logger.warning(f"BBDown错误输出: {process.stderr}")
+                    
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"BBDown执行失败: {str(e)}")
+                    logger.error(f"BBDown输出: {e.stdout}")
+                    logger.error(f"BBDown错误: {e.stderr}")
+                    raise ValueError(f"BBDown执行失败: {str(e)}")
+                except subprocess.TimeoutExpired as e:
+                    logger.error(f"BBDown执行超时: {str(e)}")
+                    raise ValueError(f"BBDown执行超时，超过{timeout}秒")
+            
+            # 查找下载的文件
+            downloaded_files = []
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    if file.endswith((".mp3", ".m4a", ".mp4")):
+                        downloaded_files.append(os.path.join(root, file))
+            
+            if not downloaded_files:
+                logger.error(f"BBDown下载成功，但找不到下载的文件: {temp_dir}")
+                raise ValueError(f"BBDown下载成功，但找不到下载的文件")
+            
+            # 找到最新的文件
+            latest_file = max(downloaded_files, key=os.path.getctime)
+            file_ext = os.path.splitext(latest_file)[1][1:]  # 获取扩展名，去除前面的点
+            logger.info(f"BBDown下载的文件: {latest_file}")
+            
+            # 从文件名提取视频标题
+            file_basename = os.path.basename(latest_file)
+            
+            # 提取视频标题的逻辑
+            # 首先尝试匹配 BBDown 的标准输出格式 "[BVxxx]视频标题.扩展名"
+            video_title_match = re.search(r'\[(BV\w+)\](.*)\.' + file_ext, file_basename)
+            if video_title_match:
+                video_title = video_title_match.group(2).strip()
+                logger.info(f"从标准BBDown文件名格式提取到标题: {video_title}")
+            else:
+                # 如果标准格式匹配失败，直接使用文件名（去除扩展名）作为标题
+                video_title = os.path.splitext(file_basename)[0]
+                logger.info(f"从文件名直接提取标题: {video_title}")
+                
+                # 如果文件名为空或只包含空白字符，则使用默认值
+                if not video_title or video_title.strip() == "":
+                    video_title = f"bilibili_{bv_id}"
+                    logger.warning(f"文件名为空，使用默认值作为标题: {video_title}")
+            
+            # 移动文件到临时目录
+            target_filename = f"bilibili_{bv_id}_{int(time.time())}.{file_ext}"
+            target_path = os.path.join(self.temp_dir, target_filename)
+            shutil.move(latest_file, target_path)
+            
+            # 清理临时工作目录
+            try:
+                shutil.rmtree(temp_dir)
+                logger.info(f"删除临时工作目录: {temp_dir}")
+            except Exception as e:
+                logger.warning(f"删除临时工作目录失败: {temp_dir}, 错误: {str(e)}")
+            
+            # 构建返回结果
+            result = {
+                "video_id": bv_id,
+                "video_title": video_title,
+                "author": "",  # BBDown不直接提供作者信息
+                "download_url": None,  # 本地文件，无需下载URL
+                "filename": target_filename,
+                "local_file": target_path,  # 本地文件路径
+                "platform": "bilibili",
+                "downloaded": True  # 标记为已下载
+            }
+            
+            logger.info(f"成功使用BBDown下载Bilibili视频: ID={bv_id}, 标题={video_title}")
+            return result
+            
+        except Exception as e:
+            logger.exception(f"使用BBDown获取视频信息异常: {str(e)}")
+            raise
+    
+    def _get_video_info_api(self, url):
+        """
+        使用API获取视频信息（原方法）
         
         参数:
             url: 视频URL
@@ -235,7 +420,8 @@ class BilibiliDownloader(BaseDownloader):
                 "author": author,
                 "download_url": download_url,
                 "filename": filename,
-                "platform": "bilibili"
+                "platform": "bilibili",
+                "downloaded": False  # 标记为未下载
             }
             
             logger.info(f"成功获取Bilibili视频信息: ID={bv_id}, 文件类型={file_ext}")
@@ -244,6 +430,45 @@ class BilibiliDownloader(BaseDownloader):
         except Exception as e:
             logger.exception(f"获取Bilibili视频信息异常: {str(e)}")
             raise
+    
+    def get_video_info(self, url):
+        """
+        获取视频信息
+        
+        参数:
+            url: 视频URL
+            
+        返回:
+            dict: 包含视频信息的字典
+        """
+        # 判断是否使用BBDown下载
+        use_bbdown = self.config.get("bbdown", {}).get("use_bbdown", False)
+        
+        if use_bbdown:
+            logger.info("使用BBDown下载Bilibili视频")
+            return self._get_video_info_bbdown(url)
+        else:
+            logger.info("使用API获取Bilibili视频信息")
+            return self._get_video_info_api(url)
+    
+    def download_file(self, url, filename):
+        """
+        下载文件到本地
+        
+        参数:
+            url: 文件URL或本地文件路径
+            filename: 本地文件名
+            
+        返回:
+            str: 本地文件路径，如果下载失败则返回None
+        """
+        # 检查是否已经是本地文件
+        if isinstance(url, str) and os.path.exists(url):
+            logger.info(f"文件已存在于本地: {url}")
+            return url
+        
+        # 调用父类方法下载文件
+        return super().download_file(url, filename)
     
     def get_subtitle(self, url):
         """

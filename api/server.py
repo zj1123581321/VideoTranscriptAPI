@@ -424,29 +424,36 @@ def process_transcription(task_id, url):
             logger.info(f"下载视频进行转录: {url}")
             wechat_notifier.notify_task_status(url, "正在下载视频", title=video_title, author=author)
             
-            # 下载视频
-            download_url = video_info.get("download_url")
-            filename = video_info.get("filename")
-            
-            if not download_url or not filename:
-                error_msg = f"无法获取下载信息: {url}"
-                logger.error(error_msg)
-                wechat_notifier.notify_task_status(url, "下载失败", error_msg, title=video_title, author=author)
-                return {
-                    "status": "failed",
-                    "message": error_msg
-                }
-            
-            # 下载文件
-            local_file = downloader.download_file(download_url, filename)
-            if not local_file:
-                error_msg = f"下载文件失败: {url}"
-                logger.error(error_msg)
-                wechat_notifier.notify_task_status(url, "下载失败", error_msg, title=video_title, author=author)
-                return {
-                    "status": "failed",
-                    "message": error_msg
-                }
+            # 检查是否已通过BBDown下载
+            local_file = None
+            if video_info.get("downloaded", False) and video_info.get("local_file"):
+                # 使用BBDown已下载的文件
+                local_file = video_info.get("local_file")
+                logger.info(f"使用BBDown已下载的文件: {local_file}")
+            else:
+                # 常规下载流程
+                download_url = video_info.get("download_url")
+                filename = video_info.get("filename")
+                
+                if not download_url or not filename:
+                    error_msg = f"无法获取下载信息: {url}"
+                    logger.error(error_msg)
+                    wechat_notifier.notify_task_status(url, "下载失败", error_msg, title=video_title, author=author)
+                    return {
+                        "status": "failed",
+                        "message": error_msg
+                    }
+                
+                # 下载文件
+                local_file = downloader.download_file(download_url, filename)
+                if not local_file:
+                    error_msg = f"下载文件失败: {url}"
+                    logger.error(error_msg)
+                    wechat_notifier.notify_task_status(url, "下载失败", error_msg, title=video_title, author=author)
+                    return {
+                        "status": "failed",
+                        "message": error_msg
+                    }
             
             try:
                 # 开始转录
