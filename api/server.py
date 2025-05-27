@@ -273,9 +273,13 @@ def process_transcription(task_id, url):
                 import threading
                 result_dict = {}
                 def run_calibrate():
-                    result_dict['校对文本'] = call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url)
+                    max_retries = config_llm.get("max_retries", 2)
+                    retry_delay = config_llm.get("retry_delay", 5)
+                    result_dict['校对文本'] = call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url, max_retries, retry_delay)
                 def run_summary():
-                    result_dict['内容总结'] = call_llm_api(summary_model, summary_prompt, api_key, base_url)
+                    max_retries = config_llm.get("max_retries", 2)
+                    retry_delay = config_llm.get("retry_delay", 5)
+                    result_dict['内容总结'] = call_llm_api(summary_model, summary_prompt, api_key, base_url, max_retries, retry_delay)
                 t1 = threading.Thread(target=run_calibrate)
                 t2 = threading.Thread(target=run_summary)
                 t1.start(); t2.start(); t1.join(); t2.join()
@@ -384,9 +388,13 @@ def process_transcription(task_id, url):
                 import threading
                 result_dict = {}
                 def run_calibrate():
-                    result_dict['校对文本'] = call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url)
+                    max_retries = config_llm.get("max_retries", 2)
+                    retry_delay = config_llm.get("retry_delay", 5)
+                    result_dict['校对文本'] = call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url, max_retries, retry_delay)
                 def run_summary():
-                    result_dict['内容总结'] = call_llm_api(summary_model, summary_prompt, api_key, base_url)
+                    max_retries = config_llm.get("max_retries", 2)
+                    retry_delay = config_llm.get("retry_delay", 5)
+                    result_dict['内容总结'] = call_llm_api(summary_model, summary_prompt, api_key, base_url, max_retries, retry_delay)
                 t1 = threading.Thread(target=run_calibrate)
                 t2 = threading.Thread(target=run_summary)
                 t1.start(); t2.start(); t1.join(); t2.join()
@@ -514,9 +522,13 @@ def process_transcription(task_id, url):
                     import threading
                     result_dict = {}
                     def run_calibrate():
-                        result_dict['校对文本'] = call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url)
+                        max_retries = config_llm.get("max_retries", 2)
+                        retry_delay = config_llm.get("retry_delay", 5)
+                        result_dict['校对文本'] = call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url, max_retries, retry_delay)
                     def run_summary():
-                        result_dict['内容总结'] = call_llm_api(summary_model, summary_prompt, api_key, base_url)
+                        max_retries = config_llm.get("max_retries", 2)
+                        retry_delay = config_llm.get("retry_delay", 5)
+                        result_dict['内容总结'] = call_llm_api(summary_model, summary_prompt, api_key, base_url, max_retries, retry_delay)
                     t1 = threading.Thread(target=run_calibrate)
                     t2 = threading.Thread(target=run_summary)
                     t1.start(); t2.start(); t1.join(); t2.join()

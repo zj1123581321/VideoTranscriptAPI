@@ -10,10 +10,13 @@ def main():
     with open(txt_path, 'r', encoding='utf-8') as f:
         transcript = f.read()
     config = load_config()
-    api_key = config['llm']['api_key']
-    base_url = config['llm']['base_url']
-    calibrate_model = config['llm']['calibrate_model']
-    summary_model = config['llm']['summary_model']
+    llm_config = config['llm']
+    api_key = llm_config['api_key']
+    base_url = llm_config['base_url']
+    calibrate_model = llm_config['calibrate_model']
+    summary_model = llm_config['summary_model']
+    max_retries = llm_config.get('max_retries', 2)
+    retry_delay = llm_config.get('retry_delay', 5)
     calibrate_prompt = (
         "你将收到一段音频的转录文本。你的任务是对这段文本进行校对,提高其可读性,但不改变原意。 "
         "请按照以下指示进行校对: "
@@ -32,9 +35,9 @@ def main():
         + transcript
     )
     print("【校对文本】\n")
-    print(call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url))
+    print(call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url, max_retries, retry_delay))
     print("\n【内容总结】\n")
-    print(call_llm_api(summary_model, summary_prompt, api_key, base_url))
+    print(call_llm_api(summary_model, summary_prompt, api_key, base_url, max_retries, retry_delay))
 
 if __name__ == '__main__':
     main() 

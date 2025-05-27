@@ -141,6 +141,13 @@ python start_server.py
   - `file`: 日志文件路径
   - `max_size`: 日志文件大小限制
   - `backup_count`: 日志文件备份数量
+- `llm`: 大语言模型配置
+  - `api_key`: LLM API密钥
+  - `base_url`: LLM API基础URL
+  - `calibrate_model`: 校对文本使用的模型
+  - `summary_model`: 内容总结使用的模型
+  - `max_retries`: 最大重试次数（默认2次）
+  - `retry_delay`: 重试间隔秒数（默认5秒）
 
 ## 使用方法
 
