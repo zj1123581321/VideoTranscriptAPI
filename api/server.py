@@ -5,6 +5,8 @@ import asyncio
 import concurrent.futures
 import datetime
 import re
+import threading
+import queue
 from fastapi import FastAPI, HTTPException, Depends, Header, BackgroundTasks, Request
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,8 +48,14 @@ wechat_notifier = WechatNotifier()
 # 任务队列
 task_queue = asyncio.Queue(config.get("concurrent", {}).get("queue_size", 10))
 
+# LLM处理队列，使用线程安全的队列，确保同一视频的校对和总结连续发送
+llm_task_queue = queue.Queue(maxsize=100)
+
 # 任务结果存储
 task_results = {}
+
+# LLM处理锁，确保同一时间只有一个视频在进行LLM处理和微信发送
+llm_processing_lock = threading.Lock()
 
 
 class TranscribeRequest(BaseModel):
@@ -107,30 +115,44 @@ async def process_task_queue():
                     "message": "正在处理转录任务"
                 }
                 
-                # 提交任务到线程池
+                # 提交任务到线程池，但不等待结果
                 future = executor.submit(process_transcription, task_id, url)
                 
-                # 等待任务完成
-                result = await asyncio.get_event_loop().run_in_executor(
-                    None, future.result
-                )
+                # 添加回调函数来处理任务完成
+                def task_completed(future_result):
+                    try:
+                        result = future_result.result()
+                        task_results[task_id] = result
+                        logger.info(f"任务完成: {task_id}")
+                    except Exception as e:
+                        logger.exception(f"任务处理失败: {task_id}, URL: {url}, 错误: {str(e)}")
+                        
+                        # 更新任务状态为失败
+                        task_results[task_id] = {
+                            "status": "failed",
+                            "message": f"转录任务失败: {str(e)}",
+                            "error": str(e)
+                        }
+                        
+                        # 发送错误通知
+                        wechat_notifier.notify_task_status(url, "转录失败", str(e))
                 
-                # 更新任务结果
-                task_results[task_id] = result
+                # 添加回调函数
+                future.add_done_callback(task_completed)
+                
+                logger.info(f"任务已提交到线程池: {task_id}, URL: {url}")
+                
             except Exception as e:
-                logger.exception(f"任务处理失败: {task_id}, URL: {url}, 错误: {str(e)}")
+                logger.exception(f"提交任务到线程池失败: {task_id}, URL: {url}, 错误: {str(e)}")
                 
                 # 更新任务状态为失败
                 task_results[task_id] = {
                     "status": "failed",
-                    "message": f"转录任务失败: {str(e)}",
+                    "message": f"提交任务失败: {str(e)}",
                     "error": str(e)
                 }
-                
-                # 发送错误通知
-                wechat_notifier.notify_task_status(url, "转录失败", str(e))
             finally:
-                # 标记任务完成
+                # 标记任务完成（从队列角度）
                 task_queue.task_done()
         except Exception as e:
             logger.exception(f"任务队列处理器异常: {str(e)}")
@@ -243,64 +265,24 @@ def process_transcription(task_id, url):
                 transcript="正在处理已存在的转录文本..."
             )
             
-            # 直接调用大模型API进行校对和总结
+            # 将LLM处理任务加入队列，而不是直接处理
             try:
-                from utils.llm import call_llm_api
-                from utils.wechat import send_long_text_wechat
-                config_llm = config.get("llm", {})
-                api_key = config_llm.get("api_key")
-                base_url = config_llm.get("base_url")
-                calibrate_model = config_llm.get("calibrate_model")
-                summary_model = config_llm.get("summary_model")
+                llm_task = {
+                    "task_id": task_id,
+                    "url": url,
+                    "video_title": video_title,
+                    "author": author,
+                    "transcript": transcript
+                }
                 
-                calibrate_prompt = (
-                    "你将收到一段音频的转录文本。你的任务是对这段文本进行校对,提高其可读性,但不改变原意。 "
-                    "请按照以下指示进行校对: "
-                    "1. 适当分段,使文本结构更清晰。每个自然段落应该是一个完整的思想单元。 "
-                    "2. 修正明显的错别字和语法错误。 "
-                    "3. 调整标点符号的使用,确保其正确性和一致性。 "
-                    "4. 如有必要,可以轻微调整词序以提高可读性,但不要改变原意。 "
-                    "5. 保留原文中的口语化表达和说话者的语气特点。 "
-                    "6. 不要添加或删除任何实质性内容。 "
-                    "7. 不要解释或评论文本内容。 "
-                    "只返回校对后的文本,不要包含任何其他解释或评论。 "
-                    "以下是需要校对的转录文本: <transcript>  " + transcript + "  </transcript>"
-                )
-                summary_prompt = (
-                    "请以回车换行为分割，逐段地将正文内容，高度归纳提炼总结为凝炼的一句话，需涵盖主要内容，不能丢失关键信息和想表达的核心意思。用中文。然后将归纳总结的，用无序列表，挨个排列出来。\n"
-                    + transcript
-                )
-                import threading
-                result_dict = {}
-                def run_calibrate():
-                    max_retries = config_llm.get("max_retries", 2)
-                    retry_delay = config_llm.get("retry_delay", 5)
-                    result_dict['校对文本'] = call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url, max_retries, retry_delay)
-                def run_summary():
-                    max_retries = config_llm.get("max_retries", 2)
-                    retry_delay = config_llm.get("retry_delay", 5)
-                    result_dict['内容总结'] = call_llm_api(summary_model, summary_prompt, api_key, base_url, max_retries, retry_delay)
-                t1 = threading.Thread(target=run_calibrate)
-                t2 = threading.Thread(target=run_summary)
-                t1.start(); t2.start(); t1.join(); t2.join()
+                logger.info(f"将LLM任务加入队列: {task_id}, 标题: {video_title}")
                 
-                # 校对文本分段发送
-                send_long_text_wechat(
-                    title=video_title,
-                    url=url,
-                    text=result_dict['校对文本'],
-                    is_summary=False
-                )
-                # 总结文本直接发送
-                send_long_text_wechat(
-                    title=video_title,
-                    url=url,
-                    text=result_dict['内容总结'],
-                    is_summary=True
-                )
+                # 将LLM任务放入线程安全队列中
+                llm_task_queue.put(llm_task)
+                
             except Exception as e:
-                logger.exception(f"使用缓存转录调用大模型API异常: {str(e)}")
-                wechat_notifier.send_text(f"【使用缓存转录调用大模型API异常】{str(e)}")
+                logger.exception(f"将LLM任务加入队列失败: {str(e)}")
+                wechat_notifier.send_text(f"【LLM任务加入队列失败】{str(e)}")
             
             return {
                 "status": "success",
@@ -358,63 +340,24 @@ def process_transcription(task_id, url):
             #     transcript=subtitle
             # )
             
-            # ======= 新增：调用大模型API进行校对和总结 =======
+            # ======= 新增：将LLM处理任务加入队列 =======
             try:
-                from utils.llm import call_llm_api
-                from utils.wechat import send_long_text_wechat
-                config_llm = config.get("llm", {})
-                api_key = config_llm.get("api_key")
-                base_url = config_llm.get("base_url")
-                calibrate_model = config_llm.get("calibrate_model")
-                summary_model = config_llm.get("summary_model")
-                transcript_text = subtitle
-                calibrate_prompt = (
-                    "你将收到一段音频的转录文本。你的任务是对这段文本进行校对,提高其可读性,但不改变原意。 "
-                    "请按照以下指示进行校对: "
-                    "1. 适当分段,使文本结构更清晰。每个自然段落应该是一个完整的思想单元。 "
-                    "2. 修正明显的错别字和语法错误。 "
-                    "3. 调整标点符号的使用,确保其正确性和一致性。 "
-                    "4. 如有必要,可以轻微调整词序以提高可读性,但不要改变原意。 "
-                    "5. 保留原文中的口语化表达和说话者的语气特点。 "
-                    "6. 不要添加或删除任何实质性内容。 "
-                    "7. 不要解释或评论文本内容。 "
-                    "只返回校对后的文本,不要包含任何其他解释或评论。 "
-                    "以下是需要校对的转录文本: <transcript>  " + transcript_text + "  </transcript>"
-                )
-                summary_prompt = (
-                    "请以回车换行为分割，逐段地将正文内容，高度归纳提炼总结为凝炼的一句话，需涵盖主要内容，不能丢失关键信息和想表达的核心意思。用中文。然后将归纳总结的，用无序列表，挨个排列出来。\n"
-                    + transcript_text
-                )
-                import threading
-                result_dict = {}
-                def run_calibrate():
-                    max_retries = config_llm.get("max_retries", 2)
-                    retry_delay = config_llm.get("retry_delay", 5)
-                    result_dict['校对文本'] = call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url, max_retries, retry_delay)
-                def run_summary():
-                    max_retries = config_llm.get("max_retries", 2)
-                    retry_delay = config_llm.get("retry_delay", 5)
-                    result_dict['内容总结'] = call_llm_api(summary_model, summary_prompt, api_key, base_url, max_retries, retry_delay)
-                t1 = threading.Thread(target=run_calibrate)
-                t2 = threading.Thread(target=run_summary)
-                t1.start(); t2.start(); t1.join(); t2.join()
-                # 校对文本分段发送
-                send_long_text_wechat(
-                    title=video_title,
-                    url=url,
-                    text=result_dict['校对文本'],
-                    is_summary=False
-                )
-                # 总结文本直接发送
-                send_long_text_wechat(
-                    title=video_title,
-                    url=url,
-                    text=result_dict['内容总结'],
-                    is_summary=True
-                )
+                llm_task = {
+                    "task_id": task_id,
+                    "url": url,
+                    "video_title": video_title,
+                    "author": author,
+                    "transcript": subtitle
+                }
+                
+                logger.info(f"将LLM任务加入队列（平台字幕）: {task_id}, 标题: {video_title}")
+                
+                # 将LLM任务放入线程安全队列中
+                llm_task_queue.put(llm_task)
+                
             except Exception as e:
-                logger.exception(f"大模型API调用异常: {str(e)}")
-                wechat_notifier.send_text(f"【大模型API调用异常】{str(e)}")
+                logger.exception(f"将LLM任务加入队列失败（平台字幕）: {str(e)}")
+                wechat_notifier.send_text(f"【LLM任务加入队列失败】{str(e)}")
             # ======= END =======
             
             result = {
@@ -492,63 +435,24 @@ def process_transcription(task_id, url):
                     transcript=transcript
                 )
                 
-                # ======= 新增：调用大模型API进行校对和总结 =======
+                # ======= 新增：将LLM处理任务加入队列 =======
                 try:
-                    from utils.llm import call_llm_api
-                    from utils.wechat import send_long_text_wechat
-                    config_llm = config.get("llm", {})
-                    api_key = config_llm.get("api_key")
-                    base_url = config_llm.get("base_url")
-                    calibrate_model = config_llm.get("calibrate_model")
-                    summary_model = config_llm.get("summary_model")
-                    transcript_text = transcript
-                    calibrate_prompt = (
-                        "你将收到一段音频的转录文本。你的任务是对这段文本进行校对,提高其可读性,但不改变原意。 "
-                        "请按照以下指示进行校对: "
-                        "1. 适当分段,使文本结构更清晰。每个自然段落应该是一个完整的思想单元。 "
-                        "2. 修正明显的错别字和语法错误。 "
-                        "3. 调整标点符号的使用,确保其正确性和一致性。 "
-                        "4. 如有必要,可以轻微调整词序以提高可读性,但不要改变原意。 "
-                        "5. 保留原文中的口语化表达和说话者的语气特点。 "
-                        "6. 不要添加或删除任何实质性内容。 "
-                        "7. 不要解释或评论文本内容。 "
-                        "只返回校对后的文本,不要包含任何其他解释或评论。 "
-                        "以下是需要校对的转录文本: <transcript>  " + transcript_text + "  </transcript>"
-                    )
-                    summary_prompt = (
-                        "请以回车换行为分割，逐段地将正文内容，高度归纳提炼总结为凝炼的一句话，需涵盖主要内容，不能丢失关键信息和想表达的核心意思。用中文。然后将归纳总结的，用无序列表，挨个排列出来。\n"
-                        + transcript_text
-                    )
-                    import threading
-                    result_dict = {}
-                    def run_calibrate():
-                        max_retries = config_llm.get("max_retries", 2)
-                        retry_delay = config_llm.get("retry_delay", 5)
-                        result_dict['校对文本'] = call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url, max_retries, retry_delay)
-                    def run_summary():
-                        max_retries = config_llm.get("max_retries", 2)
-                        retry_delay = config_llm.get("retry_delay", 5)
-                        result_dict['内容总结'] = call_llm_api(summary_model, summary_prompt, api_key, base_url, max_retries, retry_delay)
-                    t1 = threading.Thread(target=run_calibrate)
-                    t2 = threading.Thread(target=run_summary)
-                    t1.start(); t2.start(); t1.join(); t2.join()
-                    # 校对文本分段发送
-                    send_long_text_wechat(
-                        text=result_dict['校对文本'],
-                        title=video_title,
-                        url=url,
-                        is_summary=False
-                    )
-                    # 总结文本直接发送
-                    send_long_text_wechat(
-                        text=result_dict['内容总结'],
-                        title=video_title,
-                        url=url,
-                        is_summary=True
-                    )
+                    llm_task = {
+                        "task_id": task_id,
+                        "url": url,
+                        "video_title": video_title,
+                        "author": author,
+                        "transcript": transcript
+                    }
+                    
+                    logger.info(f"将LLM任务加入队列（常规转录）: {task_id}, 标题: {video_title}")
+                    
+                    # 将LLM任务放入线程安全队列中
+                    llm_task_queue.put(llm_task)
+                    
                 except Exception as e:
-                    logger.exception(f"大模型API调用异常: {str(e)}")
-                    wechat_notifier.send_text(f"【大模型API调用异常】{str(e)}")
+                    logger.exception(f"将LLM任务加入队列失败（常规转录）: {str(e)}")
+                    wechat_notifier.send_text(f"【LLM任务加入队列失败】{str(e)}")
                 # ======= END =======
                 
                 # 返回结果
@@ -581,12 +485,120 @@ def process_transcription(task_id, url):
         }
 
 
+def process_llm_queue():
+    """
+    处理LLM队列的后台任务（在单独线程中运行）
+    确保同一视频的校对和总结文本按顺序连续发送
+    """
+    logger.info("启动LLM队列处理器")
+    
+    while True:
+        try:
+            # 从LLM队列中获取任务（阻塞等待）
+            llm_task = llm_task_queue.get()
+            
+            # 获取锁，确保同一时间只处理一个视频的LLM任务
+            with llm_processing_lock:
+                task_id = llm_task["task_id"]
+                url = llm_task["url"]
+                video_title = llm_task["video_title"]
+                author = llm_task["author"]
+                transcript = llm_task["transcript"]
+                
+                logger.info(f"开始处理LLM任务: {task_id}, 标题: {video_title}")
+                
+                try:
+                    # 调用大模型API进行校对和总结
+                    from utils.llm import call_llm_api
+                    from utils.wechat import send_long_text_wechat
+                    config_llm = config.get("llm", {})
+                    api_key = config_llm.get("api_key")
+                    base_url = config_llm.get("base_url")
+                    calibrate_model = config_llm.get("calibrate_model")
+                    summary_model = config_llm.get("summary_model")
+                    
+                    calibrate_prompt = (
+                        "你将收到一段音频的转录文本。你的任务是对这段文本进行校对,提高其可读性,但不改变原意。 "
+                        "请按照以下指示进行校对: "
+                        "1. 适当分段,使文本结构更清晰。每个自然段落应该是一个完整的思想单元。 "
+                        "2. 修正明显的错别字和语法错误。 "
+                        "3. 调整标点符号的使用,确保其正确性和一致性。 "
+                        "4. 如有必要,可以轻微调整词序以提高可读性,但不要改变原意。 "
+                        "5. 保留原文中的口语化表达和说话者的语气特点。 "
+                        "6. 不要添加或删除任何实质性内容。 "
+                        "7. 不要解释或评论文本内容。 "
+                        "只返回校对后的文本,不要包含任何其他解释或评论。 "
+                        "以下是需要校对的转录文本: <transcript>  " + transcript + "  </transcript>"
+                    )
+                    summary_prompt = (
+                        "请以回车换行为分割，逐段地将正文内容，高度归纳提炼总结为凝炼的一句话，需涵盖主要内容，不能丢失关键信息和想表达的核心意思。用中文。然后将归纳总结的，用无序列表，挨个排列出来。\n"
+                        + transcript
+                    )
+                    
+                    # 并发调用LLM API
+                    result_dict = {}
+                    
+                    def run_calibrate():
+                        max_retries = config_llm.get("max_retries", 2)
+                        retry_delay = config_llm.get("retry_delay", 5)
+                        result_dict['校对文本'] = call_llm_api(calibrate_model, calibrate_prompt, api_key, base_url, max_retries, retry_delay)
+                    
+                    def run_summary():
+                        max_retries = config_llm.get("max_retries", 2)
+                        retry_delay = config_llm.get("retry_delay", 5)
+                        result_dict['内容总结'] = call_llm_api(summary_model, summary_prompt, api_key, base_url, max_retries, retry_delay)
+                    
+                    # 启动并发线程
+                    t1 = threading.Thread(target=run_calibrate)
+                    t2 = threading.Thread(target=run_summary)
+                    t1.start()
+                    t2.start()
+                    t1.join()
+                    t2.join()
+                    
+                    logger.info(f"LLM API调用完成，开始发送微信通知: {task_id}")
+                    
+                    # 校对文本分段发送
+                    send_long_text_wechat(
+                        title=video_title,
+                        url=url,
+                        text=result_dict['校对文本'],
+                        is_summary=False
+                    )
+                    
+                    # 总结文本直接发送
+                    send_long_text_wechat(
+                        title=video_title,
+                        url=url,
+                        text=result_dict['内容总结'],
+                        is_summary=True
+                    )
+                    
+                    logger.info(f"LLM任务处理完成: {task_id}, 标题: {video_title}")
+                    
+                except Exception as e:
+                    logger.exception(f"LLM任务处理异常: {task_id}, 错误: {str(e)}")
+                    wechat_notifier.send_text(f"【LLM API调用异常】{str(e)}")
+                finally:
+                    # 标记LLM任务完成
+                    llm_task_queue.task_done()
+        except Exception as e:
+            logger.exception(f"LLM队列处理器异常: {str(e)}")
+            import time
+            time.sleep(1)  # 防止过快重试
+
+
 @app.on_event("startup")
 async def startup_event():
     """服务启动时执行"""
     # 启动任务队列处理器
     asyncio.create_task(process_task_queue())
-    logger.info("API服务已启动")
+    
+    # 启动LLM队列处理器（在单独线程中运行）
+    llm_thread = threading.Thread(target=process_llm_queue, daemon=True)
+    llm_thread.start()
+    
+    logger.info("API服务已启动，转录队列和LLM队列处理器已启动")
 
 
 @app.post("/api/transcribe", response_model=TranscribeResponse, dependencies=[Depends(verify_token)])
