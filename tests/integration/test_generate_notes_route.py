@@ -14,6 +14,7 @@ from starlette.requests import Request
 from video_transcript_api.api.services.transcription import GenerateNotesRequest
 from video_transcript_api.cache.cache_manager import CacheManager
 from video_transcript_api.utils.llm_status import ChaptersStatus, NotesStatus
+from video_transcript_api.utils.task_status import TaskStatus
 
 
 @pytest.fixture
@@ -237,3 +238,66 @@ def test_generate_notes_rejects_inflight_notes_task(notes_cache, monkeypatch):
         == "详细笔记正在生成中，请等待当前任务完成"
     )
     assert llm_queue.qsize() == 1
+
+
+def test_generate_notes_rechecks_status_after_inflight_task_completes(
+    notes_cache,
+    monkeypatch,
+):
+    task = _seed_notes_source(notes_cache)
+    tasks_route, llm_queue = _configure_notes_route(notes_cache, monkeypatch)
+    first_response = _call_generate_notes(tasks_route, task["view_token"])
+    llm_queue.get_nowait()
+
+    with notes_cache._get_cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) FROM task_status WHERE view_token = ?",
+            (task["view_token"],),
+        )
+        task_count_before = cursor.fetchone()[0]
+
+    original_find = tasks_route._find_inflight_notes_task
+    completion_injected = False
+
+    def _complete_during_admission(cursor, view_token):
+        nonlocal completion_injected
+        inflight_task_id = original_find(cursor, view_token)
+        if not completion_injected:
+            assert inflight_task_id == first_response.data["task_id"]
+            notes_cache.save_llm_status(
+                platform="youtube",
+                media_id="notes-media",
+                use_speaker_recognition=False,
+                notes_status=NotesStatus.GENERATED,
+            )
+            notes_cache.update_task_status(
+                inflight_task_id,
+                TaskStatus.SUCCESS,
+                platform="youtube",
+                media_id="notes-media",
+            )
+            completion_injected = True
+            return None
+        return inflight_task_id
+
+    monkeypatch.setattr(
+        tasks_route,
+        "_find_inflight_notes_task",
+        _complete_during_admission,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _call_generate_notes(tasks_route, task["view_token"])
+
+    with notes_cache._get_cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) FROM task_status WHERE view_token = ?",
+            (task["view_token"],),
+        )
+        task_count_after = cursor.fetchone()[0]
+
+    assert completion_injected is True
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "详细笔记已存在，无需重复生成"
+    assert task_count_after == task_count_before
+    assert llm_queue.empty()

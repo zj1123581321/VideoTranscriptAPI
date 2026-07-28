@@ -2,6 +2,8 @@ import asyncio
 import datetime
 import json
 import queue
+from pathlib import Path
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from ..context import (
@@ -83,6 +85,19 @@ def _find_inflight_notes_task(cursor, view_token: str) -> str | None:
         if _is_notes_task_options(task_row["processing_options"]):
             return task_row["task_id"]
     return None
+
+
+def _read_fresh_notes_status(cache_dir: str | None) -> str | None:
+    """Read notes_status directly from the authoritative cache status file."""
+    if not cache_dir:
+        raise ValueError("Detailed notes cache directory is unavailable")
+    status_file = Path(cache_dir) / "llm_status.json"
+    if not status_file.exists():
+        return None
+    status_payload = json.loads(status_file.read_text(encoding="utf-8"))
+    if not isinstance(status_payload, dict):
+        raise ValueError("llm_status.json must contain a JSON object")
+    return status_payload.get("notes_status")
 
 
 # K1 路由站点观察面（CI review 第 3 轮 major）：_fail_task_after_creation
@@ -1213,6 +1228,7 @@ async def generate_notes(
     try:
         try:
             inflight_notes_task_id = None
+            notes_generated_during_admission = False
             with cache_manager._get_cursor() as cursor:
                 # Serialize check + insert so concurrent requests cannot both
                 # observe "no in-flight notes task" and enqueue duplicates.
@@ -1223,27 +1239,32 @@ async def generate_notes(
                 )
 
                 if inflight_notes_task_id is None:
-                    cursor.execute(
-                        """
-                        INSERT INTO task_status
-                        (task_id, view_token, url, platform, media_id,
-                         use_speaker_recognition, status, title, author,
-                         processing_options, submitted_by)
-                        VALUES (?, ?, ?, ?, ?, ?, 'processing', ?, ?, ?, ?)
-                        """,
-                        (
-                            task_id,
-                            view_token,
-                            task_info.get("url", ""),
-                            platform,
-                            media_id,
-                            use_speaker_recognition,
-                            video_title,
-                            author,
-                            json.dumps(notes_processing_options, sort_keys=True),
-                            user_id,
-                        ),
+                    notes_generated_during_admission = (
+                        _read_fresh_notes_status(cache_file_path)
+                        == NotesStatus.GENERATED
                     )
+                    if not notes_generated_during_admission:
+                        cursor.execute(
+                            """
+                            INSERT INTO task_status
+                            (task_id, view_token, url, platform, media_id,
+                             use_speaker_recognition, status, title, author,
+                             processing_options, submitted_by)
+                            VALUES (?, ?, ?, ?, ?, ?, 'processing', ?, ?, ?, ?)
+                            """,
+                            (
+                                task_id,
+                                view_token,
+                                task_info.get("url", ""),
+                                platform,
+                                media_id,
+                                use_speaker_recognition,
+                                video_title,
+                                author,
+                                json.dumps(notes_processing_options, sort_keys=True),
+                                user_id,
+                            ),
+                        )
 
             if inflight_notes_task_id is not None:
                 logger.warning(
@@ -1253,6 +1274,12 @@ async def generate_notes(
                 raise HTTPException(
                     status_code=409,
                     detail="详细笔记正在生成中，请等待当前任务完成",
+                )
+            if notes_generated_during_admission:
+                logger.warning(f"详细笔记已在准入期间生成，拒绝重复生成: {view_token}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="详细笔记已存在，无需重复生成",
                 )
             logger.info(f"详细笔记任务创建成功: {task_id}, view_token: {view_token}")
         except HTTPException:
