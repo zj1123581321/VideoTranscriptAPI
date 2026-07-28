@@ -186,6 +186,8 @@ class TestDeepReadPromptButtonsInTranscriptPage:
         )
 
         assert "<script>alert(1)</script>" not in html
+        assert 'title="Quoted &#34;label&#34;"' in html
+        assert 'title="Quoted "label""' not in html
         assert "deep-read-prompt-btn" in html
 
     def test_apostrophe_and_focus_payload_cannot_break_template_attribute(self):
