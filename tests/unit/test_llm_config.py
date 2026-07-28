@@ -303,3 +303,39 @@ class TestLLMConfigGetModels:
         )
         models = config.get_models()
         assert "has_risk" not in models
+
+    def test_notes_fields_fallback_to_summary_for_legacy_config(self):
+        config = LLMConfig.from_dict(
+            {
+                "llm": {
+                    "api_key": "k",
+                    "base_url": "u",
+                    "calibrate_model": "calibrate",
+                    "summary_model": "summary",
+                    "summary_reasoning_effort": "medium",
+                }
+            }
+        )
+
+        assert config.notes_model == "summary"
+        assert config.notes_reasoning_effort == "medium"
+        assert config.get_models()["notes_model"] == "summary"
+        assert config.get_models()["notes_reasoning_effort"] == "medium"
+
+    def test_notes_fields_accept_explicit_values(self):
+        config = LLMConfig.from_dict(
+            {
+                "llm": {
+                    "api_key": "k",
+                    "base_url": "u",
+                    "calibrate_model": "calibrate",
+                    "summary_model": "summary",
+                    "summary_reasoning_effort": "low",
+                    "notes_model": "notes",
+                    "notes_reasoning_effort": "high",
+                }
+            }
+        )
+
+        assert config.get_models()["notes_model"] == "notes"
+        assert config.get_models()["notes_reasoning_effort"] == "high"

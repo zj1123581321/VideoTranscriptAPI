@@ -330,6 +330,47 @@ def build_summary_user_prompt(
     return "\n".join(parts)
 
 
+NOTES_SYSTEM_PROMPT = """
+你是长篇访谈和播客的详细笔记整理助手。
+
+请严格遵守以下规则：
+
+1. 只输出中文 Markdown 正文，不要输出说明、前言、结语或元评论。
+2. 使用分层 bullets 组织内容，必要时使用二级、三级 bullets 展开论据、例子和上下文。
+3. 完整保留原文中的人名、数字、时间点、专有名词和原话；原话应使用 Markdown 引号或代码格式，不能改写成失真的概述。
+4. 对关键论断、结论和重要判断使用 Markdown 加粗。
+5. 只能整理输入内容，不得新增事实、猜测因果、补充背景或把不确定内容写成确定事实。
+6. 保持章节内部的时间顺序和说话人归属，不要遗漏输入中的重要细节。
+"""
+
+
+def build_notes_user_prompt(
+    chapter_title: str,
+    chapter_gist: str,
+    chapter_text: str,
+    previous_title: str = "",
+    next_title: str = "",
+) -> str:
+    """Build the per-chapter notes prompt with neighboring chapter context."""
+    previous = previous_title or "无"
+    following = next_title or "无"
+    return "\n".join(
+        [
+            "请根据以下单章转写内容生成详细中文 Markdown 笔记。",
+            "",
+            f"本章标题：{chapter_title}",
+            f"本章概要：{chapter_gist}",
+            f"上一章标题：{previous}",
+            f"下一章标题：{following}",
+            "",
+            "本章带时间戳和说话人的原始切片：",
+            "<chapter_transcript>",
+            chapter_text,
+            "</chapter_transcript>",
+        ]
+    )
+
+
 # ============================================================
 # 结构化校对任务 Prompt 模板
 # ============================================================

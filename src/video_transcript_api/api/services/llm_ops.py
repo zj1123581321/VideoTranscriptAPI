@@ -28,6 +28,7 @@ from ..context import (
 )
 from ..processing_options import normalize_processing_options
 from ...llm.core.usage_context import bind_task_id, set_context
+from ...llm.processors.notes_processor import NotesProcessor
 from ...utils.notifications import (
     WechatNotifier,
     send_long_text_wechat,
@@ -38,7 +39,12 @@ from ...utils.notifications.channel import _clean_url, _apply_risk_control_safe
 from ...utils.rendering import get_base_url
 from ...utils.perf_tracker import PerfTracker
 from ...utils.task_status import TaskStatus
-from ...utils.llm_status import CalibrationStatus, ChaptersStatus, SummaryStatus
+from ...utils.llm_status import (
+    CalibrationStatus,
+    ChaptersStatus,
+    NotesStatus,
+    SummaryStatus,
+)
 
 logger = lazy_resource(get_logger)
 config = lazy_resource(get_config)
@@ -313,6 +319,107 @@ def process_llm_queue():
             time.sleep(1)
 
 
+def _handle_notes_generation(
+    *,
+    llm_task: dict,
+    tracker: PerfTracker,
+    processing_options: dict,
+) -> None:
+    """Run and persist a notes-only task without touching existing LLM layers."""
+    task_id = llm_task["task_id"]
+    platform = llm_task.get("platform")
+    media_id = llm_task.get("media_id")
+    use_speaker_recognition = llm_task.get("use_speaker_recognition", False)
+    if not platform or not media_id:
+        raise ValueError("Detailed notes task requires platform and media_id")
+
+    cache_dir = llm_task.get("cache_dir")
+    if not cache_dir:
+        cache_snapshot = cache_manager.get_cache(
+            platform,
+            media_id,
+            use_speaker_recognition=use_speaker_recognition,
+        )
+        cache_dir = (cache_snapshot or {}).get("file_path")
+    if not cache_dir:
+        raise ValueError("Detailed notes task requires a valid cache directory")
+
+    try:
+        notes_processor = NotesProcessor(
+            llm_client=llm_coordinator.llm_client,
+            config=llm_coordinator.config,
+        )
+        selected_models = llm_coordinator.config.get_models()
+        cache_manager.update_task_llm_config(task_id, dict(selected_models))
+        with tracker.track("llm_processing"), set_context(stage="notes"):
+            notes_result = notes_processor.process(
+                cache_dir=cache_dir,
+                selected_models=selected_models,
+            )
+
+        if (
+            notes_result.status != NotesStatus.GENERATED
+            or not isinstance(notes_result.text, str)
+            or not notes_result.text.strip()
+        ):
+            error_message = (
+                notes_result.error
+                or "Detailed notes processor returned no complete artifact"
+            )
+            raise RuntimeError(error_message)
+
+        if not cache_manager.save_llm_result(
+            platform=platform,
+            media_id=media_id,
+            use_speaker_recognition=use_speaker_recognition,
+            llm_type="notes",
+            content=notes_result.text,
+        ):
+            raise OSError("Failed to persist detailed notes artifact")
+
+        cache_manager.save_llm_status(
+            platform=platform,
+            media_id=media_id,
+            use_speaker_recognition=use_speaker_recognition,
+            notes_status=NotesStatus.GENERATED,
+        )
+        status_written = cache_manager.update_task_status(
+            task_id,
+            TaskStatus.SUCCESS,
+            platform=platform,
+            media_id=media_id,
+            title=llm_task.get("video_title", ""),
+            author=llm_task.get("author", ""),
+            terminal_snapshot={
+                "result": {
+                    "notes_status": NotesStatus.GENERATED,
+                    "notes_chapter_count": notes_result.chapter_count,
+                    "notes_fingerprint": notes_result.fingerprint,
+                },
+                "processing_options": processing_options,
+            },
+        )
+        if status_written:
+            logger.info(f"详细笔记任务状态已更新为 success: {task_id}")
+        else:
+            current_task = cache_manager.get_task_by_id(task_id)
+            current_status = current_task.get("status") if current_task else "unknown"
+            logger.warning(
+                f"详细笔记任务 success CAS 被已有终态拒绝({current_status}): {task_id}"
+            )
+    except Exception:
+        try:
+            cache_manager.save_llm_status(
+                platform=platform,
+                media_id=media_id,
+                use_speaker_recognition=use_speaker_recognition,
+                notes_status=NotesStatus.FAILED,
+            )
+        except Exception:
+            logger.exception(f"详细笔记 failed 状态落盘失败: {task_id}")
+        raise
+
+
 def _handle_llm_task(llm_task: dict):
     """Worker entry for processing a single LLM task.
 
@@ -353,8 +460,18 @@ def _handle_llm_task(llm_task: dict):
             logger.info(f"开始处理LLM任务: {task_id}, 标题: {video_title}")
 
             try:
+                raw_processing_options = llm_task.get("processing_options") or {}
+                if raw_processing_options.get("notes") is True:
+                    _handle_notes_generation(
+                        llm_task=llm_task,
+                        tracker=tracker,
+                        processing_options=raw_processing_options,
+                    )
+                    tracker.log_summary()
+                    return
+
                 processing_options = normalize_processing_options(
-                    llm_task.get("processing_options")
+                    raw_processing_options
                 )
                 calibrate_requested = processing_options.get("calibrate", True)
                 summarize_requested = processing_options.get("summarize", True)

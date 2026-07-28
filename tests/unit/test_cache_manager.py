@@ -375,6 +375,62 @@ class TestSaveLLMResult:
         assert "llm_summary" in result
         assert result["llm_summary"] == "Summary."
 
+    def test_notes_layer_preserves_existing_artifacts_and_status(self, cm):
+        _save_sample_capswriter(cm)
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="calibrated",
+            content="Calibrated layer.",
+        )
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="summary",
+            content="Summary layer.",
+        )
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="chapters",
+            content={"chapters": [{"title": "Chapter"}]},
+        )
+        cm.save_llm_status(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            calibration_status="full",
+            summary_status="generated",
+            chapters_status="generated",
+        )
+
+        assert cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="notes",
+            content="Notes layer.",
+        ) is True
+        status = cm.save_llm_status(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            notes_status="generated",
+        )
+
+        result = cm.get_cache(platform="youtube", media_id="vid1")
+        assert result["llm_calibrated"] == "Calibrated layer."
+        assert result["llm_summary"] == "Summary layer."
+        assert result["llm_notes"] == "Notes layer."
+        assert result["llm_chapters"]["chapters"][0]["title"] == "Chapter"
+        assert status["calibration_status"] == "full"
+        assert status["summary_status"] == "generated"
+        assert status["chapters_status"] == "generated"
+        assert status["notes_status"] == "generated"
+
     def test_save_chapters_and_get_cache(self, cm, cache_dir):
         """llm_type=chapters writes llm_chapters.json and get_cache reads it back."""
         _save_sample_capswriter(cm)

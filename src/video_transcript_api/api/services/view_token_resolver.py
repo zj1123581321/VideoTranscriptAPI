@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from ...utils.llm_status import SummaryStatus
+from ...utils.llm_status import NotesStatus, SummaryStatus
 from ...utils.logging import setup_logger
 
 if TYPE_CHECKING:
@@ -49,6 +49,23 @@ class ViewTokenResolver:
             return SummaryStatus.GENERATED, raw_summary
         return SummaryStatus.SKIPPED_SHORT, None
 
+    def _resolve_notes_state(
+        self, cache_data: Dict[str, Any]
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Resolve detailed-notes status and expose text only when generated."""
+        llm_status = cache_data.get("llm_status") or {}
+        notes_status = llm_status.get("notes_status")
+        raw_notes = cache_data.get("llm_notes")
+        if raw_notes is not None and not isinstance(raw_notes, str):
+            raw_notes = str(raw_notes)
+        has_notes_text = bool(raw_notes and raw_notes.strip())
+
+        if notes_status == NotesStatus.GENERATED:
+            return NotesStatus.GENERATED, raw_notes if has_notes_text else None
+        if notes_status:
+            return notes_status, None
+        return None, None
+
     def get_view_data_by_token(self, view_token: str) -> Optional[Dict[str, Any]]:
         """Return the view-page data associated with a view token."""
         try:
@@ -86,6 +103,7 @@ class ViewTokenResolver:
                     summary_state, summary = self._resolve_summary_state(
                         task_info, cache_data
                     )
+                    notes_state, notes = self._resolve_notes_state(cache_data)
                     transcript = cache_data.get("llm_calibrated") or cache_data.get(
                         "transcript_data", "转录文本获取中..."
                     )
@@ -112,6 +130,8 @@ class ViewTokenResolver:
                         "url": display_url,
                         "summary": summary,
                         "summary_state": summary_state,
+                        "notes": notes,
+                        "notes_state": notes_state,
                         "transcript": transcript,
                         "use_speaker_recognition": cache_data.get(
                             "use_speaker_recognition", False

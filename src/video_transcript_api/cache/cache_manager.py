@@ -99,6 +99,7 @@ class CacheManager:
         "transcript_capswriter.json",
         "llm_calibrated.txt",
         "llm_summary.txt",
+        "llm_notes.txt",
         "llm_status.json",
         "llm_processed.json",
         "llm_chapters.json",
@@ -876,6 +877,7 @@ class CacheManager:
                 # 读取其他文件（如果存在）
                 llm_calibrated = file_path / "llm_calibrated.txt"
                 llm_summary = file_path / "llm_summary.txt"
+                llm_notes = file_path / "llm_notes.txt"
                 
                 if llm_calibrated.exists():
                     with open(llm_calibrated, 'r', encoding='utf-8') as f:
@@ -884,6 +886,10 @@ class CacheManager:
                 if llm_summary.exists():
                     with open(llm_summary, 'r', encoding='utf-8') as f:
                         cache_data['llm_summary'] = f.read()
+
+                if llm_notes.exists():
+                    with open(llm_notes, 'r', encoding='utf-8') as f:
+                        cache_data['llm_notes'] = f.read()
 
                 # 读取诚实状态模型落盘文件（可能不存在：历史任务或校对未完成）
                 llm_status_file = file_path / "llm_status.json"
@@ -1372,6 +1378,10 @@ class CacheManager:
                 llm_file = file_path / "llm_summary.txt"
                 self._atomic_write(llm_file, lambda f: f.write(content))
 
+            elif llm_type == "notes":
+                llm_file = file_path / "llm_notes.txt"
+                self._atomic_write(llm_file, lambda f: f.write(content))
+
             elif llm_type == "structured":
                 # 保存结构化数据到 JSON 文件
                 llm_file = file_path / "llm_processed.json"
@@ -1449,6 +1459,7 @@ class CacheManager:
         calibration_stats: Optional[Dict[str, Any]] = None,
         summary_status: Optional[str] = None,
         chapters_status: Optional[str] = None,
+        notes_status: Optional[str] = None,
     ) -> Dict[str, Any]:
         """写入/合并 llm_status.json（"诚实状态模型"统一落盘文件）。
 
@@ -1504,6 +1515,8 @@ class CacheManager:
                     existing['summary_status'] = summary_status
                 if chapters_status is not None:
                     existing['chapters_status'] = chapters_status
+                if notes_status is not None:
+                    existing['notes_status'] = notes_status
                 existing['updated_at'] = datetime.datetime.now(datetime.timezone.utc).strftime(
                     '%Y-%m-%d %H:%M:%S'
                 )

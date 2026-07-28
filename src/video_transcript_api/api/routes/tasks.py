@@ -16,6 +16,7 @@ from ..context import (
 )
 from .audit import check_view_token_ownership
 from ..services.transcription import (
+    GenerateNotesRequest,
     RecalibrateRequest,
     ResummarizeRequest,
     TranscribeRequest,
@@ -24,7 +25,7 @@ from ..services.transcription import (
     verify_token,
 )
 from ..services.view_token_resolver import ViewTokenResolver
-from ...utils.llm_status import SummaryStatus
+from ...utils.llm_status import ChaptersStatus, NotesStatus, SummaryStatus
 from ...utils.notifications import send_view_link_wechat, get_notification_router
 from ...utils.task_status import TaskStatus, http_code_for_status
 
@@ -1058,6 +1059,217 @@ async def resummarize(
         return TranscribeResponse(
             code=202,
             message="重新生成总结任务已提交",
+            data={"task_id": task_id, "view_token": view_token},
+        )
+    finally:
+        if registration_owned:
+            inflight_registry.release("llm", task_id)
+
+
+@router.post("/generate_notes", response_model=TranscribeResponse)
+async def generate_notes(
+    request_body: GenerateNotesRequest,
+    request: Request,
+    user_info: dict = Depends(verify_token),
+):
+    """按已有章节异步生成详细笔记，不触碰其它 LLM 缓存层。"""
+    view_token = request_body.view_token
+    user_id = user_info.get("user_id")
+    api_key = user_info.get("api_key")
+    start_time = datetime.datetime.now()
+
+    audit_logger.log_api_call(
+        api_key=api_key,
+        user_id=user_id,
+        endpoint="/api/generate_notes",
+        user_agent=request.headers.get("User-Agent"),
+        remote_ip=request.client.host if request.client else None,
+    )
+
+    if not user_manager.check_permission(user_info, "recalibrate"):
+        logger.warning(f"用户 {user_id} 无 recalibrate 权限，拒绝生成详细笔记")
+        raise HTTPException(status_code=403, detail="无生成详细笔记权限")
+
+    cache_data = ViewTokenResolver(cache_manager).get_cache_by_view_token(view_token)
+    if not cache_data:
+        logger.warning(f"view_token 对应的缓存不存在，无法生成详细笔记: {view_token}")
+        raise HTTPException(status_code=404, detail="未找到对应的转录数据")
+
+    transcript_data = cache_data.get("transcript_data")
+    if not transcript_data:
+        logger.warning(f"缓存中无转录数据，无法生成详细笔记: {view_token}")
+        raise HTTPException(
+            status_code=400,
+            detail="缓存中没有转录数据，无法生成详细笔记",
+        )
+
+    task_info = cache_data.get("task_info", {})
+    original_task_id = task_info.get("task_id")
+    if original_task_id:
+        try:
+            owned = await asyncio.to_thread(
+                check_view_token_ownership,
+                view_token,
+                original_task_id,
+                user_id,
+                cache_manager,
+                audit_logger,
+            )
+        except Exception as exc:
+            logger.error(f"generate_notes 归属校验暂时不可用(fail-closed 拒绝): {exc}")
+            raise HTTPException(status_code=503, detail="归属校验暂时不可用，请稍后重试")
+        if not owned:
+            logger.warning(
+                f"用户 {user_id} 无权对 view_token={view_token} 发起 generate_notes"
+                "（非该任务的权威提交者）"
+            )
+            raise HTTPException(status_code=403, detail="无权对该任务生成详细笔记")
+
+    llm_status = cache_data.get("llm_status") or {}
+    if llm_status.get("chapters_status") != ChaptersStatus.GENERATED:
+        logger.warning(f"详细笔记依赖的章节层尚未生成: {view_token}")
+        raise HTTPException(
+            status_code=409,
+            detail="详细笔记依赖已生成的章节层，请先生成章节后再重试",
+        )
+    if llm_status.get("notes_status") == NotesStatus.GENERATED:
+        logger.warning(f"详细笔记已存在，拒绝重复生成: {view_token}")
+        raise HTTPException(status_code=400, detail="详细笔记已存在，无需重复生成")
+
+    platform = cache_data.get("platform")
+    media_id = cache_data.get("media_id")
+    use_speaker_recognition = cache_data.get("use_speaker_recognition", False)
+    video_title = cache_data.get("title", "")
+    author = cache_data.get("author", "")
+    description = cache_data.get("description", "")
+    cache_file_path = cache_data.get("file_path")
+    transcript_text = cache_data.get("llm_calibrated") or transcript_data
+
+    notes_processing_options = {
+        "calibrate": False,
+        "summarize": False,
+        "infer_speaker_names": False,
+        "chapters": False,
+        "notes": True,
+    }
+
+    from ..context import get_inflight_registry, get_llm_queue
+
+    task_id = cache_manager.generate_task_id()
+    inflight_registry = get_inflight_registry()
+    if not inflight_registry.try_register("llm", task_id):
+        logger.warning("在途 LLM 任务已达受理上限，拒绝详细笔记任务: %s", view_token)
+        raise HTTPException(status_code=503, detail="任务处理已达上限，请稍后重试")
+
+    registration_owned = True
+    try:
+        try:
+            with cache_manager._get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO task_status
+                    (task_id, view_token, url, platform, media_id,
+                     use_speaker_recognition, status, title, author,
+                     processing_options, submitted_by)
+                    VALUES (?, ?, ?, ?, ?, ?, 'processing', ?, ?, ?, ?)
+                    """,
+                    (
+                        task_id,
+                        view_token,
+                        task_info.get("url", ""),
+                        platform,
+                        media_id,
+                        use_speaker_recognition,
+                        video_title,
+                        author,
+                        json.dumps(notes_processing_options, sort_keys=True),
+                        user_id,
+                    ),
+                )
+            logger.info(f"详细笔记任务创建成功: {task_id}, view_token: {view_token}")
+        except Exception as exc:
+            logger.error(f"创建详细笔记任务失败: {exc}")
+            raise HTTPException(status_code=500, detail=f"创建详细笔记任务失败: {exc}")
+
+        notes_webhooks = {}
+        wechat_webhook = (
+            request_body.wechat_webhook
+            or user_info.get("wechat_webhook")
+            or config.get("wechat", {}).get("webhook")
+        )
+        if wechat_webhook:
+            notes_webhooks["wechat"] = wechat_webhook
+        feishu_webhook = (
+            user_info.get("feishu_webhook")
+            or config.get("feishu", {}).get("webhook")
+        )
+        if feishu_webhook:
+            notes_webhooks["feishu"] = feishu_webhook
+
+        llm_task = {
+            "task_id": task_id,
+            "url": task_info.get("url", ""),
+            "display_url": task_info.get("url", ""),
+            "platform": platform,
+            "media_id": media_id,
+            "video_title": video_title,
+            "author": author,
+            "description": description,
+            "transcript": transcript_text,
+            "use_speaker_recognition": use_speaker_recognition,
+            "transcription_data": None,
+            "is_generic": False,
+            "cache_dir": cache_file_path,
+            "wechat_webhook": notes_webhooks.get("wechat"),
+            "notification_webhooks": notes_webhooks,
+            "processing_options": notes_processing_options,
+        }
+
+        llm_queue = get_llm_queue()
+        try:
+            llm_queue.put_nowait(llm_task)
+            registration_owned = False
+            logger.info(f"详细笔记任务已加入 LLM 队列: {task_id}")
+        except queue.Full:
+            logger.warning("LLM 队列已满，拒绝详细笔记任务: %s", task_id)
+            terminal_write_ok = _fail_task_after_creation(
+                task_id,
+                "LLM 队列已满，详细笔记提交被拒绝",
+                log_context="LLM 队列已满后写入详细笔记 failed 终态失败",
+            )
+            detail = "LLM 队列已满，请稍后重试"
+            if not terminal_write_ok:
+                detail += _TERMINAL_WRITE_FAILURE_NOTE
+            raise HTTPException(status_code=503, detail=detail)
+        except Exception as exc:
+            logger.error(f"详细笔记任务加入队列失败: {exc}")
+            terminal_write_ok = _fail_task_after_creation(
+                task_id,
+                f"详细笔记任务加入队列失败: {exc}",
+                log_context="详细笔记任务加入队列失败后写入 failed 终态失败",
+            )
+            detail = f"详细笔记任务加入队列失败: {exc}"
+            if not terminal_write_ok:
+                detail += _TERMINAL_WRITE_FAILURE_NOTE
+            raise HTTPException(status_code=500, detail=detail)
+
+        processing_time_ms = int(
+            (datetime.datetime.now() - start_time).total_seconds() * 1000
+        )
+        audit_logger.log_api_call(
+            api_key=api_key,
+            user_id=user_id,
+            endpoint="/api/generate_notes",
+            processing_time_ms=processing_time_ms,
+            status_code=202,
+            task_id=task_id,
+            user_agent=request.headers.get("User-Agent"),
+            remote_ip=request.client.host if request.client else None,
+            wechat_webhook=notes_webhooks.get("wechat"),
+        )
+        return TranscribeResponse(
+            code=202,
+            message="详细笔记任务已提交",
             data={"task_id": task_id, "view_token": view_token},
         )
     finally:

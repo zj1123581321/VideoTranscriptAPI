@@ -116,6 +116,7 @@
             原始转录 {{ "{:,}".format(stats.original_length) }} 字
             {% if stats.calibrated_length > 0 %} | 校对文本 {{ "{:,}".format(stats.calibrated_length) }} 字{% endif %}
             {% if stats.summary_length > 0 and stats.summary_length != stats.calibrated_length %} | 内容总结 {{ "{:,}".format(stats.summary_length) }} 字{% endif %}
+            {% if stats.get('notes_length', 0) > 0 %} | 详细笔记 {{ "{:,}".format(stats.get('notes_length', 0)) }} 字{% endif %}
         </span>
     </div>
     {% endif %}
@@ -212,6 +213,10 @@
                     <a href="/view/{{ view_token }}?raw=calibrated" title="导出校对文本（纯文本）">校对文本</a>
                     <span class="export-sep">·</span>
                     <a href="/view/{{ view_token }}?raw=summary" title="导出内容总结（纯文本）">总结</a>
+                    {% if notes_html is defined and notes_html %}
+                    <span class="export-sep">·</span>
+                    <a href="/view/{{ view_token }}?raw=notes" title="导出详细笔记（纯文本）">详细笔记</a>
+                    {% endif %}
                     <span class="export-sep">·</span>
                     <a href="/view/{{ view_token }}?raw=transcript" title="导出原始转录（纯文本）">原始转录</a>
                 </span>
@@ -223,6 +228,10 @@
                     <a href="/view/{{ view_token }}?page=calibrated" title="导出校对文本（HTML 页面）">校对文本</a>
                     <span class="export-sep">·</span>
                     <a href="/view/{{ view_token }}?page=summary" title="导出内容总结（HTML 页面）">总结</a>
+                    {% if notes_html is defined and notes_html %}
+                    <span class="export-sep">·</span>
+                    <a href="/view/{{ view_token }}?page=notes" title="导出详细笔记（HTML 页面）">详细笔记</a>
+                    {% endif %}
                     <span class="export-sep">·</span>
                     <a href="/view/{{ view_token }}?page=transcript" title="导出原始转录（HTML 页面）">原始转录</a>
                 </span>
@@ -277,6 +286,56 @@
         </dialog>
         {% endif %}
     </div>
+
+    {% if notes_html is defined and notes_html %}
+    <details class="section notes-section" open>
+        <summary class="section-header">
+            <h2>📚 详细笔记</h2>
+            <span class="section-header-actions">
+                <button class="recalibrate-btn copy-content-btn" type="button" data-copy-target="notes-content-block" title="复制详细笔记正文">📋 复制内容</button>
+            </span>
+        </summary>
+        <div class="content" id="notes-content-block">
+            {{ notes_html|safe }}
+        </div>
+    </details>
+    {% elif stats and stats.get('chapters_status') == 'generated' %}
+    <div class="section">
+        <div class="section-header">
+            <h2>📚 详细笔记</h2>
+            {% if view_token %}
+            <span id="generateNotesArea">
+                <button class="recalibrate-btn" id="generateNotesBtn" onclick="document.getElementById('generateNotesDialog').showModal()">
+                    {% if notes_state|default(None) == 'failed' %}🔄 详细笔记生成失败，可重试{% else %}🧭 生成详细笔记{% endif %}
+                </button>
+            </span>
+            {% endif %}
+        </div>
+        <div class="content">
+            {% if notes_state|default(None) == 'failed' %}
+            <p style="color: #991b1b; font-style: italic;">详细笔记生成失败，可重新提交生成。</p>
+            {% else %}
+            <p style="color: var(--text-secondary); font-style: italic;">按现有章节逐章生成更完整的阅读笔记。</p>
+            {% endif %}
+        </div>
+
+        {% if view_token %}
+        <dialog id="generateNotesDialog" class="recalibrate-dialog">
+            <form method="dialog">
+                <h3>生成详细笔记</h3>
+                <p class="dialog-desc">将按已有章节逐章调用 LLM，完成后刷新页面即可查看；不会改写校对文本、总结或章节。</p>
+                <label for="generateNotesApiKey">API Key</label>
+                <input type="password" id="generateNotesApiKey" placeholder="Bearer token" autocomplete="off">
+                <div class="dialog-actions">
+                    <button type="button" class="dialog-btn dialog-btn-cancel" onclick="document.getElementById('generateNotesDialog').close()">取消</button>
+                    <button type="button" class="dialog-btn dialog-btn-confirm" id="generateNotesConfirmBtn" onclick="submitGenerateNotes()">确认</button>
+                </div>
+                <p id="generateNotesStatus" class="dialog-status" style="display:none;"></p>
+            </form>
+        </dialog>
+        {% endif %}
+    </div>
+    {% endif %}
 
     {% if chapters_data %}
     <script type="application/json" id="chapters-data">{{ chapters_data|safe }}</script>
@@ -341,6 +400,8 @@
     if (recalInput && stored) recalInput.value = stored;
     var resumInput = document.getElementById('resummarizeApiKey');
     if (resumInput && stored) resumInput.value = stored;
+    var notesInput = document.getElementById('generateNotesApiKey');
+    if (notesInput && stored) notesInput.value = stored;
 })();
 
 function submitRecalibrate() {
@@ -439,6 +500,57 @@ function submitResummarize() {
         dialog.close();
         area.innerHTML = '<span class="recalibrate-status">总结中... (0s)</span>';
         pollTask(taskId, apiKey, area, '总结');
+    })
+    .catch(function(err) {
+        status.textContent = err.message;
+        status.className = 'dialog-status dialog-status-error';
+        status.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Confirm';
+    });
+}
+
+function submitGenerateNotes() {
+    var btn = document.getElementById('generateNotesConfirmBtn');
+    var status = document.getElementById('generateNotesStatus');
+    var dialog = document.getElementById('generateNotesDialog');
+    var area = document.getElementById('generateNotesArea');
+    var apiKey = document.getElementById('generateNotesApiKey').value.trim();
+
+    if (!apiKey) {
+        status.textContent = 'Please enter API Key';
+        status.className = 'dialog-status dialog-status-error';
+        status.style.display = 'block';
+        return;
+    }
+
+    localStorage.setItem('api_key', apiKey);
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+    status.style.display = 'none';
+
+    fetch('/api/generate_notes', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + apiKey
+        },
+        body: JSON.stringify({ view_token: '{{ view_token }}' })
+    })
+    .then(function(resp) {
+        if (resp.status === 401) throw new Error('API Key invalid');
+        if (resp.status === 403) throw new Error('No detailed notes permission');
+        if (resp.status === 404) throw new Error('Transcript data not found');
+        if (resp.status === 409) throw new Error('Chapters are not generated');
+        if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.detail || 'Request failed'); });
+        return resp.json();
+    })
+    .then(function(data) {
+        var taskId = data.data && data.data.task_id;
+        if (!taskId) throw new Error('No task_id returned');
+        dialog.close();
+        area.innerHTML = '<span class="recalibrate-status">详细笔记生成中... (0s)</span>';
+        pollTask(taskId, apiKey, area, '详细笔记');
     })
     .catch(function(err) {
         status.textContent = err.message;

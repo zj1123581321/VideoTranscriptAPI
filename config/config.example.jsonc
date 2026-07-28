@@ -171,6 +171,15 @@
         "summary_reasoning_effort": "high",     // 总结推理强度（v4-flash 下触发思考模式）
 
         // ------------------------------------------------------
+        // 按需分章详细笔记（可选）
+        // ------------------------------------------------------
+        // 未配置时自动复用 summary_model / summary_reasoning_effort。
+        // 详细笔记只由查看页按钮或 POST /api/generate_notes 触发，
+        // 不属于 /api/transcribe 的公开 processing_options。
+        "notes_model": "deepseek-v4-flash",
+        "notes_reasoning_effort": "high",
+
+        // ------------------------------------------------------
         // 通用配置
         // ------------------------------------------------------
         "max_retries": 2,                // LLM 调用失败时的最大重试次数（由 llm-compat 内部处理）
