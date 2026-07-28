@@ -1209,7 +1209,7 @@
 
         document.addEventListener('DOMContentLoaded', function() {
             // 场景一：一键复制链接 URL（沿用原有的按钮文案短暂反馈样式）
-            document.querySelectorAll('.quick-copy-btn').forEach(function(btn) {
+            document.querySelectorAll('.quick-copy-btn:not(.deep-read-prompt-btn)').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     var path = btn.getAttribute('data-path');
                     var fullUrl = window.location.origin + path;
@@ -1219,6 +1219,33 @@
                     copyTextToClipboard(fullUrl, function() {
                         btn.classList.add('copied');
                         actionEl.textContent = 'Copied!';
+                        setTimeout(function() {
+                            btn.classList.remove('copied');
+                            actionEl.textContent = originalText;
+                        }, 1500);
+                    });
+                });
+            });
+
+            // 场景一补充：复制深度阅读 Prompt 与同源 Raw 校对文本 URL
+            document.querySelectorAll('.deep-read-prompt-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var path = btn.getAttribute('data-path') || '';
+                    var templatePayload = btn.getAttribute('data-template') || '';
+                    var template = '';
+                    try {
+                        template = templatePayload ? JSON.parse(templatePayload) : '';
+                    } catch (error) {
+                        return;
+                    }
+                    var fullUrl = window.location.origin + path;
+                    var text = template.split('{url}').join(fullUrl);
+                    var actionEl = btn.querySelector('.quick-copy-action');
+                    var originalText = actionEl.textContent;
+
+                    copyTextToClipboard(text, function() {
+                        btn.classList.add('copied');
+                        actionEl.textContent = '已复制';
                         setTimeout(function() {
                             btn.classList.remove('copied');
                             actionEl.textContent = originalText;

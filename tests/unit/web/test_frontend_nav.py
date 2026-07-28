@@ -131,6 +131,55 @@ class TestCopyContentButtonsInTranscriptPage:
         # The calibrated-text copy button must still be present.
         assert 'data-copy-target="calibrated-content-block"' in html
 
+
+class TestDeepReadPromptButtonsInTranscriptPage:
+    """Deep-read prompt buttons must be safe and require calibrated text."""
+
+    def _render(self, **overrides) -> str:
+        env = _jinja_env()
+        return env.get_template("transcript.html").render(**_base_context(**overrides))
+
+    def test_renders_one_button_per_configured_preset(self):
+        html = self._render(
+            deep_read_prompt_presets=[
+                {
+                    "label": "Read deeply",
+                    "template": "Read the full transcript at {url}\n",
+                },
+                {"label": "Ask for details", "template": "Analyze {url}"},
+            ]
+        )
+
+        assert html.count('class="quick-copy-btn deep-read-prompt-btn"') == 2
+        assert "Read deeply" in html
+        assert "Ask for details" in html
+        assert 'data-path="/view/test-view-token-123?raw=calibrated"' in html
+        assert "Read the full transcript at" in html
+        assert "{url}" in html
+
+    def test_buttons_are_hidden_without_calibrated_text(self):
+        html = self._render(
+            calibrated_html="",
+            deep_read_prompt_presets=[
+                {"label": "Read deeply", "template": "Read {url}"}
+            ],
+        )
+
+        assert 'class="quick-copy-btn deep-read-prompt-btn"' not in html
+
+    def test_template_text_cannot_break_out_of_button_markup(self):
+        html = self._render(
+            deep_read_prompt_presets=[
+                {
+                    "label": 'Quoted "label"',
+                    "template": 'Read "quoted" <script>alert(1)</script> at {url}',
+                }
+            ]
+        )
+
+        assert "<script>alert(1)</script>" not in html
+        assert "deep-read-prompt-btn" in html
+
     def test_shared_clipboard_helper_is_wired_once(self):
         """Both URL-copy and content-copy buttons must reuse one clipboard function."""
         html = self._render()

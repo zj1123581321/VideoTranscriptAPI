@@ -49,6 +49,18 @@ https://your-domain.com/view/{view_token}?raw=transcript
 
 ## 使用示例
 
+### 一键复制深度阅读 Prompt
+
+查看结果页存在校对文本时，`quick-copy-bar` 会显示「复制深度阅读 Prompt」按钮。点击后会把预设指令和当前站点的绝对校对文本地址一起复制，粘贴到 ChatGPT、Claude 等支持读取 URL 的工具即可开始深度阅读。
+
+复制内容使用以下格式的地址，与 Raw 校对文本导出保持一致：
+
+```
+https://transcript.example.com/view/view_abc123xyz?raw=calibrated
+```
+
+可在 `config/config.jsonc` 的 `web.deep_read_prompts` 中配置多个按钮。每项需要同时提供 `label` 和包含 `{url}` 占位符的 `template`；缺省或全部配置无效时使用内置默认 Prompt。
+
 ### 1. 浏览器直接查看
 
 **场景**：想快速查看校对文本，进行复制
