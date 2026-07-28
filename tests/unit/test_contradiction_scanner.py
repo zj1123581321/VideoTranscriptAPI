@@ -1,5 +1,6 @@
 """Increment 2 semantic contradiction scanner tests."""
 
+import logging
 from unittest.mock import MagicMock, patch
 import json
 from pathlib import Path
@@ -9,10 +10,12 @@ import pytest
 from video_transcript_api.llm.core.config import LLMConfig
 from video_transcript_api.llm.core.contradiction_scanner import (
     ContradictionScanner,
+    MAX_SCAN_SEGMENTS,
 )
 from video_transcript_api.llm.processors.speaker_aware_processor import SpeakerAwareProcessor
 from video_transcript_api.llm.core.key_info_extractor import KeyInfo
 from video_transcript_api.llm.prompts.schemas.contradiction_scan import (
+    CONTRADICTION_REASONS,
     CONTRADICTION_SCAN_SCHEMA,
 )
 
@@ -116,6 +119,88 @@ def test_scanner_prompt_caps_each_text_at_first_100_characters():
     assert '"text": "' + ("a" * 101) + '"' not in prompt
 
 
+def test_scanner_skips_llm_when_prepared_segments_exceed_maximum(caplog):
+    assert MAX_SCAN_SEGMENTS == 500
+    client = MagicMock()
+    scanner = ContradictionScanner(client, model="scan-model")
+
+    with patch(
+        "video_transcript_api.llm.core.contradiction_scanner.logger",
+        logging.getLogger("contradiction_scanner_max_segments_test"),
+    ), caplog.at_level(logging.WARNING):
+        result = scanner.scan_contradictions(_dialogs(501), {}, {})
+
+    client.call.assert_not_called()
+    assert "Contradiction scan skipped because segment count 501" in caplog.text
+    assert result == {
+        "status": "skipped",
+        "segment_overrides": {},
+        "speaker_risk_flags": [],
+    }
+
+
+@pytest.mark.parametrize(
+    ("extra_field", "extra_value"), [("name", "Alice"), ("reasoning", "free text")]
+)
+def test_scanner_discards_contradiction_with_hallucinated_extra_field(
+    extra_field, extra_value
+):
+    client = MagicMock()
+    entry = {
+        "segment_id": "seg_1",
+        "reason": "self_reference_conflict",
+        "evidence_segment_ids": ["seg_0"],
+        extra_field: extra_value,
+    }
+    client.call.return_value = _response({"contradictions": [entry]})
+
+    result = ContradictionScanner(client).scan_contradictions(_dialogs(), {}, {})
+
+    assert result["segment_overrides"] == {}
+
+
+def test_scanner_logs_hallucinated_target_id_with_segment_count(caplog):
+    client = MagicMock()
+    client.call.return_value = _response(
+        {
+            "contradictions": [
+                {
+                    "segment_id": "seg_missing",
+                    "reason": "self_reference_conflict",
+                    "evidence_segment_ids": ["seg_0"],
+                }
+            ]
+        }
+    )
+    scanner = ContradictionScanner(client)
+
+    with patch(
+        "video_transcript_api.llm.core.contradiction_scanner.logger",
+        logging.getLogger("contradiction_scanner_test"),
+    ), caplog.at_level(logging.WARNING):
+        result = scanner.scan_contradictions(_dialogs(), {}, {})
+
+    assert result["segment_overrides"] == {}
+    assert "Contradiction scan dropped entry" in caplog.text
+    assert "seg_missing" in caplog.text
+    assert "target id hallucination" in caplog.text
+
+
+def test_scanner_warns_when_dialogs_without_segment_id_are_skipped(caplog):
+    client = MagicMock()
+    client.call.return_value = _response({"contradictions": []})
+    scanner = ContradictionScanner(client)
+    dialogs = [{"speaker": "Alice", "text": "missing id"}] + _dialogs(2)
+
+    with patch(
+        "video_transcript_api.llm.core.contradiction_scanner.logger",
+        logging.getLogger("contradiction_scanner_missing_id_test"),
+    ), caplog.at_level(logging.WARNING):
+        scanner.scan_contradictions(dialogs, {}, {})
+
+    assert "Contradiction scan skipped 1 dialogs without segment_id" in caplog.text
+
+
 def test_scanner_drops_entry_with_hallucinated_evidence_id():
     client = MagicMock()
     client.call.return_value = _response(
@@ -134,7 +219,8 @@ def test_scanner_drops_entry_with_hallucinated_evidence_id():
     ) as mock_logger:
         result = ContradictionScanner(client).scan_contradictions(_dialogs(), {}, {})
     mock_logger.warning.assert_any_call(
-        "Contradiction scan dropped entry with unknown evidence segment id"
+        "Contradiction scan dropped entry for segment_id 'seg_1': "
+        "evidence segment id hallucination"
     )
     assert result["status"] == "completed"
     assert result["segment_overrides"] == {}
@@ -241,14 +327,76 @@ def test_scanner_ratio_boundary_detects_one_of_thirty_three_only(total, expected
 
 def test_contradiction_schema_locks_reason_enum_and_unknown_fields():
     item_schema = CONTRADICTION_SCAN_SCHEMA["properties"]["contradictions"]["items"]
-    assert set(item_schema["properties"]["reason"]["enum"]) == {
-        "direct_address_conflict",
-        "self_reference_conflict",
-        "third_person_conflict",
-        "qa_adjacency_conflict",
-    }
+    assert tuple(item_schema["properties"]["reason"]["enum"]) == CONTRADICTION_REASONS
+    assert ContradictionScanner.REASONS == frozenset(CONTRADICTION_REASONS)
     assert item_schema["additionalProperties"] is False
     assert CONTRADICTION_SCAN_SCHEMA["additionalProperties"] is False
+
+
+def test_processor_sanitizer_derives_reasons_from_scanner(monkeypatch):
+    monkeypatch.setattr(ContradictionScanner, "REASONS", frozenset({"dynamic_reason"}))
+    override = {
+        "status": "suspect",
+        "assignment_source": "semantic_evidence",
+        "reason": "dynamic_reason",
+        "evidence_segment_ids": ["seg_0"],
+    }
+
+    sanitized = SpeakerAwareProcessor._sanitize_contradiction_overrides(
+        {"seg_0": override}, {"seg_0"}
+    )
+
+    assert sanitized == {"seg_0": override}
+
+
+@pytest.mark.parametrize(
+    ("extra_field", "extra_value"), [("name", "Alice"), ("reasoning", "free text")]
+)
+def test_processor_sanitizer_discards_contradiction_with_hallucinated_extra_field(
+    extra_field, extra_value
+):
+    override = {
+        "status": "suspect",
+        "assignment_source": "semantic_evidence",
+        "reason": "self_reference_conflict",
+        "evidence_segment_ids": ["seg_0"],
+        extra_field: extra_value,
+    }
+
+    sanitized = SpeakerAwareProcessor._sanitize_contradiction_overrides(
+        {"seg_0": override}, {"seg_0"}
+    )
+
+    assert sanitized == {}
+
+
+def test_processor_preserves_scanner_skipped_status():
+    client = MagicMock()
+    key_info = MagicMock()
+    key_info.extract.return_value = KeyInfo([], [], [], [], [], [], [])
+    inferencer = MagicMock()
+    inferencer.infer.return_value = {
+        "mapping": {"Speaker1": "Alice"},
+        "meta": {},
+        "source": "llm",
+    }
+    scanner = MagicMock()
+    scanner.scan_contradictions.return_value = {
+        "status": "skipped",
+        "segment_overrides": {},
+        "speaker_risk_flags": [],
+    }
+    processor = SpeakerAwareProcessor(
+        _config(), client, key_info, inferencer, MagicMock(), contradiction_scanner=scanner
+    )
+
+    result = processor.process(
+        [{"speaker": "Speaker1", "text": "hello", "start_time": 0, "end_time": 1}],
+        title="slice",
+        skip_calibration=True,
+    )
+
+    assert result["stats"]["contradiction_scan_status"] == "skipped"
 
 
 def test_processor_runs_scan_after_segment_dedup_and_keeps_skip_calibration():

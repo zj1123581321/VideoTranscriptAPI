@@ -8,23 +8,21 @@ from ..prompts import (
     CONTRADICTION_SCAN_SYSTEM_PROMPT,
     build_contradiction_scan_user_prompt,
 )
-from ..prompts.schemas.contradiction_scan import CONTRADICTION_SCAN_SCHEMA
+from ..prompts.schemas.contradiction_scan import (
+    CONTRADICTION_REASONS,
+    CONTRADICTION_SCAN_SCHEMA,
+)
 from .llm_client import LLMClient
 
 logger = setup_logger(__name__)
+# Maximum prepared dialog segments allowed in one semantic scan; larger scans skip the LLM call.
+MAX_SCAN_SEGMENTS = 500
 
 
 class ContradictionScanner:
     """Scan final segment IDs for semantic speaker-assignment contradictions."""
 
-    REASONS = frozenset(
-        {
-            "direct_address_conflict",
-            "self_reference_conflict",
-            "third_person_conflict",
-            "qa_adjacency_conflict",
-        }
-    )
+    REASONS = frozenset(CONTRADICTION_REASONS)
 
     def __init__(
         self,
@@ -49,6 +47,14 @@ class ContradictionScanner:
         """Run one mocked/real LLM scan and return safe overrides plus risk flags."""
         try:
             prepared_dialogs = self._prepare_dialogs(dialogs)
+            prepared_count = len(prepared_dialogs)
+            if prepared_count > MAX_SCAN_SEGMENTS:
+                logger.warning(f"Contradiction scan skipped because segment count {prepared_count} exceeds MAX_SCAN_SEGMENTS={MAX_SCAN_SEGMENTS}")
+                return {
+                    "status": "skipped",
+                    "segment_overrides": {},
+                    "speaker_risk_flags": [],
+                }
             known_ids = {
                 item["segment_id"]
                 for item in prepared_dialogs
@@ -111,11 +117,13 @@ class ContradictionScanner:
     def _prepare_dialogs(dialogs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Keep only prompt fields and cap text to the first 100 characters."""
         prepared: List[Dict[str, Any]] = []
+        skipped_missing_segment_id = 0
         for dialog in dialogs or []:
             if not isinstance(dialog, dict):
                 continue
             segment_id = dialog.get("segment_id")
             if not segment_id:
+                skipped_missing_segment_id += 1
                 continue
             prepared.append(
                 {
@@ -129,6 +137,8 @@ class ContradictionScanner:
                     "text": str(dialog.get("text") or "")[:100],
                 }
             )
+        if skipped_missing_segment_id:
+            logger.warning(f"Contradiction scan skipped {skipped_missing_segment_id} dialogs without segment_id")
         return prepared
 
     def _extract_entries(self, payload: Any) -> List[Dict[str, Any]]:
@@ -151,28 +161,26 @@ class ContradictionScanner:
         overrides: Dict[str, Dict[str, Any]] = {}
         allowed_fields = {"segment_id", "reason", "evidence_segment_ids"}
         for entry in entries:
-            if set(entry) != allowed_fields:
-                logger.warning("Contradiction scan dropped entry with unknown fields")
-                continue
             segment_id = entry.get("segment_id")
+            if set(entry) != allowed_fields:
+                logger.warning(f"Contradiction scan dropped entry for segment_id {segment_id!r}: field set mismatch")
+                continue
             reason = entry.get("reason")
             evidence = entry.get("evidence_segment_ids")
-            if (
-                not isinstance(segment_id, str)
-                or segment_id not in known_ids
-                or reason not in self.REASONS
-                or not isinstance(evidence, list)
-                or not evidence
-                or any(not isinstance(item, str) or item not in known_ids for item in evidence)
-            ):
-                if isinstance(evidence, list) and any(
-                    isinstance(item, str) and item not in known_ids for item in evidence
-                ):
-                    logger.warning(
-                        "Contradiction scan dropped entry with unknown evidence segment id"
-                    )
+            if not isinstance(segment_id, str) or segment_id not in known_ids:
+                logger.warning(f"Contradiction scan dropped entry for segment_id {segment_id!r}: target id hallucination")
+                continue
+            if not isinstance(reason, str) or reason not in self.REASONS:
+                logger.warning(f"Contradiction scan dropped entry for segment_id {segment_id!r}: reason is illegal ({reason!r})")
+                continue
+            if not isinstance(evidence, list) or not evidence:
+                logger.warning(f"Contradiction scan dropped entry for segment_id {segment_id!r}: evidence fields are malformed")
+                continue
+            if any(not isinstance(item, str) or item not in known_ids for item in evidence):
+                logger.warning(f"Contradiction scan dropped entry for segment_id {segment_id!r}: evidence segment id hallucination")
                 continue
             if segment_id in overrides:
+                logger.warning(f"Contradiction scan dropped entry for segment_id {segment_id!r}: duplicate id")
                 continue
             overrides[segment_id] = {
                 "status": "suspect",

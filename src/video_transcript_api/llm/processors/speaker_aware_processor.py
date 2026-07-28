@@ -92,7 +92,9 @@ class SpeakerAwareProcessor:
             skip_calibration: 是否跳过分块 LLM 校对调用（processing_options.calibrate=False
                 时为 True）。说话人推断、说话人映射、对话规范化合并这些步骤仍会执行——
                 它们属于"转录"交付物（谁在说话）而非"校对"（文字是否准确），跳过的只是
-                逐块把文本喂给 LLM 做文字校正/纠错的那一步。
+                逐块把文本喂给 LLM 做文字校正/纠错的那一步。矛盾扫描不受
+                skip_calibration 控制，仍会运行；仅受 contradiction_scan_enabled 与
+                infer_speaker_names 门控。
             has_speaker: 输入是否携带说话人标签。None（默认）时自动判定——
                 任一原始输入段能解析出说话人标签即为 True（混合输入维持现状
                 行为）；False 时走「无说话人逐段校对」模式：跳过说话人推断、
@@ -367,10 +369,12 @@ class SpeakerAwareProcessor:
         if not isinstance(result, dict):
             return "failed", {}, []
         status = result.get("status")
-        if status not in {"completed", "failed"}:
+        if status not in {"completed", "failed", "skipped"}:
             return "failed", {}, []
         if status == "failed":
             return "failed", {}, []
+        if status == "skipped":
+            return "skipped", {}, []
         known_ids = {
             str(dialog.get("segment_id"))
             for dialog in dialogs
@@ -399,11 +403,12 @@ class SpeakerAwareProcessor:
         """Persist only the fixed suspect contract; never persist a name/free text."""
         if not isinstance(overrides, dict):
             return {}
-        allowed_reasons = {
-            "direct_address_conflict",
-            "self_reference_conflict",
-            "third_person_conflict",
-            "qa_adjacency_conflict",
+        allowed_reasons = ContradictionScanner.REASONS
+        allowed_fields = {
+            "status",
+            "assignment_source",
+            "reason",
+            "evidence_segment_ids",
         }
         sanitized: Dict[str, Dict[str, Any]] = {}
         for segment_id, override in overrides.items():
@@ -411,6 +416,7 @@ class SpeakerAwareProcessor:
                 not isinstance(segment_id, str)
                 or segment_id not in known_ids
                 or not isinstance(override, dict)
+                or set(override) != allowed_fields
                 or override.get("status") != "suspect"
                 or override.get("assignment_source") != "semantic_evidence"
                 or override.get("reason") not in allowed_reasons

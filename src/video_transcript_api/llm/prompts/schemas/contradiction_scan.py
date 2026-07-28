@@ -1,5 +1,13 @@
 """Semantic contradiction scan JSON schema."""
 
+# Canonical reason values shared by the schema, scanner, and processor sanitizer.
+CONTRADICTION_REASONS: tuple[str, ...] = (
+    "direct_address_conflict",
+    "self_reference_conflict",
+    "third_person_conflict",
+    "qa_adjacency_conflict",
+)
+
 CONTRADICTION_SCAN_SCHEMA = {
     "type": "object",
     "properties": {
@@ -12,12 +20,7 @@ CONTRADICTION_SCAN_SCHEMA = {
                     "segment_id": {"type": "string", "minLength": 1},
                     "reason": {
                         "type": "string",
-                        "enum": [
-                            "direct_address_conflict",
-                            "self_reference_conflict",
-                            "third_person_conflict",
-                            "qa_adjacency_conflict",
-                        ],
+                        "enum": list(CONTRADICTION_REASONS),
                     },
                     "evidence_segment_ids": {
                         "type": "array",
@@ -33,4 +36,3 @@ CONTRADICTION_SCAN_SCHEMA = {
     "required": ["contradictions"],
     "additionalProperties": False,
 }
-
