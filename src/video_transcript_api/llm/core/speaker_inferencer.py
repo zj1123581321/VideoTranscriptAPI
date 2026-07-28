@@ -443,8 +443,9 @@ class SpeakerInferencer:
 
         对每个说话人：
         - 默认从全时间轴按头/中/尾分层采集 samples_per_speaker 条发言（每条
-          截断到 _MAX_CHARS_PER_SAMPLE 字符，该说话人总采样不超过
-          max_chars_per_speaker）；当有效发言不足 K 条时按原时间顺序退化
+          截断到单条上限与人均预算中的较小值，该说话人总采样不超过
+          max_chars_per_speaker）；当有效发言不足 K 条时按原时间顺序退化，
+          保持原有单条截断行为
         - 采集其首次发言前的 context_dialogs 条「其他人」的发言作为上下文
           （谁称呼/提及了这个人，是最强的身份信号）
 
@@ -489,6 +490,7 @@ class SpeakerInferencer:
             candidates = candidate_dialogs[speaker]
             if len(candidates) <= self.samples_per_speaker:
                 selected = candidates
+                per_sample_limit = None
             else:
                 # Spread the default K=3 samples over the full timeline so a
                 # polluted tail remains visible to the inference prompt.  For
@@ -499,7 +501,20 @@ class SpeakerInferencer:
                     for index in range(self.samples_per_speaker)
                 ] if self.samples_per_speaker > 1 else [0]
                 selected = [candidates[position] for position in positions]
+                # Reserve an equal share of the per-speaker budget for each
+                # stratified sample so a long head/middle sample cannot crowd
+                # out the tail.  K=0 keeps the existing empty-selection path.
+                per_sample_limit = (
+                    min(
+                        self._MAX_CHARS_PER_SAMPLE,
+                        self.max_chars_per_speaker // self.samples_per_speaker,
+                    )
+                    if self.samples_per_speaker > 0
+                    else None
+                )
             for text in selected:
+                if per_sample_limit is not None:
+                    text = self._truncate(text, per_sample_limit)
                 self._try_add_sample(speaker, text, own_samples, own_chars)
 
         sample_groups = {}
