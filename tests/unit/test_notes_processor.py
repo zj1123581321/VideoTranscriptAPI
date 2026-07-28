@@ -343,6 +343,31 @@ def test_empty_chapter_response_returns_failed_without_partial_text():
     assert result.error == "chapter 1 notes response is empty"
 
 
+def test_failed_chapter_cancels_queued_chapters_instead_of_burning_quota():
+    """First-chapter failure must not keep spending LLM calls on queued chapters."""
+    segments, chapters = _chapter_batch(5)
+    calls = []
+
+    class FailFirstNotesClient:
+        def call(self, **kwargs):
+            title = _chapter_title(kwargs["user_prompt"])
+            calls.append(title)
+            if title == "Chapter 0":
+                raise RuntimeError("provider exploded")
+            return f"- {title} notes"
+
+    # notes_concurrency=1 makes scheduling deterministic: chapters 1..4 are still
+    # queued when chapter 0 fails, so they must be cancelled, not executed.
+    result = NotesProcessor(FailFirstNotesClient(), _config(notes_concurrency=1)).process(
+        chapters=chapters,
+        source_segments=segments,
+    )
+
+    assert result.status is NotesStatus.FAILED
+    assert result.text is None
+    assert calls == ["Chapter 0"]
+
+
 def test_notes_concurrency_config_defaults_to_ten_and_parses_explicit_value():
     base = {
         "api_key": "k",

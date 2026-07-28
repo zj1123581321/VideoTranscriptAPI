@@ -459,6 +459,11 @@ class NotesProcessor:
                     try:
                         notes_sections.append(future.result())
                     except Exception as exc:  # noqa: BLE001 - preserve processor contract
+                        # 整批已一次性提交：首个失败后取消尚未开始的章节，
+                        # 否则 shutdown(wait=True) 仍会把排队的章节全部跑完，
+                        # 白烧 LLM 配额并把失败反馈拖到整批耗时之后。
+                        for pending in futures:
+                            pending.cancel()
                         return NotesResult(
                             text=None,
                             status=NotesStatus.FAILED,
