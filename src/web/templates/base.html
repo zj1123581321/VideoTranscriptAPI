@@ -1238,9 +1238,15 @@
                     } catch (error) {
                         return;
                     }
+                    if (typeof template !== 'string' || template.indexOf('{url}') === -1) {
+                        return;
+                    }
+                    var actionEl = btn.querySelector('.quick-copy-action');
+                    if (!actionEl || btn.classList.contains('copied')) {
+                        return;
+                    }
                     var fullUrl = window.location.origin + path;
                     var text = template.split('{url}').join(fullUrl);
-                    var actionEl = btn.querySelector('.quick-copy-action');
                     var originalText = actionEl.textContent;
 
                     copyTextToClipboard(text, function() {

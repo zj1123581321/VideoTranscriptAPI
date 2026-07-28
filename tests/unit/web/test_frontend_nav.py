@@ -131,6 +131,14 @@ class TestCopyContentButtonsInTranscriptPage:
         # The calibrated-text copy button must still be present.
         assert 'data-copy-target="calibrated-content-block"' in html
 
+    def test_shared_clipboard_helper_is_wired_once(self):
+        """Both URL-copy and content-copy buttons must reuse one clipboard function."""
+        html = self._render()
+        assert html.count("function copyTextToClipboard(") == 1
+        assert "function fallbackCopyToClipboard(" in html
+        assert ".copy-content-btn" in html
+        assert ".quick-copy-btn" in html
+
 
 class TestDeepReadPromptButtonsInTranscriptPage:
     """Deep-read prompt buttons must be safe and require calibrated text."""
@@ -180,13 +188,23 @@ class TestDeepReadPromptButtonsInTranscriptPage:
         assert "<script>alert(1)</script>" not in html
         assert "deep-read-prompt-btn" in html
 
-    def test_shared_clipboard_helper_is_wired_once(self):
-        """Both URL-copy and content-copy buttons must reuse one clipboard function."""
-        html = self._render()
-        assert html.count("function copyTextToClipboard(") == 1
-        assert "function fallbackCopyToClipboard(" in html
-        assert ".copy-content-btn" in html
-        assert ".quick-copy-btn" in html
+    def test_apostrophe_and_focus_payload_cannot_break_template_attribute(self):
+        html = self._render(
+            deep_read_prompt_presets=[
+                {
+                    "label": "Read deeply",
+                    "template": (
+                        "Read user's notes' autofocus='autofocus' "
+                        "onfocus='alert(1)' at {url}"
+                    ),
+                }
+            ]
+        )
+
+        assert "data-template='&#34;" in html
+        assert "' autofocus='" not in html
+        assert "onfocus='alert(1)'" not in html
+        assert "<button" in html
 
 
 class TestIndexPageNavigation:
