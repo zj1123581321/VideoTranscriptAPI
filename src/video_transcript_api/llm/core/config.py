@@ -123,6 +123,11 @@ class LLMConfig:
     # Semantic contradiction scan (Increment 2), enabled by default.
     contradiction_scan_enabled: bool = True
 
+    # Chapter-detailed notes. These fields are appended to preserve legacy
+    # positional construction of LLMConfig.
+    notes_model: Optional[str] = None
+    notes_reasoning_effort: Optional[str] = None
+
     @classmethod
     def from_dict(cls, config_dict: dict) -> "LLMConfig":
         """从配置字典创建 LLMConfig 实例
@@ -305,6 +310,15 @@ class LLMConfig:
                 "contradiction_scan_enabled",
                 speaker_inference_config.get("contradiction_scan_enabled", True),
             ),
+
+            # Notes default to the summary model and effort when omitted.
+            notes_model=llm_config.get("notes_model", llm_config["summary_model"]),
+            notes_reasoning_effort=normalize_reasoning_effort(
+                llm_config.get(
+                    "notes_reasoning_effort",
+                    llm_config.get("summary_reasoning_effort"),
+                )
+            ),
         )
 
     def get_models(self) -> dict:
@@ -318,6 +332,12 @@ class LLMConfig:
             "calibrate_reasoning_effort": self.calibrate_reasoning_effort,
             "summary_model": self.summary_model,
             "summary_reasoning_effort": self.summary_reasoning_effort,
+            "notes_model": self.notes_model or self.summary_model,
+            "notes_reasoning_effort": (
+                self.notes_reasoning_effort
+                if self.notes_reasoning_effort is not None
+                else self.summary_reasoning_effort
+            ),
             "validator_model": self.validator_model,
             "validator_reasoning_effort": self.validator_reasoning_effort,
         }

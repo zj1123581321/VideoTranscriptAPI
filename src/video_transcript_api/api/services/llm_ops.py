@@ -9,6 +9,7 @@
   - 企微通知发送
 """
 
+import json
 import queue
 import re
 import time
@@ -28,6 +29,11 @@ from ..context import (
 )
 from ..processing_options import normalize_processing_options
 from ...llm.core.usage_context import bind_task_id, set_context
+from ...llm.processors.notes_processor import (
+    NotesProcessor,
+    compute_notes_anchor_fingerprint,
+    load_notes_source_segments,
+)
 from ...utils.notifications import (
     WechatNotifier,
     send_long_text_wechat,
@@ -38,7 +44,12 @@ from ...utils.notifications.channel import _clean_url, _apply_risk_control_safe
 from ...utils.rendering import get_base_url
 from ...utils.perf_tracker import PerfTracker
 from ...utils.task_status import TaskStatus
-from ...utils.llm_status import CalibrationStatus, ChaptersStatus, SummaryStatus
+from ...utils.llm_status import (
+    CalibrationStatus,
+    ChaptersStatus,
+    NotesStatus,
+    SummaryStatus,
+)
 
 logger = lazy_resource(get_logger)
 config = lazy_resource(get_config)
@@ -46,6 +57,11 @@ cache_manager = lazy_resource(get_cache_manager)
 llm_coordinator = lazy_resource(get_llm_coordinator)
 llm_task_queue = lazy_resource(get_llm_queue)
 llm_executor = lazy_resource(get_llm_executor)
+
+_NOTES_STALE_CHAPTERS_ERROR = (
+    "chapters changed during notes generation, "
+    "notes discarded to avoid misalignment"
+)
 
 
 def _requires_llm_title(
@@ -313,6 +329,157 @@ def process_llm_queue():
             time.sleep(1)
 
 
+def _validate_notes_commit_fingerprint(
+    *,
+    cache_dir: str,
+    generated_fingerprint: Optional[str],
+) -> None:
+    """Reject notes generated against a chapter anchor that is no longer current."""
+    try:
+        chapters_payload = json.loads(
+            (Path(cache_dir) / "llm_chapters.json").read_text(encoding="utf-8")
+        )
+        source = chapters_payload.get("source")
+        stored_fingerprint = source.get("fingerprint")
+        source_kind = source.get("kind")
+        current_segments, _ = load_notes_source_segments(
+            cache_dir,
+            source_kind=source_kind,
+        )
+        current_fingerprint = compute_notes_anchor_fingerprint(
+            current_segments or []
+        )
+    except Exception as exc:
+        raise RuntimeError(_NOTES_STALE_CHAPTERS_ERROR) from exc
+
+    if (
+        not generated_fingerprint
+        or generated_fingerprint != stored_fingerprint
+        or generated_fingerprint != current_fingerprint
+    ):
+        raise RuntimeError(_NOTES_STALE_CHAPTERS_ERROR)
+
+
+def _handle_notes_generation(
+    *,
+    llm_task: dict,
+    tracker: PerfTracker,
+    processing_options: dict,
+) -> Optional[dict]:
+    """Run and persist a notes-only task without touching existing LLM layers."""
+    task_id = llm_task["task_id"]
+    platform = llm_task.get("platform")
+    media_id = llm_task.get("media_id")
+    use_speaker_recognition = llm_task.get("use_speaker_recognition", False)
+    if not platform or not media_id:
+        raise ValueError("Detailed notes task requires platform and media_id")
+
+    cache_dir = llm_task.get("cache_dir")
+    if not cache_dir:
+        cache_snapshot = cache_manager.get_cache(
+            platform,
+            media_id,
+            use_speaker_recognition=use_speaker_recognition,
+        )
+        cache_dir = (cache_snapshot or {}).get("file_path")
+    if not cache_dir:
+        raise ValueError("Detailed notes task requires a valid cache directory")
+
+    try:
+        notes_processor = NotesProcessor(
+            llm_client=llm_coordinator.llm_client,
+            config=llm_coordinator.config,
+        )
+        selected_models = llm_coordinator.config.get_models()
+        cache_manager.update_task_llm_config(task_id, dict(selected_models))
+        with tracker.track("llm_processing"), set_context(stage="notes"):
+            notes_result = notes_processor.process(
+                cache_dir=cache_dir,
+                selected_models=selected_models,
+            )
+
+        if (
+            notes_result.status != NotesStatus.GENERATED
+            or not isinstance(notes_result.text, str)
+            or not notes_result.text.strip()
+        ):
+            error_message = (
+                notes_result.error
+                or "Detailed notes processor returned no complete artifact"
+            )
+            raise RuntimeError(error_message)
+
+        # Keep the commit-time anchor recheck, notes artifact write, and honest
+        # status merge in the existing per-media critical section. Normal
+        # chapters writers use this same lock, so they cannot change the source
+        # snapshot between this check and the notes commit.
+        with cache_manager.media_lock(platform, media_id):
+            _validate_notes_commit_fingerprint(
+                cache_dir=cache_dir,
+                generated_fingerprint=notes_result.fingerprint,
+            )
+            if not cache_manager.save_llm_result(
+                platform=platform,
+                media_id=media_id,
+                use_speaker_recognition=use_speaker_recognition,
+                llm_type="notes",
+                content=notes_result.text,
+            ):
+                raise OSError("Failed to persist detailed notes artifact")
+
+            cache_manager.save_llm_status(
+                platform=platform,
+                media_id=media_id,
+                use_speaker_recognition=use_speaker_recognition,
+                notes_status=NotesStatus.GENERATED,
+            )
+        status_written = cache_manager.update_task_status(
+            task_id,
+            TaskStatus.SUCCESS,
+            platform=platform,
+            media_id=media_id,
+            title=llm_task.get("video_title", ""),
+            author=llm_task.get("author", ""),
+            terminal_snapshot={
+                "result": {
+                    "notes_status": NotesStatus.GENERATED,
+                    "notes_chapter_count": notes_result.chapter_count,
+                    "notes_fingerprint": notes_result.fingerprint,
+                },
+                "processing_options": processing_options,
+            },
+        )
+        if status_written:
+            logger.info(f"详细笔记任务状态已更新为 success: {task_id}")
+            return {
+                "详细笔记": notes_result.text,
+                "stats": {
+                    "notes_status": NotesStatus.GENERATED,
+                    "notes_length": len(notes_result.text),
+                    "notes_chapter_count": notes_result.chapter_count,
+                },
+                "models_used": selected_models,
+            }
+        else:
+            current_task = cache_manager.get_task_by_id(task_id)
+            current_status = current_task.get("status") if current_task else "unknown"
+            logger.warning(
+                f"详细笔记任务 success CAS 被已有终态拒绝({current_status}): {task_id}"
+            )
+            return None
+    except Exception:
+        try:
+            cache_manager.save_llm_status(
+                platform=platform,
+                media_id=media_id,
+                use_speaker_recognition=use_speaker_recognition,
+                notes_status=NotesStatus.FAILED,
+            )
+        except Exception:
+            logger.exception(f"详细笔记 failed 状态落盘失败: {task_id}")
+        raise
+
+
 def _handle_llm_task(llm_task: dict):
     """Worker entry for processing a single LLM task.
 
@@ -353,8 +520,34 @@ def _handle_llm_task(llm_task: dict):
             logger.info(f"开始处理LLM任务: {task_id}, 标题: {video_title}")
 
             try:
+                raw_processing_options = llm_task.get("processing_options") or {}
+                if raw_processing_options.get("notes") is True:
+                    notes_notification_result = _handle_notes_generation(
+                        llm_task=llm_task,
+                        tracker=tracker,
+                        processing_options=raw_processing_options,
+                    )
+                    if notes_notification_result is not None:
+                        try:
+                            _send_notification(
+                                task_id=task_id,
+                                video_title=video_title,
+                                display_url=display_url,
+                                use_speaker_recognition=use_speaker_recognition,
+                                result_dict=notes_notification_result,
+                                notification_channel=notification_channel,
+                                notification_webhooks=notification_webhooks,
+                            )
+                        except Exception:
+                            logger.exception(
+                                "详细笔记完成通知发送失败"
+                                f"（任务已成功落库，不影响任务结果）: {task_id}"
+                            )
+                    tracker.log_summary()
+                    return
+
                 processing_options = normalize_processing_options(
-                    llm_task.get("processing_options")
+                    raw_processing_options
                 )
                 calibrate_requested = processing_options.get("calibrate", True)
                 summarize_requested = processing_options.get("summarize", True)
@@ -2191,6 +2384,7 @@ def _send_notification(
 
     calibrated_text = result_dict.get("校对文本", "")
     summary_text = result_dict.get("内容总结")
+    notes_text = result_dict.get("详细笔记")
     skip_summary = result_dict.get("skip_summary", False)
     stats = result_dict.get("stats", {})
     models_used = result_dict.get("models_used", {})
@@ -2225,7 +2419,24 @@ def _send_notification(
     # 校对文本超过此阈值时，不发送全文到通知渠道（避免刷屏）
     NOTIFICATION_TEXT_THRESHOLD = 5000
 
-    if skip_summary:
+    notes_generated = (
+        stats.get("notes_status") == NotesStatus.GENERATED
+        and isinstance(notes_text, str)
+        and bool(notes_text.strip())
+    )
+    if notes_generated:
+        notes_length = stats.get("notes_length", len(notes_text))
+        notes_chapter_count = stats.get("notes_chapter_count", 0)
+        full_message = f"""## 详细笔记已生成
+🌐 网页查看：{view_url}
+📄 直接获取：{view_url}?raw=notes
+
+## 笔记统计
+共 {notes_chapter_count:,} 章 | {notes_length:,} 字
+
+{model_config_text}"""
+        logger.info(f"发送详细笔记完成通知: {task_id}")
+    elif skip_summary:
         if len(calibrated_text) <= NOTIFICATION_TEXT_THRESHOLD:
             full_message = f"""## 总结和校对
 🌐 网页查看：{view_url}
@@ -2288,7 +2499,16 @@ def _send_notification(
         clean = _clean_url(display_url)
         sanitized_title = _sanitize_title(video_title)
 
-        completion_message = f"# {sanitized_title}\n\n{clean}\n\n🔗 总结和校对：\n{view_url}\n\n✅ **【任务完成】**"
+        if notes_generated:
+            completion_message = (
+                f"# {sanitized_title}\n\n{clean}\n\n"
+                f"🔗 详细笔记已生成：\n{view_url}\n\n✅ **【任务完成】**"
+            )
+        else:
+            completion_message = (
+                f"# {sanitized_title}\n\n{clean}\n\n"
+                f"🔗 总结和校对：\n{view_url}\n\n✅ **【任务完成】**"
+            )
         router.send_text(
             completion_message,
             channel_name=notification_channel,

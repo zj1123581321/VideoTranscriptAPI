@@ -100,6 +100,56 @@ class TestViewTokenResolver:
         assert view_data["summary_state"] == "generated"
         assert view_data["summary"] == "A real generated summary."
 
+    def test_generated_notes_returns_real_text(self, cm, resolver):
+        task = _make_success_task(cm, "vid-notes-generated")
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid-notes-generated",
+            use_speaker_recognition=False,
+            llm_type="notes",
+            content="## Chapter\n- Detailed note.",
+        )
+        cm.save_llm_status(
+            platform="youtube",
+            media_id="vid-notes-generated",
+            use_speaker_recognition=False,
+            notes_status="generated",
+        )
+
+        view_data = resolver.get_view_data_by_token(task["view_token"])
+
+        assert view_data["notes_state"] == "generated"
+        assert view_data["notes"] == "## Chapter\n- Detailed note."
+
+    def test_failed_notes_has_no_placeholder_text(self, cm, resolver):
+        task = _make_success_task(cm, "vid-notes-failed")
+        cm.save_llm_status(
+            platform="youtube",
+            media_id="vid-notes-failed",
+            use_speaker_recognition=False,
+            notes_status="failed",
+        )
+
+        view_data = resolver.get_view_data_by_token(task["view_token"])
+
+        assert view_data["notes_state"] == "failed"
+        assert view_data["notes"] is None
+
+    def test_notes_artifact_without_generated_status_is_hidden(self, cm, resolver):
+        task = _make_success_task(cm, "vid-notes-orphan")
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid-notes-orphan",
+            use_speaker_recognition=False,
+            llm_type="notes",
+            content="orphan notes artifact",
+        )
+
+        view_data = resolver.get_view_data_by_token(task["view_token"])
+
+        assert view_data["notes_state"] is None
+        assert view_data["notes"] is None
+
     def test_legacy_summary_without_status_is_skipped_short(self, cm, resolver):
         task = _make_success_task(cm, "vid-legacy")
 

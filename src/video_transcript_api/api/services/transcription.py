@@ -215,6 +215,10 @@ class ResummarizeRequest(BaseModel):
         return v
 
 
+class GenerateNotesRequest(ResummarizeRequest):
+    """按需生成分章详细笔记请求数据模型。"""
+
+
 class TranscribeResponse(BaseModel):
     """转录响应数据模型"""
 

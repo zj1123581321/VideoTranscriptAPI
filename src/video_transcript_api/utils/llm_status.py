@@ -72,3 +72,10 @@ class ChaptersStatus(StrEnum):
     DISABLED = "disabled"                       # 用户主动关闭章节生成
                                                  # （区别于 SKIPPED_SHORT/SKIPPED_NO_TIMELINE：
                                                  # 那两者是"想生成但条件不满足"，DISABLED 是"用户压根不想要"）
+
+
+class NotesStatus(StrEnum):
+    """Status persisted for chapter-detailed notes artifacts."""
+
+    GENERATED = "generated"
+    FAILED = "failed"

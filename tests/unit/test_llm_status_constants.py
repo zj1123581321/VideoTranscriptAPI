@@ -7,7 +7,12 @@ Silent renames would break backward compatibility with existing cache data.
 All console output must be in English only (no emoji, no Chinese).
 """
 
-from video_transcript_api.utils.llm_status import CalibrationStatus, ChaptersStatus, SummaryStatus
+from video_transcript_api.utils.llm_status import (
+    CalibrationStatus,
+    ChaptersStatus,
+    NotesStatus,
+    SummaryStatus,
+)
 
 
 class TestCalibrationStatus:
@@ -48,3 +53,13 @@ class TestChaptersStatus:
     def test_is_str_subclass(self):
         assert isinstance(ChaptersStatus.GENERATED, str)
         assert str(ChaptersStatus.GENERATED) == "generated"
+
+
+class TestNotesStatus:
+    def test_values(self):
+        assert NotesStatus.GENERATED == "generated"
+        assert NotesStatus.FAILED == "failed"
+
+    def test_is_str_subclass(self):
+        assert isinstance(NotesStatus.GENERATED, str)
+        assert str(NotesStatus.GENERATED) == "generated"

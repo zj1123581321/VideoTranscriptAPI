@@ -144,7 +144,7 @@ curl -X GET "http://localhost:8000/api/task/{task_id}" \
 - **提交任务**：`GET /add_task_by_web`
 - **查看结果**：`GET /view/{view_token}` — 不可猜测的公开只读分享 capability；写操作仍需认证
 - **任务历史**：`GET /static/history.html` — 支持按日期、平台、频道、关键词搜索，已读追踪，摘要预览
-- **导出文件**：`GET /export/{view_token}/{type}`（支持 `calibrated`、`summary`、`transcript`）
+- **导出文件**：`GET /export/{view_token}/{type}`（支持 `calibrated`、`summary`、`notes`、`transcript`）
 
 ### API 端点一览
 
@@ -154,6 +154,7 @@ curl -X GET "http://localhost:8000/api/task/{task_id}" \
 | `/api/task/{task_id}` | GET | 查询任务状态 |
 | `/api/recalibrate` | POST | 重新校对（唯一强制重做例外，忽略分层缓存保护；总结缺失时仍会自动补跑，但单独重跑总结请用 `/api/resummarize`） |
 | `/api/resummarize` | POST | 只重新生成总结（跳过下载、转录、校对和章节，复用已有校对文本） |
+| `/api/generate_notes` | POST | 按已有章节异步生成详细笔记（只新增 notes 缓存层，不改写校对、总结或章节） |
 | `/api/audit/stats` | GET | 调用统计，含 LLM token 用量聚合（按阶段汇总 prompt/completion/total tokens） |
 | `/api/audit/calls` | GET | 调用记录 |
 | `/api/audit/history` | GET | audit.db 独立终态任务历史（状态仅支持 `success`、`failed`、`all`；支持过滤、分页、关键词搜索），含处理状态与 `content_expired` |
@@ -163,6 +164,8 @@ curl -X GET "http://localhost:8000/api/task/{task_id}" \
 | `/view/{view_token}` | GET | 结果查看页 |
 | `/view/{view_token}?raw=calibrated` | GET | 纯文本导出 |
 | `/view/{view_token}?page=calibrated` | GET | HTML 页面导出 |
+| `/view/{view_token}?raw=notes` | GET | 详细笔记纯文本导出（生成后可用） |
+| `/view/{view_token}?page=notes` | GET | 详细笔记 HTML 页面导出（生成后可用） |
 | `/export/{view_token}/{type}` | GET | 文件下载 |
 
 更多 API 细节请参考 [功能文档](docs/)。

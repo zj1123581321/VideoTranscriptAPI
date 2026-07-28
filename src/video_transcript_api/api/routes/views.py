@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,7 +26,7 @@ from ...utils.rendering import (
     render_transcript_content,
 )
 from ...utils.timeutil import format_datetime_for_display
-from ...utils.llm_status import CalibrationStatus, ChaptersStatus
+from ...utils.llm_status import CalibrationStatus, ChaptersStatus, NotesStatus
 
 logger = lazy_resource(get_logger)
 cache_manager = lazy_resource(get_cache_manager)
@@ -195,7 +196,7 @@ def resolve_export_file_path(cache_dir: str, export_type: str) -> Optional[Path]
 
     Args:
         cache_dir: 缓存目录
-        export_type: 导出类型(calibrated / summary / transcript)
+        export_type: 导出类型(calibrated / summary / notes / transcript)
 
     Returns:
         Path: 对应的文件路径;若 export_type 不支持则返回 None
@@ -206,6 +207,8 @@ def resolve_export_file_path(cache_dir: str, export_type: str) -> Optional[Path]
         return base / "llm_calibrated.txt"
     if export_type == "summary":
         return base / "llm_summary.txt"
+    if export_type == "notes":
+        return base / "llm_notes.txt"
     if export_type == "transcript":
         funasr_file = base / "transcript_funasr.json"
         capswriter_file = base / "transcript_capswriter.txt"
@@ -213,12 +216,23 @@ def resolve_export_file_path(cache_dir: str, export_type: str) -> Optional[Path]
     return None
 
 
+def is_notes_export_generated(
+    view_data: Dict[str, Any],
+    export_type: str,
+) -> bool:
+    """Require the honest generated state before exposing the notes artifact."""
+    return (
+        export_type != "notes"
+        or view_data.get("notes_state") == NotesStatus.GENERATED
+    )
+
+
 def _build_text_metadata_header(view_data: Dict[str, Any], export_type: str) -> str:
     """生成纯文本导出的 YAML front matter 风格元数据头.
 
     Args:
         view_data: 页面数据字典
-        export_type: 导出类型（calibrated/summary/transcript）
+        export_type: 导出类型（calibrated/summary/notes/transcript）
 
     Returns:
         包含元数据的字符串，以 '---' 分隔
@@ -226,6 +240,7 @@ def _build_text_metadata_header(view_data: Dict[str, Any], export_type: str) -> 
     type_map = {
         "calibrated": "校对文本",
         "summary": "总结文本",
+        "notes": "详细笔记",
         "transcript": "原始转录",
     }
 
@@ -259,7 +274,7 @@ def _build_metadata_headers(view_data: Dict[str, Any], export_type: str) -> dict
 
     Args:
         view_data: 页面数据字典
-        export_type: 导出类型（calibrated/summary/transcript）
+        export_type: 导出类型（calibrated/summary/notes/transcript）
 
     Returns:
         包含自定义响应头的字典
@@ -269,6 +284,7 @@ def _build_metadata_headers(view_data: Dict[str, Any], export_type: str) -> dict
     type_map = {
         "calibrated": "calibrated",
         "summary": "summary",
+        "notes": "notes",
         "transcript": "transcript",
     }
 
@@ -306,7 +322,7 @@ def _build_page_html(
 
     Args:
         view_data: 页面数据字典
-        export_type: 导出类型（calibrated/summary/transcript）
+        export_type: 导出类型（calibrated/summary/notes/transcript）
         body_html: 已渲染的 HTML 正文内容
 
     Returns:
@@ -317,6 +333,7 @@ def _build_page_html(
     type_map = {
         "calibrated": "校对文本",
         "summary": "内容总结",
+        "notes": "详细笔记",
         "transcript": "原始转录",
     }
 
@@ -464,6 +481,11 @@ def handle_page_export(view_data: Dict[str, Any], export_type: str) -> Response:
             content=f"<html><body><p>任务状态异常: {status}</p></body></html>",
             status_code=400,
         )
+    if not is_notes_export_generated(view_data, export_type):
+        return HTMLResponse(
+            content="<html><body><p>详细笔记尚未成功生成</p></body></html>",
+            status_code=404,
+        )
 
     # 2. 获取缓存目录
     cache_dir = view_data.get("cache_dir")
@@ -486,6 +508,7 @@ def handle_page_export(view_data: Dict[str, Any], export_type: str) -> Response:
         content_type_cn = {
             "calibrated": "校对文本",
             "summary": "总结文本",
+            "notes": "详细笔记",
             "transcript": "原始转录",
         }.get(export_type, export_type)
         return HTMLResponse(
@@ -572,6 +595,7 @@ def generate_download_filename(title: str, platform: str, content_type: str) -> 
     type_map = {
         "calibrated": "校对文本",
         "summary": "总结文本",
+        "notes": "详细笔记",
         "transcript": "原始转录",
     }
 
@@ -638,6 +662,12 @@ def handle_raw_export(view_data: Dict[str, Any], export_type: str) -> Response:
             media_type="text/plain; charset=utf-8",
             status_code=400,
         )
+    if not is_notes_export_generated(view_data, export_type):
+        return Response(
+            content="❌ 详细笔记尚未成功生成",
+            media_type="text/plain; charset=utf-8",
+            status_code=404,
+        )
 
     # 2. 获取缓存目录
     cache_dir = view_data.get("cache_dir")
@@ -652,7 +682,7 @@ def handle_raw_export(view_data: Dict[str, Any], export_type: str) -> Response:
     file_path = resolve_export_file_path(cache_dir, export_type)
     if file_path is None:
         return Response(
-            content=f"❌ 不支持的导出类型: {export_type}\n\n支持的类型: calibrated, summary, transcript",
+            content=f"❌ 不支持的导出类型: {export_type}\n\n支持的类型: calibrated, summary, notes, transcript",
             media_type="text/plain; charset=utf-8",
             status_code=400,
         )
@@ -662,6 +692,7 @@ def handle_raw_export(view_data: Dict[str, Any], export_type: str) -> Response:
         content_type_cn = {
             "calibrated": "校对文本",
             "summary": "总结文本",
+            "notes": "详细笔记",
             "transcript": "原始转录",
         }.get(export_type, export_type)
 
@@ -734,7 +765,7 @@ async def export_content(view_token: str, export_type: str, request: Request):
 
     Args:
         view_token: 查看token
-        export_type: 导出类型 (calibrated/summary/transcript)
+        export_type: 导出类型 (calibrated/summary/notes/transcript)
 
     Returns:
         FileResponse: 文件响应
@@ -750,6 +781,12 @@ async def export_content(view_token: str, export_type: str, request: Request):
                 media_type="text/plain; charset=utf-8",
                 status_code=404,
             )
+        if not is_notes_export_generated(view_data, export_type):
+            return Response(
+                content="❌ 详细笔记尚未成功生成",
+                media_type="text/plain; charset=utf-8",
+                status_code=404,
+            )
 
         cache_dir = view_data.get("cache_dir")
         if not cache_dir or not os.path.exists(cache_dir):
@@ -762,7 +799,7 @@ async def export_content(view_token: str, export_type: str, request: Request):
         file_path = resolve_export_file_path(cache_dir, export_type)
         if file_path is None:
             return Response(
-                content=f"❌ 不支持的导出类型: {export_type}\n\n支持的类型: calibrated, summary, transcript",
+                content=f"❌ 不支持的导出类型: {export_type}\n\n支持的类型: calibrated, summary, notes, transcript",
                 media_type="text/plain; charset=utf-8",
                 status_code=400,
             )
@@ -771,6 +808,7 @@ async def export_content(view_token: str, export_type: str, request: Request):
             content_type_cn = {
                 "calibrated": "校对文本",
                 "summary": "总结文本",
+                "notes": "详细笔记",
                 "transcript": "原始转录",
             }.get(export_type, export_type)
             return Response(
@@ -959,6 +997,29 @@ def _compute_anchor_fingerprint(segments: list) -> Optional[str]:
         return None
 
 
+def _add_notes_chapter_anchors(notes_html: str) -> str:
+    """Add deterministic anchors to each rendered detailed-notes chapter."""
+    chapter_index = 0
+
+    def _replace_heading(match: re.Match) -> str:
+        nonlocal chapter_index
+        chapter_index += 1
+        attributes = match.group("attributes") or ""
+        attributes = re.sub(
+            r"""\s+id=(["']).*?\1""",
+            "",
+            attributes,
+            flags=re.IGNORECASE,
+        )
+        return f'<h2 id="notes-chapter-{chapter_index}"{attributes}>'
+
+    return re.sub(
+        r"<h2(?P<attributes>[^>]*)>",
+        _replace_heading,
+        notes_html,
+    )
+
+
 def _prepare_success_view(view_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     成功任务的视图准备：渲染 HTML、统计各阶段文本字数。
@@ -972,9 +1033,19 @@ def _prepare_success_view(view_data: Dict[str, Any]) -> Dict[str, Any]:
 
     if view_data.get("summary"):
         view_data["summary_html"] = render_markdown_to_html(view_data["summary"])
+    if view_data.get("notes") and view_data.get("notes_state") == NotesStatus.GENERATED:
+        rendered_notes = render_markdown_to_html(view_data["notes"])
+        view_data["notes_html"] = _add_notes_chapter_anchors(rendered_notes)
+    else:
+        view_data["notes_html"] = None
 
     cache_dir = view_data.get("cache_dir")
-    stats: Dict[str, Any] = {"original_length": 0, "calibrated_length": 0, "summary_length": 0}
+    stats: Dict[str, Any] = {
+        "original_length": 0,
+        "calibrated_length": 0,
+        "summary_length": 0,
+        "notes_length": 0,
+    }
     # Default: no chapters data island (only GENERATED + file renders).
     view_data["chapters_data"] = None
     # Chapters in the view shape, handed to the transcript renderer for
@@ -1051,6 +1122,15 @@ def _prepare_success_view(view_data: Dict[str, Any]) -> Dict[str, Any]:
             except Exception as exc:
                 logger.error(f"计算总结文本字数失败: {exc}")
 
+        notes_file = cache_dir_path / "llm_notes.txt"
+        if notes_file.exists():
+            try:
+                with open(notes_file, "r", encoding="utf-8") as f:
+                    stats["notes_length"] = len(f.read())
+                logger.debug(f"详细笔记字数: {stats['notes_length']}")
+            except Exception as exc:
+                logger.error(f"计算详细笔记字数失败: {exc}")
+
         # 4. 读取校准质量统计（诚实状态模型）
         # 优先读 llm_status.json：两条校对路径（纯文本/结构化）都会写这份文件，
         # 统一提供 calibration_status + calibration_stats，模板据此渲染警告条。
@@ -1069,6 +1149,9 @@ def _prepare_success_view(view_data: Dict[str, Any]) -> Dict[str, Any]:
                 chapters_status = status_data.get("chapters_status")
                 if chapters_status is not None:
                     stats["chapters_status"] = chapters_status
+                notes_status = status_data.get("notes_status")
+                if notes_status is not None:
+                    stats["notes_status"] = notes_status
             except Exception as exc:
                 logger.error(f"读取 llm_status.json 失败: {exc}")
         else:
