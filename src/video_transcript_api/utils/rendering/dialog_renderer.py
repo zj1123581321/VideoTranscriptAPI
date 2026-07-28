@@ -421,12 +421,19 @@ class DialogRenderer:
 
             dialogs = structured_data["dialogs"]
             speaker_mapping = structured_data.get("speaker_mapping", {})
+            segment_overrides = structured_data.get("segment_overrides", {})
+            if not isinstance(segment_overrides, dict):
+                segment_overrides = {}
+            speaker_risk_flags = structured_data.get("speaker_risk_flags", [])
+            speaker_meta = structured_data.get("speaker_inference_meta")
+            if not speaker_meta:
+                speaker_meta = structured_data.get("speaker_inference", {})
 
             # 获取说话人列表
             # 防御：plain 源结构化产物（mode=="plain_structured"）的段落无 speaker 键，
             # 用下标 d["speaker"] 会直接 KeyError 崩主视图；无 speaker 段不参与颜色映射。
             speakers = list(
-                dict.fromkeys(d["speaker"] for d in dialogs if d.get("speaker"))
+                dict.fromkeys(d.get("speaker") for d in dialogs if d.get("speaker"))
             )
 
             # 内嵌章节头：只收 jump_ok 且 start_seg 合法的章节，按 start_seg 索引。
@@ -447,24 +454,49 @@ class DialogRenderer:
                         chapter_anchors[seg] = ch
 
             html_parts = ['<div class="dialog-container">']
+            if speaker_risk_flags:
+                html_parts.append(
+                    '<div class="speaker-risk-warning" role="alert">'
+                    "本集说话人区分可能不准"
+                    "</div>"
+                )
 
             # Enumerate over the original dialogs list so start_seg / #dlg-{i}
             # stay aligned with the raw input indices used by chapters.
             for dlg_index, dialog in enumerate(dialogs):
                 speaker = dialog.get("speaker") or ""
+                segment_id = dialog.get("segment_id")
+                override = segment_overrides.get(segment_id) if segment_id else None
+                if not isinstance(override, dict):
+                    override = None
+                display_speaker = (
+                    override.get("name") if override and override.get("name") else speaker
+                )
                 content = dialog.get("text", dialog.get("content", ""))
-                color = self.get_speaker_color(speaker, speakers) if speaker else self.SPEAKER_COLORS[0]
+                color = (
+                    self.get_speaker_color(display_speaker, speakers)
+                    if display_speaker
+                    else self.SPEAKER_COLORS[0]
+                )
 
                 # 安全转义：防止 XSS
-                safe_speaker = html.escape(str(speaker)) if speaker else ""
-                safe_content = html.escape(content if isinstance(content, str) else str(content or ""))
+                safe_speaker = (
+                    html.escape(str(display_speaker)) if display_speaker else ""
+                )
+                safe_content = html.escape(
+                    content if isinstance(content, str) else str(content or "")
+                )
 
                 # 获取开始时间（展示用转义；属性同样转义）
                 raw_start = dialog.get("start_time", "")
                 if raw_start is None:
                     raw_start = ""
-                start_time_attr = html.escape(str(raw_start), quote=True) if raw_start != "" else ""
-                start_time_display = html.escape(str(raw_start)) if raw_start != "" else ""
+                start_time_attr = (
+                    html.escape(str(raw_start), quote=True) if raw_start != "" else ""
+                )
+                start_time_display = (
+                    html.escape(str(raw_start)) if raw_start != "" else ""
+                )
                 time_display = (
                     f'<span class="time-tag">{start_time_display}</span>'
                     if start_time_display
@@ -481,8 +513,12 @@ class DialogRenderer:
                 if content_html and not content_html.startswith("<p>"):
                     content_html = f"<p>{content_html}</p>"
 
-                # Chapter anchors: id="dlg-{i}" + optional data-start-time.
+                # Chapter jump contract: the DOM id always follows the raw dialog
+                # index; segment IDs are metadata only and never replace dlg-{i}.
                 item_attrs = f'id="dlg-{dlg_index}" class="dialog-item"'
+                if segment_id:
+                    safe_segment_id = html.escape(str(segment_id), quote=True)
+                    item_attrs += f' data-segment-id="{safe_segment_id}"'
                 if start_time_attr:
                     item_attrs += f' data-start-time="{start_time_attr}"'
 
@@ -492,11 +528,50 @@ class DialogRenderer:
                 if anchor_html:
                     html_parts.append(anchor_html)
 
-                if speaker:
+                if display_speaker:
+                    pending_badge = ""
+                    if re.match(r"^说话人\d+$", str(display_speaker)):
+                        pending_badge = (
+                            '<span class="speaker-status-badge speaker-pending" '
+                            'data-speaker-status="pending">待确认</span>'
+                        )
+                    override_badge = ""
+                    if override:
+                        status = str(override.get("status") or "").lower()
+                        if status in {"confirmed", "suspect"}:
+                            status_text = "已确认" if status == "confirmed" else "待核实"
+                            override_badge = (
+                                f'<span class="speaker-override-status speaker-override-{status}" '
+                                f'data-override-status="{status}">{status_text}</span>'
+                            )
+                    confidence = None
+                    if isinstance(speaker_meta, dict):
+                        details = speaker_meta.get(dialog.get("speaker_id"))
+                        if not details:
+                            details = speaker_meta.get(speaker)
+                        if isinstance(details, dict):
+                            confidence = details.get("confidence")
+                    if isinstance(confidence, (int, float)) and not isinstance(
+                        confidence, bool
+                    ):
+                        level = (
+                            "较可靠"
+                            if confidence >= 0.8
+                            else "AI 推断"
+                            if confidence >= 0.6
+                            else "待确认"
+                        )
+                    else:
+                        level = (
+                            "待确认"
+                            if re.match(r"^说话人\d+$", str(display_speaker))
+                            else "AI 推断"
+                        )
                     header_html = f"""
                     <div class="speaker-header">
-                        <div class="speaker-tag" style="background-color: {color};">
+                        <div class="speaker-tag" title="{level}" data-confidence-level="{level}" style="background-color: {color};">
                             {safe_speaker}
+                            {pending_badge}{override_badge}
                         </div>
                         {time_display}
                     </div>

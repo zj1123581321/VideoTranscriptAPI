@@ -1,0 +1,45 @@
+{
+  "mapping": {
+    "Speaker1": "小丹尼",
+    "Speaker2": "大卫",
+    "Speaker3": "电动Emma",
+    "Speaker4": "说话人4",
+    "Speaker5": "李自然"
+  },
+  "meta": {
+    "Speaker1": {"applied": true, "confidence": 0.7, "name": "小丹尼", "sampled": true},
+    "Speaker2": {"applied": true, "confidence": 0.6, "name": "大卫", "sampled": true},
+    "Speaker3": {"applied": true, "confidence": 0.6, "name": "电动Emma", "sampled": true},
+    "Speaker4": {"applied": false, "confidence": 0.4, "name": "小丹尼", "sampled": true},
+    "Speaker5": {"applied": true, "confidence": 0.9, "name": "李自然", "sampled": true}
+  },
+  "low_confidence": ["Speaker4"],
+  "source": "llm",
+  "segments": [
+    {"start_time": 59.34, "end_time": 66.3, "speaker": "Speaker1", "text": "因为今天我们这个主题是提升幸福感啊，但坦白说这个行业的人可能是离幸福感。"},
+    {"start_time": 66.34, "end_time": 69.96, "speaker": "Speaker2", "text": "但是其实这个幸福感没有那么近的头发。"},
+    {"start_time": 69.98, "end_time": 73.24, "speaker": "Speaker4", "text": "最少离幸福感最远问错人了。"},
+    {"start_time": 73.66, "end_time": 106.28, "speaker": "Speaker1", "text": "对，因为怎么说呢？你 AI 确实可能效率更高了。"},
+    {"start_time": 106.28, "end_time": 114.36, "speaker": "Speaker2", "text": "你前段时间一直在美国，从美国的视角来看看有没有什么你觉得 AI 提升你生活品质的一些案例呢？"},
+    {"start_time": 114.64, "end_time": 245.96, "speaker": "Speaker5", "text": "说起美国人的生活，我觉得跟中国人是有非常大的不同的。我觉得美国人是非常会生活的。"},
+    {"start_time": 246.56, "end_time": 269.97, "speaker": "Speaker2", "text": "对你说这个很有意思，我也想到了，也是我们之前的嘉宾。"},
+    {"start_time": 270.43, "end_time": 291.75, "speaker": "Speaker4", "text": "哎，我还想问问你们，刚才自然也好，大卫也好，你们说你们用 AI 的方式。"},
+    {"start_time": 292.09, "end_time": 344.04, "speaker": "Speaker5", "text": "读书，这个事情不在于书，而在于读。"},
+    {"start_time": 344.3, "end_time": 373.98, "speaker": "Speaker4", "text": "所以你的主体性是很强的嘛，你就是认为你读书的方式就是比 AI 强的。"},
+    {"start_time": 374.32, "end_time": 422.43, "speaker": "Speaker5", "text": "如果读工具书可以这么读三十天，但是读社科类的、读文学类的，一定是读本身大于结果。"},
+    {"start_time": 422.43, "end_time": 510.99, "speaker": "Speaker2", "text": "其实我觉得你们俩说的不矛盾，而且我使用 AI 帮助我读书。"},
+    {"start_time": 510.99, "end_time": 571.62, "speaker": "Speaker5", "text": "我这里跟大家有一点建议，就是我们千万不要让 AI 把自己变得很浮躁。"},
+    {"start_time": 571.62, "end_time": 631.23, "speaker": "Speaker2", "text": "你说这点其实很像纳瓦尔说的，AI 其实是杠杆，幸福才是那个支点。"},
+    {"start_time": 631.53, "end_time": 651.96, "speaker": "Speaker5", "text": "对的对的，这里还有一个点分享给大家。我是在美国接近一个月吧，然后也是开着特斯拉 FSD。大卫你还是真的很爱问问题啊。"},
+    {"start_time": 652.71, "end_time": 689.45, "speaker": "Speaker2", "text": "刚才大卫提到了特斯拉 FSD，其实我看最近特斯拉发了财报。"},
+    {"start_time": 689.45, "end_time": 731.76, "speaker": "Speaker5", "text": "那天我去试驾赛博皮卡，然后我去那个店里面。"},
+    {"start_time": 732.2, "end_time": 740.68, "speaker": "Speaker4", "text": "这就跟苹果有点像。"},
+    {"start_time": 4011.77, "end_time": 4048.79, "speaker": "Speaker2", "text": "我觉得你们说特别好，然后也让我想到一个能提升幸福感的点。"},
+    {"start_time": 4048.79, "end_time": 4050.24, "speaker": "Speaker1", "text": "升华了呀。"},
+    {"start_time": 4050.96, "end_time": 4052.8, "speaker": "Speaker5", "text": "升华了，升华了，但总升华了。"},
+    {"start_time": 4053.12, "end_time": 4057.14, "speaker": "Speaker2", "text": "掌声掌声、掌声掌声，我觉得是这样的。"},
+    {"start_time": 4057.14, "end_time": 4057.4, "speaker": "Speaker1", "text": "谢谢。"},
+    {"start_time": 4057.4, "end_time": 4078.78, "speaker": "Speaker2", "text": "这样的最后特别感谢自然来做客，然后也推荐一下自然在各平台的频道叫李自然说。"},
+    {"start_time": 4078.78, "end_time": 4149.59, "speaker": "Speaker1", "text": "因为我之前一直是创业嘛，后来我发现 AI 这件事情，必须得我百分百的投入。"}
+  ]
+}

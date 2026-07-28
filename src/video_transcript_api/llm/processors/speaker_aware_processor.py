@@ -13,6 +13,7 @@ from ..core.config import LLMConfig
 from ..core.llm_client import LLMClient
 from ..core.key_info_extractor import KeyInfoExtractor, KeyInfo
 from ..core.speaker_inferencer import SpeakerInferencer
+from ..core.speaker_inferencer import build_speaker_risk_flags
 from ..core.usage_context import set_context
 from ..validators.unified_quality_validator import UnifiedQualityValidator
 from ..segmenters.dialog_segmenter import DialogSegmenter
@@ -168,6 +169,14 @@ class SpeakerAwareProcessor:
             }
         speaker_mapping = speaker_inference_result.get("mapping", {})
         speaker_inference_meta = speaker_inference_result.get("meta", {})
+        inference_threshold = getattr(
+            self.speaker_inferencer, "confidence_threshold", 0.6
+        )
+        if not isinstance(inference_threshold, (int, float)):
+            inference_threshold = 0.6
+        speaker_risk_flags = build_speaker_risk_flags(
+            speaker_inference_result, base_dialogs, inference_threshold
+        )
         # 本地 codex review 第 6 轮 G4：随 meta 一起把本轮映射的真实
         # 来源传给下游（llm_ops._save_llm_results 的补层刷新判断），
         # 区分 llm/cache_hit/identity_fallback——见
@@ -258,6 +267,11 @@ class SpeakerAwareProcessor:
             calibrated_dialogs = self._paragraphize_no_speaker_dialogs(
                 calibrated_dialogs, time_snapshot
             )
+        else:
+            # Calibration can split one long normalized dialog into multiple
+            # fragments; keep every persisted dialog anchor unique without
+            # changing the original start-time-derived base ID.
+            calibrated_dialogs = self._deduplicate_segment_ids(calibrated_dialogs)
 
         original_text = self._build_text_from_dialogs(
             normalized_dialogs, has_speaker=has_speaker
@@ -276,6 +290,9 @@ class SpeakerAwareProcessor:
             "structured_data": {
                 "dialogs": calibrated_dialogs,
                 "speaker_mapping": speaker_mapping,
+                "speaker_inference_meta": speaker_inference_meta,
+                "segment_overrides": {},
+                "speaker_risk_flags": speaker_risk_flags,
             },
             "key_info": key_info.to_dict(),
             "stats": {
@@ -288,6 +305,7 @@ class SpeakerAwareProcessor:
                 "calibration_stats": calibration_stats,
                 "speaker_inference": speaker_inference_meta,
                 "speaker_inference_source": speaker_inference_source,
+                "speaker_risk_flags": speaker_risk_flags,
             }
         }
 
@@ -315,22 +333,24 @@ class SpeakerAwareProcessor:
             if text in (None, ""):
                 continue
 
-            coerced.append(
-                {
-                    # 无说话人模式保留缺省（None），不塞 "unknown"。注意
-                    # d.get("speaker", "unknown") 的默认值只在键缺失时生效，
-                    # 键存在但值为 None 时不触发——所以这里必须显式写 None。
-                    "speaker": (
-                        str(speaker)
-                        if speaker is not None
-                        else ("unknown" if has_speaker else None)
-                    ),
-                    "text": str(text),
-                    "start_time": dialog.get("start_time", dialog.get("start")),
-                    "end_time": dialog.get("end_time", dialog.get("end")),
-                    "duration": dialog.get("duration"),
-                }
-            )
+            normalized = {
+                # 无说话人模式保留缺省（None），不塞 "unknown"。注意
+                # d.get("speaker", "unknown") 的默认值只在键缺失时生效，
+                # 键存在但值为 None 时不触发——所以这里必须显式写 None。
+                "speaker": (
+                    str(speaker)
+                    if speaker is not None
+                    else ("unknown" if has_speaker else None)
+                ),
+                "text": str(text),
+                "start_time": dialog.get("start_time", dialog.get("start")),
+                "end_time": dialog.get("end_time", dialog.get("end")),
+                "duration": dialog.get("duration"),
+            }
+            for field in ("segment_id", "assignment_source"):
+                if field in dialog:
+                    normalized[field] = dialog[field]
+            coerced.append(normalized)
 
         return coerced
 
@@ -383,7 +403,7 @@ class SpeakerAwareProcessor:
         if current:
             normalized.append(current)
 
-        return normalized
+        return self._assign_dialog_segment_ids(normalized)
 
     def _normalize_dialog(
         self, dialog: Dict, speaker_mapping: Dict[str, str], has_speaker: bool = True
@@ -430,10 +450,87 @@ class SpeakerAwareProcessor:
             "duration": duration,
             "speaker": speaker,
             "speaker_id": raw_speaker,
+            "assignment_source": dialog.get("assignment_source", "global_mapping"),
             "text": text,
+            "_segment_start_seconds": start_seconds,
         }
+        if dialog.get("segment_id"):
+            normalized_dialog["segment_id"] = dialog["segment_id"]
 
         return normalized_dialog, start_seconds, end_seconds
+
+    def _assign_dialog_segment_ids(self, dialogs: List[Dict]) -> List[Dict]:
+        """Attach stable segment IDs after merge using raw speaker and start ms."""
+        seen: Dict[str, int] = {}
+        for dialog in dialogs:
+            raw_speaker = dialog.get("speaker_id")
+            if raw_speaker is None:
+                raw_speaker = dialog.get("speaker") or "unknown"
+            start_seconds = dialog.get("_segment_start_seconds")
+            if start_seconds is None:
+                start_seconds = self._parse_time_value(dialog.get("start_time"))
+            start_ms = int(round((start_seconds or 0.0) * 1000))
+            base_id = f"seg_{start_ms:08d}_{str(raw_speaker).lower()}"
+            occurrence = seen.get(base_id, 0) + 1
+            seen[base_id] = occurrence
+            dialog["segment_id"] = (
+                base_id if occurrence == 1 else f"{base_id}-{occurrence}"
+            )
+            dialog["assignment_source"] = dialog.get(
+                "assignment_source", "global_mapping"
+            )
+            dialog.pop("_segment_start_seconds", None)
+        return dialogs
+
+    @staticmethod
+    def _deduplicate_segment_ids(dialogs: List[Dict]) -> List[Dict]:
+        """Ensure duplicate calibration IDs use collision-free numeric suffixes.
+
+        The complete set of source IDs is reserved before assigning suffixes so a
+        later pre-suffixed ID (for example ``seg_X-2``) is never overwritten. A
+        numeric suffix is treated as a deduplication suffix only when its
+        unsuffixed base is also present; this keeps speaker labels such as
+        ``seg_00000001_spk-1`` intact.
+        """
+        existing_ids = {
+            str(dialog.get("segment_id"))
+            for dialog in dialogs
+            if dialog.get("segment_id")
+        }
+        assigned_ids: set[str] = set()
+        seen_ids: set[str] = set()
+
+        def _dedup_base(segment_id: str) -> str:
+            match = re.match(r"^(?P<base>.+)-(?P<suffix>[0-9]+)$", segment_id)
+            if (
+                match
+                and int(match.group("suffix")) >= 2
+                and match.group("base") in existing_ids
+            ):
+                return match.group("base")
+            return segment_id
+
+        for dialog in dialogs:
+            segment_id = dialog.get("segment_id")
+            if not segment_id:
+                continue
+            segment_id = str(segment_id)
+            if segment_id not in seen_ids:
+                seen_ids.add(segment_id)
+                assigned_ids.add(segment_id)
+                continue
+
+            base_id = _dedup_base(segment_id)
+            suffix = 2
+            while (
+                f"{base_id}-{suffix}" in existing_ids
+                or f"{base_id}-{suffix}" in assigned_ids
+            ):
+                suffix += 1
+            new_segment_id = f"{base_id}-{suffix}"
+            dialog["segment_id"] = new_segment_id
+            assigned_ids.add(new_segment_id)
+        return dialogs
 
     @staticmethod
     def _parse_time_value(value: Any) -> Optional[float]:
@@ -960,6 +1057,10 @@ class SpeakerAwareProcessor:
                     # 定位每条 dialog 对应的原始标签，丢掉后
                     # 会误判为旧 schema（无 speaker_id）不做刷新。
                     "speaker_id": original.get("speaker_id"),
+                    "segment_id": original.get("segment_id"),
+                    "assignment_source": original.get(
+                        "assignment_source", "global_mapping"
+                    ),
                     "text": text,
                     "original_text": original_text,
                 }

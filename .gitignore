@@ -122,3 +122,4 @@ graphify-out/
 
 # Skill 测试工作区
 skill-workspace/
+docs/sessions/*/fixtures/raw/
