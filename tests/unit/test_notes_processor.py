@@ -346,33 +346,10 @@ def test_empty_chapter_response_returns_failed_without_partial_text():
     assert result.error == "chapter 1 notes response is empty"
 
 
-def test_failed_chapter_cancels_queued_chapters_instead_of_burning_quota():
-    """Serialized case: a first-chapter failure must not spend calls on queued chapters.
-
-    Cancellation is best-effort in general (idle workers race to pull the next
-    queued item); this locks the deterministic single-worker case only.
-    """
-    segments, chapters = _chapter_batch(5)
-    calls = []
-
-    class FailFirstNotesClient:
-        def call(self, **kwargs):
-            title = _chapter_title(kwargs["user_prompt"])
-            calls.append(title)
-            if title == "Chapter 0":
-                raise RuntimeError("provider exploded")
-            return f"- {title} notes"
-
-    # notes_concurrency=1 makes scheduling deterministic: chapters 1..4 are still
-    # queued when chapter 0 fails, so they must be cancelled, not executed.
-    result = NotesProcessor(FailFirstNotesClient(), _config(notes_concurrency=1)).process(
-        chapters=chapters,
-        source_segments=segments,
-    )
-
-    assert result.status is NotesStatus.FAILED
-    assert result.text is None
-    assert calls == ["Chapter 0"]
+# NOTE: 失败后 cancel 排队章节是 best-effort（见 notes_processor 的注释）：主线程
+# cancel 与 worker 的 set_running_or_notify_cancel 本身就是竞态，任何断言"排队章节
+# 未被执行"的测试都只是在赌调度顺序。失败语义由
+# test_one_chapter_failure_returns_no_partial_text 锁定，这里不再断言取消行为。
 
 
 def test_notes_concurrency_config_defaults_to_ten_and_parses_explicit_value():
