@@ -528,7 +528,7 @@ class DialogRenderer:
                 if anchor_html:
                     html_parts.append(anchor_html)
 
-                if speaker:
+                if display_speaker:
                     pending_badge = ""
                     if re.match(r"^说话人\d+$", str(display_speaker)):
                         pending_badge = (

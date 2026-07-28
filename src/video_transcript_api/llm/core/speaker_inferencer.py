@@ -9,6 +9,7 @@
 
 import hashlib
 import json
+import math
 import re
 from typing import Dict, List, Optional, Tuple
 
@@ -50,14 +51,18 @@ def build_speaker_risk_flags(
         total_dialogs += 1
 
     flags: List[str] = []
-    mapping = inference_result.get("mapping", {})
 
     def _mapping_was_adopted(label: str, details: Dict) -> bool:
         if "applied" in details:
             return bool(details.get("applied"))
-        if not bool(details.get("sampled", True)) or not isinstance(mapping, dict):
-            return False
-        return mapping.get(label) == details.get("name")
+        sampled = bool(details.get("sampled", True))
+        confidence = details.get("confidence")
+        confidence_is_valid = (
+            isinstance(confidence, (int, float))
+            and not isinstance(confidence, bool)
+            and math.isfinite(float(confidence))
+        )
+        return sampled and confidence_is_valid and float(confidence) >= confidence_threshold
 
     if total_dialogs:
         dropped_cluster = any(
@@ -65,6 +70,7 @@ def build_speaker_risk_flags(
             and not _mapping_was_adopted(str(label), details)
             and isinstance(details.get("confidence"), (int, float))
             and not isinstance(details.get("confidence"), bool)
+            and math.isfinite(float(details["confidence"]))
             and float(details["confidence"]) < confidence_threshold
             and speaker_counts.get(str(label), 0) / total_dialogs >= 0.05
             for label, details in meta.items()
@@ -80,6 +86,7 @@ def build_speaker_risk_flags(
         and _mapping_was_adopted(str(label), details)
         and isinstance(details.get("confidence"), (int, float))
         and not isinstance(details.get("confidence"), bool)
+        and math.isfinite(float(details["confidence"]))
     ]
     if applied_confidences and sum(applied_confidences) / len(applied_confidences) < 0.7:
         flags.append("low_average_mapping_confidence")

@@ -484,18 +484,52 @@ class SpeakerAwareProcessor:
 
     @staticmethod
     def _deduplicate_segment_ids(dialogs: List[Dict]) -> List[Dict]:
-        """Ensure calibration fragments sharing a base ID receive ``-2`` suffixes."""
-        seen: Dict[str, int] = {}
+        """Ensure duplicate calibration IDs use collision-free numeric suffixes.
+
+        The complete set of source IDs is reserved before assigning suffixes so a
+        later pre-suffixed ID (for example ``seg_X-2``) is never overwritten. A
+        numeric suffix is treated as a deduplication suffix only when its
+        unsuffixed base is also present; this keeps speaker labels such as
+        ``seg_00000001_spk-1`` intact.
+        """
+        existing_ids = {
+            str(dialog.get("segment_id"))
+            for dialog in dialogs
+            if dialog.get("segment_id")
+        }
+        assigned_ids: set[str] = set()
+        seen_ids: set[str] = set()
+
+        def _dedup_base(segment_id: str) -> str:
+            match = re.match(r"^(?P<base>.+)-(?P<suffix>[0-9]+)$", segment_id)
+            if (
+                match
+                and int(match.group("suffix")) >= 2
+                and match.group("base") in existing_ids
+            ):
+                return match.group("base")
+            return segment_id
+
         for dialog in dialogs:
             segment_id = dialog.get("segment_id")
             if not segment_id:
                 continue
-            base_id = re.sub(r"-\d+$", "", str(segment_id))
-            occurrence = seen.get(base_id, 0) + 1
-            seen[base_id] = occurrence
-            dialog["segment_id"] = (
-                base_id if occurrence == 1 else f"{base_id}-{occurrence}"
-            )
+            segment_id = str(segment_id)
+            if segment_id not in seen_ids:
+                seen_ids.add(segment_id)
+                assigned_ids.add(segment_id)
+                continue
+
+            base_id = _dedup_base(segment_id)
+            suffix = 2
+            while (
+                f"{base_id}-{suffix}" in existing_ids
+                or f"{base_id}-{suffix}" in assigned_ids
+            ):
+                suffix += 1
+            new_segment_id = f"{base_id}-{suffix}"
+            dialog["segment_id"] = new_segment_id
+            assigned_ids.add(new_segment_id)
         return dialogs
 
     @staticmethod

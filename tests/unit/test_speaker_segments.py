@@ -93,3 +93,50 @@ def test_calibration_fragments_keep_unique_segment_ids():
     assert [dialog["segment_id"] for dialog in result] == [
         "seg_00002000_speaker1", "seg_00002000_speaker1-2"
     ]
+
+
+def test_calibration_fragments_reserve_existing_numeric_suffix_ids():
+    dialogs = [
+        {"segment_id": "seg_X", "text": "first"},
+        {"segment_id": "seg_X", "text": "second"},
+        {"segment_id": "seg_X-2", "text": "already assigned"},
+    ]
+    result = _processor()._deduplicate_segment_ids(dialogs)
+    assert [dialog["segment_id"] for dialog in result] == [
+        "seg_X", "seg_X-3", "seg_X-2"
+    ]
+
+
+def test_calibration_fragments_keep_numeric_speaker_suffix_when_duplicate():
+    dialogs = [
+        {"segment_id": "seg_00000001_spk-1", "text": "first"},
+        {"segment_id": "seg_00000001_spk-1", "text": "second"},
+    ]
+    result = _processor()._deduplicate_segment_ids(dialogs)
+    assert [dialog["segment_id"] for dialog in result] == [
+        "seg_00000001_spk-1", "seg_00000001_spk-1-2"
+    ]
+
+
+def test_calibration_fragments_keep_numeric_speaker_suffix_when_existing_suffix_present():
+    dialogs = [
+        {"segment_id": "seg_00000001_spk-1", "text": "first"},
+        {"segment_id": "seg_00000001_spk-1", "text": "second"},
+        {"segment_id": "seg_00000001_spk-1-2", "text": "already assigned"},
+    ]
+    result = _processor()._deduplicate_segment_ids(dialogs)
+    assert [dialog["segment_id"] for dialog in result] == [
+        "seg_00000001_spk-1", "seg_00000001_spk-1-3", "seg_00000001_spk-1-2"
+    ]
+
+
+def test_calibration_fragments_recognize_multi_digit_dedup_suffix():
+    dialogs = [
+        {"segment_id": "seg_X", "text": "base"},
+        {"segment_id": "seg_X-10", "text": "already assigned"},
+        {"segment_id": "seg_X-10", "text": "duplicate"},
+    ]
+    result = _processor()._deduplicate_segment_ids(dialogs)
+    assert [dialog["segment_id"] for dialog in result] == [
+        "seg_X", "seg_X-10", "seg_X-2"
+    ]

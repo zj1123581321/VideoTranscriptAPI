@@ -123,3 +123,25 @@ def test_renderer_bad_override_container_falls_back_to_dialog_name(tmp_path):
     })
     assert "Alice" in html
     assert "dialog-container" in html
+
+
+def test_renderer_uses_override_header_when_speaker_is_empty(tmp_path):
+    html = _render(tmp_path, {
+        "dialogs": [{
+            "segment_id": "seg_1", "speaker": "", "text": "hello",
+        }],
+        "segment_overrides": {
+            "seg_1": {"name": "Override Alice", "status": "suspect"},
+        },
+    })
+    assert "Override Alice" in html
+    assert 'class="speaker-header"' in html
+    assert 'speaker-override-suspect' in html
+    assert 'data-override-status="suspect"' in html
+
+
+def test_renderer_omits_header_when_speaker_and_override_are_empty(tmp_path):
+    html = _render(tmp_path, {
+        "dialogs": [{"segment_id": "seg_1", "speaker": "", "text": "hello"}],
+    })
+    assert 'class="speaker-header"' not in html

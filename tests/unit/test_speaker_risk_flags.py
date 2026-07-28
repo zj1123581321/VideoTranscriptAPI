@@ -48,7 +48,7 @@ def test_average_mapping_confidence_below_point_seven_triggers():
     ]
 
 
-def test_mapping_name_equivalence_counts_as_adopted_without_applied_key():
+def test_legacy_meta_without_applied_ignores_mapping_name_equivalence():
     result = {
         "mapping": {"Speaker1": "Alice", "Speaker2": "Bob"},
         "meta": {
@@ -56,8 +56,25 @@ def test_mapping_name_equivalence_counts_as_adopted_without_applied_key():
             "Speaker2": {"name": "Bob", "confidence": 0.8, "sampled": True},
         },
     }
-    assert build_speaker_risk_flags(result, [{"speaker": "Speaker1"}]) == [
-        "low_average_mapping_confidence"
+    assert build_speaker_risk_flags(
+        result, [{"speaker": "Speaker1"}]
+    ) == ["low_confidence_cluster_dropped"]
+
+
+def test_legacy_meta_without_applied_uses_sampled_and_confidence_gate():
+    result = {
+        "mapping": {"Speaker4": "Alice"},
+        "meta": {
+            "Speaker4": {
+                "name": "Different name",
+                "confidence": 0.4,
+                "sampled": True,
+            }
+        },
+    }
+    dialogs = [{"speaker": "Speaker1"}] * 19 + [{"speaker": "Speaker4"}]
+    assert build_speaker_risk_flags(result, dialogs) == [
+        "low_confidence_cluster_dropped"
     ]
 
 
