@@ -2,7 +2,6 @@
 
 import json
 import threading
-import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -240,24 +239,23 @@ def test_one_chapter_failure_returns_no_partial_text():
 def test_notes_concurrency_keeps_chapter_order_when_completion_is_out_of_order():
     segments, chapters = _chapter_batch(4)
     completed = []
-    delays = {
-        "Chapter 0": 0.04,
-        "Chapter 1": 0.03,
-        "Chapter 2": 0.02,
-        "Chapter 3": 0.01,
-    }
+    completion_events = [threading.Event() for _ in range(4)]
 
-    class DelayedNotesClient:
+    class ReverseCompletionNotesClient:
         def call(self, **kwargs):
             title = _chapter_title(kwargs["user_prompt"])
-            time.sleep(delays[title])
+            chapter_index = int(title.rsplit(" ", 1)[1])
+            if chapter_index + 1 < len(completion_events):
+                assert completion_events[chapter_index + 1].wait(timeout=5), (
+                    f"Timed out waiting for Chapter {chapter_index + 1}"
+                )
             completed.append(title)
+            completion_events[chapter_index].set()
             return f"- {title} notes"
 
-    result = NotesProcessor(DelayedNotesClient(), _config(notes_concurrency=4)).process(
-        chapters=chapters,
-        source_segments=segments,
-    )
+    result = NotesProcessor(
+        ReverseCompletionNotesClient(), _config(notes_concurrency=4)
+    ).process(chapters=chapters, source_segments=segments)
 
     assert result.status is NotesStatus.GENERATED
     assert completed == ["Chapter 3", "Chapter 2", "Chapter 1", "Chapter 0"]
@@ -273,7 +271,10 @@ def test_notes_concurrency_keeps_chapter_order_when_completion_is_out_of_order()
 
 
 def test_notes_concurrency_does_not_exceed_configured_worker_limit():
-    segments, chapters = _chapter_batch(5)
+    notes_concurrency = 2
+    segments, chapters = _chapter_batch(4)
+    expected_concurrency = min(len(chapters["chapters"]), notes_concurrency)
+    concurrent_barrier = threading.Barrier(expected_concurrency, timeout=5)
     active = 0
     peak = 0
     counter_lock = threading.Lock()
@@ -285,20 +286,19 @@ def test_notes_concurrency_does_not_exceed_configured_worker_limit():
                 active += 1
                 peak = max(peak, active)
             try:
-                time.sleep(0.02)
+                concurrent_barrier.wait()
                 return "- notes"
             finally:
                 with counter_lock:
                     active -= 1
 
-    result = NotesProcessor(CountingNotesClient(), _config(notes_concurrency=2)).process(
-        chapters=chapters,
-        source_segments=segments,
-    )
+    result = NotesProcessor(
+        CountingNotesClient(), _config(notes_concurrency=notes_concurrency)
+    ).process(chapters=chapters, source_segments=segments)
 
     assert result.status is NotesStatus.GENERATED
-    assert peak <= 2
-    assert peak > 1
+    assert peak <= notes_concurrency
+    assert peak == expected_concurrency
 
 
 def test_notes_concurrency_propagates_usage_context_to_workers():
