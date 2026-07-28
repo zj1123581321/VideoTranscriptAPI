@@ -79,6 +79,30 @@
 .recalibrate-status { font-size: 0.85rem; color: var(--text-secondary, #888); white-space: nowrap; }
 .recalibrate-done { color: #5cb85c; }
 .recalibrate-error { color: #d9534f; }
+
+/* Speaker attribution observability badges */
+.speaker-risk-warning {
+    margin: 0 0 14px;
+    padding: 10px 14px;
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    background: #fffbeb;
+    color: #92400e;
+    font-weight: 600;
+}
+.speaker-status-badge,
+.speaker-override-status {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.72em;
+    font-weight: 600;
+    vertical-align: middle;
+}
+.speaker-pending,
+.speaker-override-suspect { background: #fef3c7; color: #92400e; }
+.speaker-override-confirmed { background: #d1fae5; color: #065f46; }
 </style>
 {% endblock %}
 
@@ -267,7 +291,7 @@
         {% endif %}
         {% if use_speaker_recognition %}
             <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">
-                🎤 本校对文本包含说话人识别信息
+                说话人姓名为 AI 推断，可能有误；关键引用请核对原音频
             </p>
         {% endif %}
         <div class="content" id="calibrated-content-block">
