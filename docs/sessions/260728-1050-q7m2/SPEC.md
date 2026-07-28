@@ -112,12 +112,14 @@ flag 名写完整字面量，禁止模板拼接（grep 可检索）。
 - `reason` 枚举：`direct_address_conflict` | `self_reference_conflict` | `third_person_conflict` | `qa_adjacency_conflict`。不落盘自由推理文本（I2）。
 - `evidence_segment_ids` 必须是本集真实存在的 segment_id：schema 约束 + 代码侧过滤幻觉 id（引用不存在 id 的条目整条丢弃并记日志）。
 
-### 7.3 失控保护与状态诚实
+### 7.3 失控保护与状态诚实（v2，2026-07-28 gate 主审后修订）
 
-- 可疑段占比 > 20% → 判扫描不可靠：丢弃全部逐段标记，仅落 flag `semantic_scan_unreliable`。
+- **门控（与姓名推断解耦）**：扫描只受两个条件门控——`has_speaker` 与自身开关；**不依赖 `infer_speaker_names`**。姓名未推断时显示名为原始标签，扫描仍可抓「同一 speaker_id 自称两个名字」等簇内矛盾。
+- **开关双层**：config 级 `contradiction_scan_enabled`（默认 true）+ **per-task `processing_options` 开关**（沿用校对/总结的现有模式），任务级优先。
+- **长内容分窗**（替代 v1 的 >500 段整体跳过）：每窗 ≤400 段、相邻窗重叠 10 段；目标 segment_id 取窗内、`evidence_segment_ids` 允许全集真实 id；逐窗合并（同 id 首见优先）；flags 按全集统计。**任一窗失败 → 整体 `failed` 并丢弃全部标记**（不让半覆盖冒充全覆盖），日志记明失败窗序号。
+- 可疑段占比 > 20%（全集口径）→ 判扫描不可靠：丢弃全部逐段标记，仅落 flag `semantic_scan_unreliable`。
 - 可疑段 ≥ 3 条或 ≥ 段数 3% → 追加 flag `semantic_contradiction_detected`（横幅复用 Inc1 机制）。
-- LLM 调用失败/超时/解析失败 → 不阻塞流水线；stats 里记 `contradiction_scan_status`（completed/failed/disabled/skipped），沿用诚实状态模型。
-- 开关沿用 processing_options/config 现有模式，默认开启（单次调用成本可忽略）。
+- 状态语义：`completed` 全部窗成功；`failed` LLM/解析/任一窗失败；`disabled` 任一层开关关闭；`skipped` 仅无说话人模式。stats 记 `contradiction_scan_status`。
 
 ### 7.4 验收
 
