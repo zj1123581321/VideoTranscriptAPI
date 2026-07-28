@@ -69,7 +69,14 @@
     "web": {
         "base_url": "http://localhost:8000",  // Web 服务基础 URL
         "enable_view_links": true,       // 是否在响应中返回查看链接
-        "timezone": "UTC+8"              // 时区设置
+        "timezone": "UTC+8",             // 时区设置
+        // 一键复制深度阅读 Prompt（可选；每项 template 必须包含 {url}）
+        "deep_read_prompts": [
+            {
+                "label": "复制深度阅读 Prompt",
+                "template": "请读取下面 URL 的播客校对稿全文，按时间顺序分主题做详细笔记，保留人名、数字、时间点和原话，使用分层 bullets，关键论断加粗；不要浓缩省略。\n\n{url}\n"
+            }
+        ]
     },
 
     // ============================================================

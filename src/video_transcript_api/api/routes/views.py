@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from ..context import (
     get_cache_manager,
     get_config,
+    get_deep_read_prompt_presets,
     get_logger,
     lazy_resource,
     get_static_dir,
@@ -984,13 +985,20 @@ def _prepare_success_view(view_data: Dict[str, Any]) -> Dict[str, Any]:
     # （走原 plain 渲染），章节锚点判定必须遵守同一门控，否则会发出死链。
     # layering：renderer 不自己读配置，由 views 读好后传入。
     try:
-        _llm_cfg = get_config().get("llm") or {}
+        app_config = get_config()
+        view_data["deep_read_prompt_presets"] = get_deep_read_prompt_presets(
+            app_config, warning_logger=logger
+        )
+        _llm_cfg = app_config.get("llm") or {}
         # 缺键默认 True（与 LLMConfig 一致，T9 验收后翻正）；读取异常兜底 False
         plain_structured_enabled = bool(
             _llm_cfg.get("structured_calibration_for_plain", True)
         )
     except Exception as exc:
         logger.warning(f"Failed to read llm.structured_calibration_for_plain: {exc}")
+        view_data["deep_read_prompt_presets"] = get_deep_read_prompt_presets(
+            {}, warning_logger=logger
+        )
         plain_structured_enabled = False
 
     cache_dir_path = Path(cache_dir) if cache_dir else None

@@ -183,6 +183,18 @@
             <span class="quick-copy-action">复制 URL</span>
             <span class="quick-copy-desc">带标题的 HTML，供 NotebookLM 等工具爬取</span>
         </button>
+        {% if calibrated_html %}
+        {% for preset in deep_read_prompt_presets %}
+        <button class="quick-copy-btn deep-read-prompt-btn"
+                data-path="/view/{{ view_token }}?raw=calibrated"
+                data-template='{{ preset.template|tojson|forceescape }}'
+                title="{{ preset.label|forceescape }}">
+            <span class="quick-copy-label">{{ preset.label|forceescape }}</span>
+            <span class="quick-copy-action">复制 Prompt</span>
+            <span class="quick-copy-desc">复制带校对稿 URL 的深度阅读指令</span>
+        </button>
+        {% endfor %}
+        {% endif %}
     </div>
     {% endif %}
 

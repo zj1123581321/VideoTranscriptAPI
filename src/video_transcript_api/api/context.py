@@ -29,6 +29,80 @@ class ConfigError(ValueError):
     """Raised when production configuration is missing or invalid."""
 
 
+# Default deep-read prompt keeps the full calibrated transcript in scope.
+DEFAULT_DEEP_READ_PROMPT_LABEL = "复制深度阅读 Prompt"
+DEFAULT_DEEP_READ_PROMPT_TEMPLATE = (
+    "请读取下面 URL 的播客校对稿全文，按时间顺序分主题做详细笔记，"
+    "保留人名、数字、时间点和原话，使用分层 bullets，关键论断加粗；"
+    "不要浓缩省略。\n\n{url}\n"
+)
+DEFAULT_DEEP_READ_PROMPTS = (
+    {
+        "label": DEFAULT_DEEP_READ_PROMPT_LABEL,
+        "template": DEFAULT_DEEP_READ_PROMPT_TEMPLATE,
+    },
+)
+
+
+def get_deep_read_prompt_presets(
+    config: dict | None = None,
+    *,
+    warning_logger: Any | None = None,
+) -> list[dict[str, str]]:
+    """Return valid deep-read prompt presets, falling back to the built-in preset."""
+    if config is None:
+        config = get_config()
+    if warning_logger is None:
+        warning_logger = get_logger()
+
+    web_config = config.get("web") if isinstance(config, dict) else None
+    configured_presets = (
+        web_config.get("deep_read_prompts")
+        if isinstance(web_config, dict)
+        else None
+    )
+    if configured_presets is None:
+        return [dict(preset) for preset in DEFAULT_DEEP_READ_PROMPTS]
+    if not isinstance(configured_presets, list):
+        warning_logger.warning(
+            "Invalid deep_read_prompt configuration skipped: deep_read_prompts must be an array"
+        )
+        return [dict(preset) for preset in DEFAULT_DEEP_READ_PROMPTS]
+
+    valid_presets: list[dict[str, str]] = []
+    for preset in configured_presets:
+        if not isinstance(preset, dict):
+            warning_logger.warning(
+                "Invalid deep_read_prompt preset skipped: label and template must be non-empty strings"
+            )
+            continue
+        label = preset.get("label")
+        template = preset.get("template")
+        if (
+            not isinstance(label, str)
+            or not label.strip()
+            or not isinstance(template, str)
+            or not template.strip()
+        ):
+            warning_logger.warning(
+                "Invalid deep_read_prompt preset skipped: label and template must be non-empty strings"
+            )
+            continue
+        if "{url}" not in template:
+            warning_logger.warning(
+                "Invalid deep_read_prompt preset skipped: template must contain {url}"
+            )
+            continue
+        valid_presets.append({"label": label, "template": template})
+
+    if not valid_presets:
+        warning_logger.warning(
+            "No valid deep_read_prompt presets configured; using default deep_read_prompt preset"
+        )
+        return [dict(preset) for preset in DEFAULT_DEEP_READ_PROMPTS]
+    return valid_presets
+
+
 def _require_dict(config: dict, key: str) -> dict:
     value = config.get(key)
     if not isinstance(value, dict):
