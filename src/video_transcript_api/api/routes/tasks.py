@@ -53,6 +53,38 @@ def _normalize_empty_string(value: str | None) -> str | None:
     return value
 
 
+def _is_notes_task_options(value) -> bool:
+    """Return whether persisted processing options identify a notes-only task."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return False
+    return isinstance(value, dict) and value.get("notes") is True
+
+
+def _find_inflight_notes_task(cursor, view_token: str) -> str | None:
+    """Find an in-flight notes task using persisted task_status fields."""
+    cursor.execute(
+        """
+        SELECT task_id, processing_options
+        FROM task_status
+        WHERE view_token = ?
+          AND status IN (?, ?, ?)
+        """,
+        (
+            view_token,
+            TaskStatus.QUEUED,
+            TaskStatus.PROCESSING,
+            TaskStatus.CALIBRATING,
+        ),
+    )
+    for task_row in cursor.fetchall():
+        if _is_notes_task_options(task_row["processing_options"]):
+            return task_row["task_id"]
+    return None
+
+
 # K1 路由站点观察面（CI review 第 3 轮 major）：_fail_task_after_creation
 # 的终态清理写入自身失败时，追加到原始 500/503 响应 detail 末尾的明确
 # 标记——终态写失败不再是"只记日志、请求方毫无感知"，而是通过响应体这个
@@ -1136,6 +1168,22 @@ async def generate_notes(
         logger.warning(f"详细笔记已存在，拒绝重复生成: {view_token}")
         raise HTTPException(status_code=400, detail="详细笔记已存在，无需重复生成")
 
+    try:
+        with cache_manager._get_cursor() as cursor:
+            inflight_notes_task_id = _find_inflight_notes_task(cursor, view_token)
+    except Exception as exc:
+        logger.error(f"查询在途详细笔记任务失败(fail-closed 拒绝): {exc}")
+        raise HTTPException(status_code=503, detail="详细笔记任务状态查询失败，请稍后重试")
+    if inflight_notes_task_id is not None:
+        logger.warning(
+            "拒绝重复详细笔记任务，已有在途 notes 任务: "
+            f"view_token={view_token}, task_id={inflight_notes_task_id}"
+        )
+        raise HTTPException(
+            status_code=409,
+            detail="详细笔记正在生成中，请等待当前任务完成",
+        )
+
     platform = cache_data.get("platform")
     media_id = cache_data.get("media_id")
     use_speaker_recognition = cache_data.get("use_speaker_recognition", False)
@@ -1164,29 +1212,51 @@ async def generate_notes(
     registration_owned = True
     try:
         try:
+            inflight_notes_task_id = None
             with cache_manager._get_cursor() as cursor:
-                cursor.execute(
-                    """
-                    INSERT INTO task_status
-                    (task_id, view_token, url, platform, media_id,
-                     use_speaker_recognition, status, title, author,
-                     processing_options, submitted_by)
-                    VALUES (?, ?, ?, ?, ?, ?, 'processing', ?, ?, ?, ?)
-                    """,
-                    (
-                        task_id,
-                        view_token,
-                        task_info.get("url", ""),
-                        platform,
-                        media_id,
-                        use_speaker_recognition,
-                        video_title,
-                        author,
-                        json.dumps(notes_processing_options, sort_keys=True),
-                        user_id,
-                    ),
+                # Serialize check + insert so concurrent requests cannot both
+                # observe "no in-flight notes task" and enqueue duplicates.
+                cursor.execute("BEGIN IMMEDIATE")
+                inflight_notes_task_id = _find_inflight_notes_task(
+                    cursor,
+                    view_token,
+                )
+
+                if inflight_notes_task_id is None:
+                    cursor.execute(
+                        """
+                        INSERT INTO task_status
+                        (task_id, view_token, url, platform, media_id,
+                         use_speaker_recognition, status, title, author,
+                         processing_options, submitted_by)
+                        VALUES (?, ?, ?, ?, ?, ?, 'processing', ?, ?, ?, ?)
+                        """,
+                        (
+                            task_id,
+                            view_token,
+                            task_info.get("url", ""),
+                            platform,
+                            media_id,
+                            use_speaker_recognition,
+                            video_title,
+                            author,
+                            json.dumps(notes_processing_options, sort_keys=True),
+                            user_id,
+                        ),
+                    )
+
+            if inflight_notes_task_id is not None:
+                logger.warning(
+                    "拒绝重复详细笔记任务，已有在途 notes 任务: "
+                    f"view_token={view_token}, task_id={inflight_notes_task_id}"
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail="详细笔记正在生成中，请等待当前任务完成",
                 )
             logger.info(f"详细笔记任务创建成功: {task_id}, view_token: {view_token}")
+        except HTTPException:
+            raise
         except Exception as exc:
             logger.error(f"创建详细笔记任务失败: {exc}")
             raise HTTPException(status_code=500, detail=f"创建详细笔记任务失败: {exc}")

@@ -123,12 +123,17 @@ def _notes_patches(cache_manager, processor_result):
     processor = MagicMock()
     processor.process.return_value = processor_result
     processor_type = MagicMock(return_value=processor)
-    return processor, [
+    notification_router = MagicMock()
+    return processor, notification_router, [
         patch.object(llm_ops, "cache_manager", cache_manager),
         patch.object(llm_ops, "llm_coordinator", coordinator),
         patch.object(llm_ops, "llm_task_queue", MagicMock()),
         patch.object(llm_ops, "NotesProcessor", processor_type),
-        patch.object(llm_ops, "get_notification_router", lambda: MagicMock()),
+        patch.object(
+            llm_ops,
+            "get_notification_router",
+            lambda: notification_router,
+        ),
     ]
 
 
@@ -165,7 +170,7 @@ def test_notes_task_only_adds_notes_layer(notes_cache):
         fingerprint="fingerprint",
         chapter_count=1,
     )
-    processor, contexts = _notes_patches(notes_cache, result)
+    processor, notification_router, contexts = _notes_patches(notes_cache, result)
     for context in contexts:
         context.start()
     try:
@@ -189,6 +194,12 @@ def test_notes_task_only_adds_notes_layer(notes_cache):
         cache_dir=snapshot["file_path"],
         selected_models={},
     )
+    notification_router.send_long_text.assert_called_once()
+    long_text_call = notification_router.send_long_text.call_args.kwargs
+    assert long_text_call["title"] == "Notes demo"
+    assert "详细笔记已生成" in long_text_call["text"]
+    notification_router.send_text.assert_called_once()
+    assert "详细笔记已生成" in notification_router.send_text.call_args.args[0]
 
     for name, path in protected_files.items():
         with open(path, "rb") as artifact_file:
@@ -211,7 +222,7 @@ def test_notes_task_failure_writes_failed_status_without_artifact(notes_cache):
         fingerprint="fingerprint",
         chapter_count=1,
     )
-    _, contexts = _notes_patches(notes_cache, result)
+    _, notification_router, contexts = _notes_patches(notes_cache, result)
     for context in contexts:
         context.start()
     try:
@@ -232,3 +243,5 @@ def test_notes_task_failure_writes_failed_status_without_artifact(notes_cache):
         notes_cache.get_task_by_id(task_id)["terminal_snapshot"]["status"]
         == TaskStatus.FAILED
     )
+    notification_router.send_long_text.assert_not_called()
+    notification_router.send_text.assert_called_once()

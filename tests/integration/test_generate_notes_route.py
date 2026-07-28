@@ -219,3 +219,21 @@ def test_generate_notes_allows_failed_retry(notes_cache, monkeypatch):
 
     assert response.code == 202
     assert llm_queue.qsize() == 1
+
+
+def test_generate_notes_rejects_inflight_notes_task(notes_cache, monkeypatch):
+    task = _seed_notes_source(notes_cache)
+    tasks_route, llm_queue = _configure_notes_route(notes_cache, monkeypatch)
+
+    first_response = _call_generate_notes(tasks_route, task["view_token"])
+
+    with pytest.raises(HTTPException) as exc_info:
+        _call_generate_notes(tasks_route, task["view_token"])
+
+    assert first_response.code == 202
+    assert exc_info.value.status_code == 409
+    assert (
+        exc_info.value.detail
+        == "详细笔记正在生成中，请等待当前任务完成"
+    )
+    assert llm_queue.qsize() == 1

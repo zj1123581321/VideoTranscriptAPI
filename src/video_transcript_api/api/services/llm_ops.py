@@ -324,7 +324,7 @@ def _handle_notes_generation(
     llm_task: dict,
     tracker: PerfTracker,
     processing_options: dict,
-) -> None:
+) -> Optional[dict]:
     """Run and persist a notes-only task without touching existing LLM layers."""
     task_id = llm_task["task_id"]
     platform = llm_task.get("platform")
@@ -401,12 +401,22 @@ def _handle_notes_generation(
         )
         if status_written:
             logger.info(f"详细笔记任务状态已更新为 success: {task_id}")
+            return {
+                "详细笔记": notes_result.text,
+                "stats": {
+                    "notes_status": NotesStatus.GENERATED,
+                    "notes_length": len(notes_result.text),
+                    "notes_chapter_count": notes_result.chapter_count,
+                },
+                "models_used": selected_models,
+            }
         else:
             current_task = cache_manager.get_task_by_id(task_id)
             current_status = current_task.get("status") if current_task else "unknown"
             logger.warning(
                 f"详细笔记任务 success CAS 被已有终态拒绝({current_status}): {task_id}"
             )
+            return None
     except Exception:
         try:
             cache_manager.save_llm_status(
@@ -462,11 +472,27 @@ def _handle_llm_task(llm_task: dict):
             try:
                 raw_processing_options = llm_task.get("processing_options") or {}
                 if raw_processing_options.get("notes") is True:
-                    _handle_notes_generation(
+                    notes_notification_result = _handle_notes_generation(
                         llm_task=llm_task,
                         tracker=tracker,
                         processing_options=raw_processing_options,
                     )
+                    if notes_notification_result is not None:
+                        try:
+                            _send_notification(
+                                task_id=task_id,
+                                video_title=video_title,
+                                display_url=display_url,
+                                use_speaker_recognition=use_speaker_recognition,
+                                result_dict=notes_notification_result,
+                                notification_channel=notification_channel,
+                                notification_webhooks=notification_webhooks,
+                            )
+                        except Exception:
+                            logger.exception(
+                                "详细笔记完成通知发送失败"
+                                f"（任务已成功落库，不影响任务结果）: {task_id}"
+                            )
                     tracker.log_summary()
                     return
 
@@ -2308,6 +2334,7 @@ def _send_notification(
 
     calibrated_text = result_dict.get("校对文本", "")
     summary_text = result_dict.get("内容总结")
+    notes_text = result_dict.get("详细笔记")
     skip_summary = result_dict.get("skip_summary", False)
     stats = result_dict.get("stats", {})
     models_used = result_dict.get("models_used", {})
@@ -2342,7 +2369,24 @@ def _send_notification(
     # 校对文本超过此阈值时，不发送全文到通知渠道（避免刷屏）
     NOTIFICATION_TEXT_THRESHOLD = 5000
 
-    if skip_summary:
+    notes_generated = (
+        stats.get("notes_status") == NotesStatus.GENERATED
+        and isinstance(notes_text, str)
+        and bool(notes_text.strip())
+    )
+    if notes_generated:
+        notes_length = stats.get("notes_length", len(notes_text))
+        notes_chapter_count = stats.get("notes_chapter_count", 0)
+        full_message = f"""## 详细笔记已生成
+🌐 网页查看：{view_url}
+📄 直接获取：{view_url}?raw=notes
+
+## 笔记统计
+共 {notes_chapter_count:,} 章 | {notes_length:,} 字
+
+{model_config_text}"""
+        logger.info(f"发送详细笔记完成通知: {task_id}")
+    elif skip_summary:
         if len(calibrated_text) <= NOTIFICATION_TEXT_THRESHOLD:
             full_message = f"""## 总结和校对
 🌐 网页查看：{view_url}
@@ -2405,7 +2449,16 @@ def _send_notification(
         clean = _clean_url(display_url)
         sanitized_title = _sanitize_title(video_title)
 
-        completion_message = f"# {sanitized_title}\n\n{clean}\n\n🔗 总结和校对：\n{view_url}\n\n✅ **【任务完成】**"
+        if notes_generated:
+            completion_message = (
+                f"# {sanitized_title}\n\n{clean}\n\n"
+                f"🔗 详细笔记已生成：\n{view_url}\n\n✅ **【任务完成】**"
+            )
+        else:
+            completion_message = (
+                f"# {sanitized_title}\n\n{clean}\n\n"
+                f"🔗 总结和校对：\n{view_url}\n\n✅ **【任务完成】**"
+            )
         router.send_text(
             completion_message,
             channel_name=notification_channel,
