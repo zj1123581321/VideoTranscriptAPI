@@ -821,6 +821,53 @@ def build_speaker_inference_user_prompt(
 
 
 # ============================================================
+# 说话人语义矛盾扫描任务 Prompt 模板
+# ============================================================
+
+CONTRADICTION_SCAN_SYSTEM_PROMPT = """你是说话人归属审计助手。请只依据给定的带 segment_id 的转录片段，找出可能与当前说话人归属矛盾的段落。
+
+## 检测信号
+
+- direct_address_conflict：直接称呼或回应显示当前段的归属可能不对
+- self_reference_conflict：当前说话人自述的身份/姓名与归属不一致
+- third_person_conflict：第三人称提及显示当前段更像另一位说话人
+- qa_adjacency_conflict：相邻问答关系与当前归属不一致
+
+## 输出约束
+
+只返回 JSON 对象。每条矛盾必须包含一个真实的 segment_id、上述四个 reason 之一，以及至少一个作为证据的 evidence_segment_ids。只能引用输入中出现过的 ID；不要输出姓名、改名建议或自由文本。没有矛盾时返回 {"contradictions": []}。"""
+
+
+def build_contradiction_scan_user_prompt(
+    dialogs_text: str,
+    speaker_mapping: dict,
+    speaker_inference_meta: dict,
+    video_title: str = "",
+    description: str = "",
+) -> str:
+    """构建单次语义矛盾扫描 prompt，动态转录内容位于末尾。"""
+    import json
+
+    parts = [
+        "**speaker_mapping**:",
+        json.dumps(speaker_mapping or {}, ensure_ascii=False, sort_keys=True),
+        "\n**speaker_inference_meta**:",
+        json.dumps(speaker_inference_meta or {}, ensure_ascii=False, sort_keys=True),
+    ]
+    if video_title:
+        parts.append(f"\n**video_title**: {video_title}")
+    if description:
+        parts.append(f"\n**description**: {description[:500]}")
+    parts.extend(
+        [
+            "\n**dialogs**（每行含 segment_id、展示名、speaker_id、文本前100字符）:",
+            f"<dialogs>\n{dialogs_text}\n</dialogs>",
+        ]
+    )
+    return "\n".join(parts)
+
+
+# ============================================================
 # 章节梗概生成任务 Prompt 模板
 # ============================================================
 

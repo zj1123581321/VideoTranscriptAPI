@@ -1469,6 +1469,10 @@ def process_transcription(
                 "infer_speaker_names": need_speaker_names,
                 "chapters": need_chapters,
             }
+            if "contradiction_scan" in processing_options:
+                queued_processing_options["contradiction_scan"] = processing_options[
+                    "contradiction_scan"
+                ]
 
             # Seed chapters timeline when only chapters (or chapters+summary)
             # need backfill: prefer cached dialogs / segments so coordinator

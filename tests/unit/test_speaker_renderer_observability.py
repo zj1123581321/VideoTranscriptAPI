@@ -88,6 +88,25 @@ def test_renderer_supports_confirmed_suspect_and_pending_badges(tmp_path):
     assert '待确认' in html
 
 
+def test_renderer_marks_name_less_suspect_override_without_renaming(tmp_path):
+    html = _render(tmp_path, {
+        "dialogs": [{"segment_id": "seg_1", "speaker": "大卫", "text": "刚才大卫"}],
+        "segment_overrides": {
+            "seg_1": {
+                "status": "suspect",
+                "assignment_source": "semantic_evidence",
+                "reason": "direct_address_conflict",
+                "evidence_segment_ids": ["seg_1"],
+            }
+        },
+        "speaker_risk_flags": ["semantic_contradiction_detected"],
+    })
+    assert "大卫" in html
+    assert 'data-override-status="suspect"' in html
+    assert "待核实" in html
+    assert "本集说话人区分可能不准" in html
+
+
 def test_renderer_tooltip_uses_levels_without_confidence_numbers(tmp_path):
     html = _render(tmp_path, {
         "dialogs": [

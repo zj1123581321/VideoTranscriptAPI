@@ -703,6 +703,7 @@ def test_all_processing_features_disabled_make_zero_llm_calls(tmp_path):
                 "base_url": "https://example.invalid",
                 "calibrate_model": "test-model",
                 "summary_model": "test-model",
+                "contradiction_scan_enabled": False,
             }
         },
         cache_dir=str(tmp_path),
@@ -759,6 +760,8 @@ def test_infer_speaker_names_alone_still_calls_llm_for_name_inference(tmp_path):
                 "speaker_mapping": {"Speaker1": "Alice", "Speaker2": "Bob"},
                 "confidence": {"Speaker1": 0.95, "Speaker2": 0.95},
             })
+        if task_type == "speaker_contradiction_scan":
+            return SimpleNamespace(structured_output={"contradictions": []})
         raise AssertionError(
             f"unexpected LLM call while calibration/summary are disabled: "
             f"task_type={task_type!r}"
@@ -782,7 +785,11 @@ def test_infer_speaker_names_alone_still_calls_llm_for_name_inference(tmp_path):
         call.kwargs.get("task_type")
         for call in coordinator.llm_client.call.call_args_list
     }
-    assert called_task_types <= {"key_info", "speaker_inference"}
+    assert called_task_types <= {
+        "key_info",
+        "speaker_inference",
+        "speaker_contradiction_scan",
+    }
     # ... and calibration/summary made zero calls (would have raised above
     # via _fake_llm_call's else branch if they had).
     disabled_task_types = {

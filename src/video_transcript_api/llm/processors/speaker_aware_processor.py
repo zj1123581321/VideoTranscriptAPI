@@ -11,6 +11,7 @@ from ...utils.logging import setup_logger
 from ...utils.llm_status import CalibrationStatus
 from ..core.config import LLMConfig
 from ..core.llm_client import LLMClient
+from ..core.contradiction_scanner import ContradictionScanner
 from ..core.key_info_extractor import KeyInfoExtractor, KeyInfo
 from ..core.speaker_inferencer import SpeakerInferencer
 from ..core.speaker_inferencer import build_speaker_risk_flags
@@ -41,6 +42,7 @@ class SpeakerAwareProcessor:
         key_info_extractor: KeyInfoExtractor,
         speaker_inferencer: SpeakerInferencer,
         quality_validator: UnifiedQualityValidator,
+        contradiction_scanner: Optional[ContradictionScanner] = None,
     ):
         """初始化有说话人文本处理器
 
@@ -57,6 +59,12 @@ class SpeakerAwareProcessor:
         self.speaker_inferencer = speaker_inferencer
         self.quality_validator = quality_validator
         self.segmenter = DialogSegmenter(config)
+        self.contradiction_scanner = contradiction_scanner or ContradictionScanner(
+            llm_client=llm_client,
+            model=getattr(config, "speaker_model", None)
+            or getattr(config, "calibrate_model", ""),
+            reasoning_effort=getattr(config, "speaker_reasoning_effort", None),
+        )
 
     def process(
         self,
@@ -69,6 +77,7 @@ class SpeakerAwareProcessor:
         selected_models: Optional[Dict] = None,
         skip_calibration: bool = False,
         infer_speaker_names: bool = True,
+        contradiction_scan: Optional[bool] = None,
         has_speaker: Optional[bool] = None,
     ) -> Dict:
         """处理有说话人文本
@@ -81,10 +90,12 @@ class SpeakerAwareProcessor:
             platform: 平台标识
             media_id: 媒体 ID
             selected_models: 选定的模型
+            contradiction_scan: 任务级语义矛盾扫描开关；None 继承全局配置
             skip_calibration: 是否跳过分块 LLM 校对调用（processing_options.calibrate=False
                 时为 True）。说话人推断、说话人映射、对话规范化合并这些步骤仍会执行——
                 它们属于"转录"交付物（谁在说话）而非"校对"（文字是否准确），跳过的只是
-                逐块把文本喂给 LLM 做文字校正/纠错的那一步。
+                逐块把文本喂给 LLM 做文字校正/纠错的那一步。矛盾扫描不受
+                skip_calibration 控制，仍会运行；仅受 has_speaker 与自身开关门控。
             has_speaker: 输入是否携带说话人标签。None（默认）时自动判定——
                 任一原始输入段能解析出说话人标签即为 True（混合输入维持现状
                 行为）；False 时走「无说话人逐段校对」模式：跳过说话人推断、
@@ -273,6 +284,22 @@ class SpeakerAwareProcessor:
             # changing the original start-time-derived base ID.
             calibrated_dialogs = self._deduplicate_segment_ids(calibrated_dialogs)
 
+        contradiction_scan_status, segment_overrides, contradiction_flags = (
+            self._run_contradiction_scan(
+                dialogs=calibrated_dialogs,
+                speaker_mapping=speaker_mapping,
+                speaker_inference_meta=speaker_inference_meta,
+                title=title,
+                description=description,
+                selected_models=selected_models,
+                has_speaker=has_speaker,
+                contradiction_scan=contradiction_scan,
+            )
+        )
+        for flag in contradiction_flags:
+            if flag not in speaker_risk_flags:
+                speaker_risk_flags.append(flag)
+
         original_text = self._build_text_from_dialogs(
             normalized_dialogs, has_speaker=has_speaker
         )
@@ -291,7 +318,7 @@ class SpeakerAwareProcessor:
                 "dialogs": calibrated_dialogs,
                 "speaker_mapping": speaker_mapping,
                 "speaker_inference_meta": speaker_inference_meta,
-                "segment_overrides": {},
+                "segment_overrides": segment_overrides,
                 "speaker_risk_flags": speaker_risk_flags,
             },
             "key_info": key_info.to_dict(),
@@ -306,8 +333,121 @@ class SpeakerAwareProcessor:
                 "speaker_inference": speaker_inference_meta,
                 "speaker_inference_source": speaker_inference_source,
                 "speaker_risk_flags": speaker_risk_flags,
+                "contradiction_scan_status": contradiction_scan_status,
             }
         }
+
+    def _run_contradiction_scan(
+        self,
+        dialogs: List[Dict],
+        speaker_mapping: Dict[str, str],
+        speaker_inference_meta: Dict[str, Any],
+        title: str,
+        description: str,
+        selected_models: Optional[Dict],
+        has_speaker: bool,
+        contradiction_scan: Optional[bool],
+    ) -> tuple[str, Dict[str, Dict[str, Any]], List[str]]:
+        """Run the semantic scan gate after final segment IDs are assigned."""
+        if not has_speaker:
+            return "skipped", {}, []
+        scan_enabled = (
+            bool(getattr(self.config, "contradiction_scan_enabled", True))
+            if contradiction_scan is None
+            else bool(contradiction_scan)
+        )
+        if not scan_enabled:
+            return "disabled", {}, []
+        try:
+            result = self.contradiction_scanner.scan_contradictions(
+                dialogs=dialogs,
+                speaker_mapping=speaker_mapping,
+                speaker_inference_meta=speaker_inference_meta,
+                title=title,
+                description=description,
+                selected_models=selected_models,
+            )
+        except Exception as exc:
+            logger.warning(f"Contradiction scan failed; continuing without overrides: {exc}")
+            return "failed", {}, []
+        if not isinstance(result, dict):
+            return "failed", {}, []
+        status = result.get("status")
+        # In speaker mode, a scanner-level skipped/disabled/unknown result is
+        # not a valid partial outcome: SPEC 7.3 reserves skipped for the
+        # no-speaker gate. Treat every non-completed result as failed and drop
+        # any attached markers so status cannot claim full coverage.
+        if status != "completed":
+            return "failed", {}, []
+        known_ids = {
+            str(dialog.get("segment_id"))
+            for dialog in dialogs
+            if dialog.get("segment_id")
+        }
+        overrides = self._sanitize_contradiction_overrides(
+            result.get("segment_overrides"), known_ids
+        )
+        raw_flags = result.get("speaker_risk_flags", [])
+        flags = (
+            [
+                flag
+                for flag in raw_flags
+                if flag
+                in {"semantic_contradiction_detected", "semantic_scan_unreliable"}
+            ]
+            if isinstance(raw_flags, list)
+            else []
+        )
+        return "completed", overrides, list(dict.fromkeys(flags))
+
+    @staticmethod
+    def _sanitize_contradiction_overrides(
+        overrides: Any, known_ids: set[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """Persist only the fixed suspect contract; never persist a name/free text."""
+        if not isinstance(overrides, dict):
+            return {}
+        allowed_reasons = ContradictionScanner.REASONS
+        allowed_fields = {
+            "status",
+            "assignment_source",
+            "reason",
+            "evidence_segment_ids",
+        }
+        sanitized: Dict[str, Dict[str, Any]] = {}
+        for segment_id, override in overrides.items():
+            validation_warning: Optional[str] = None
+            if not isinstance(segment_id, str) or segment_id not in known_ids:
+                validation_warning = f"Contradiction override dropped for segment_id {segment_id!r}: target id hallucination"
+            elif not isinstance(override, dict):
+                validation_warning = f"Contradiction override dropped for segment_id {segment_id!r}: override fields are malformed"
+            elif set(override) != allowed_fields:
+                validation_warning = f"Contradiction override dropped for segment_id {segment_id!r}: field set mismatch"
+            elif override.get("status") != "suspect":
+                validation_warning = f"Contradiction override dropped for segment_id {segment_id!r}: status mismatch"
+            elif override.get("assignment_source") != "semantic_evidence":
+                validation_warning = f"Contradiction override dropped for segment_id {segment_id!r}: assignment source mismatch"
+            elif override.get("reason") not in allowed_reasons:
+                validation_warning = f"Contradiction override dropped for segment_id {segment_id!r}: reason is illegal ({override.get('reason')!r})"
+            if validation_warning is not None:
+                logger.warning(validation_warning)
+                continue
+            evidence = override.get("evidence_segment_ids")
+            evidence_warning: Optional[str] = None
+            if not isinstance(evidence, list) or not evidence:
+                evidence_warning = f"Contradiction override dropped for segment_id {segment_id!r}: evidence fields are malformed"
+            elif any(not isinstance(item, str) or item not in known_ids for item in evidence):
+                evidence_warning = f"Contradiction override dropped for segment_id {segment_id!r}: evidence segment id hallucination"
+            if evidence_warning is not None:
+                logger.warning(evidence_warning)
+                continue
+            sanitized[segment_id] = {
+                "status": "suspect",
+                "assignment_source": "semantic_evidence",
+                "reason": override["reason"],
+                "evidence_segment_ids": list(dict.fromkeys(evidence)),
+            }
+        return sanitized
 
     def _coerce_dialogs(self, dialogs: List[Dict], has_speaker: bool = True) -> List[Dict]:
         """将原始对话列表规范化为最小可用格式（speaker/text/start/end/duration）。

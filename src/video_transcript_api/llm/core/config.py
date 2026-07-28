@@ -120,6 +120,8 @@ class LLMConfig:
     paragraphization_target_chars: int = 300            # 段落长度预算（字符）
     paragraphization_hard_max_chars: int = 600          # 段落硬上限，超出放宽到逗号级断点
     paragraphization_pause_threshold_seconds: float = 2.0  # 停顿授权阈值（秒）
+    # Semantic contradiction scan (Increment 2), enabled by default.
+    contradiction_scan_enabled: bool = True
 
     @classmethod
     def from_dict(cls, config_dict: dict) -> "LLMConfig":
@@ -298,6 +300,10 @@ class LLMConfig:
             ),
             paragraphization_pause_threshold_seconds=paragraphization_config.get(
                 "pause_threshold_seconds", 2.0
+            ),
+            contradiction_scan_enabled=llm_config.get(
+                "contradiction_scan_enabled",
+                speaker_inference_config.get("contradiction_scan_enabled", True),
             ),
         )
 
