@@ -42,6 +42,7 @@ class TestProcessingOptionsSchema:
         assert opts.calibrate is True
         assert opts.summarize is True
         assert opts.infer_speaker_names is True
+        assert opts.contradiction_scan is None
         assert opts.chapters is None
 
     def test_explicit_calibrate_false_summarize_false(self):
@@ -53,6 +54,11 @@ class TestProcessingOptionsSchema:
         opts = ProcessingOptions(calibrate=True, summarize=False)
         assert opts.calibrate is True
         assert opts.summarize is False
+
+    def test_contradiction_scan_is_optional_strict_gate(self):
+        assert ProcessingOptions().contradiction_scan is None
+        assert ProcessingOptions(contradiction_scan=True).contradiction_scan is True
+        assert ProcessingOptions(contradiction_scan=False).contradiction_scan is False
 
     def test_calibrate_false_summarize_true_is_legal(self):
         """summarize=True with calibrate=False is a legal combination -- the
@@ -67,7 +73,7 @@ class TestProcessingOptionsSchema:
 
     @pytest.mark.parametrize(
         "field_name",
-        ["calibrate", "summarize", "infer_speaker_names", "chapters"],
+        ["calibrate", "summarize", "infer_speaker_names", "contradiction_scan", "chapters"],
     )
     @pytest.mark.parametrize(
         "loose_value", ["yes", "no", "1", "0", "true", "false", 1, 0]
@@ -139,6 +145,17 @@ class TestNormalizeProcessingOptions:
             "infer_speaker_names": True,
             "chapters": True,  # follows summarize when omitted
         }
+
+    @pytest.mark.parametrize("value", [True, False])
+    def test_explicit_contradiction_scan_is_preserved(self, value):
+        result = normalize_processing_options({"contradiction_scan": value})
+        assert result["contradiction_scan"] is value
+
+    def test_omitted_contradiction_scan_inherits_config_at_runtime(self):
+        # Normalization leaves an omitted optional gate absent; llm_ops uses
+        # dict.get(None) so the processor can inherit config without changing
+        # legacy task payload shapes.
+        assert "contradiction_scan" not in normalize_processing_options(None)
 
     @pytest.mark.parametrize(
         "summarize,expected_chapters",
@@ -385,3 +402,17 @@ class TestTranscribeTaskDictProcessingOptions:
             },
         )
         assert resp.status_code == 422, f"value {loose_value!r} should be rejected"
+
+
+def test_cache_manager_create_task_persists_explicit_contradiction_scan(tmp_path):
+    """Cache task rows preserve both explicit contradiction-scan gate values."""
+    from video_transcript_api.cache.cache_manager import CacheManager
+
+    manager = CacheManager(cache_dir=str(tmp_path))
+    for value in (True, False):
+        task = manager.create_task(
+            url=f"https://example.test/contradiction-{value}",
+            processing_options={"contradiction_scan": value},
+        )
+        persisted = manager.get_task_by_id(task["task_id"])
+        assert persisted["processing_options"]["contradiction_scan"] is value

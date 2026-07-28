@@ -362,6 +362,9 @@ def _handle_llm_task(llm_task: dict):
                 infer_speaker_names_requested = processing_options.get(
                     "infer_speaker_names", True
                 )
+                contradiction_scan_requested = processing_options.get(
+                    "contradiction_scan"
+                )
 
                 # 通用下载器无标题时使用 LLM 生成
                 if _requires_llm_title(
@@ -480,6 +483,7 @@ def _handle_llm_task(llm_task: dict):
                         skip_summary=skip_summary_for_coordinator,
                         skip_calibration=skip_calibration_for_coordinator,
                         infer_speaker_names=infer_speaker_names_requested,
+                        contradiction_scan=contradiction_scan_requested,
                         # 分层缓存"只补总结"场景：transcription.py 把 content 强制
                         # 降级为纯文本（transcription_data=None，避免重跑说话人
                         # 分块校对），协调器自身的说话人数自动推断因此必然判成单

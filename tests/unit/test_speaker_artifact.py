@@ -703,6 +703,7 @@ def test_all_processing_features_disabled_make_zero_llm_calls(tmp_path):
                 "base_url": "https://example.invalid",
                 "calibrate_model": "test-model",
                 "summary_model": "test-model",
+                "contradiction_scan_enabled": False,
             }
         },
         cache_dir=str(tmp_path),

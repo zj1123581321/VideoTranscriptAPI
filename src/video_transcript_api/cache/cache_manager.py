@@ -2204,7 +2204,10 @@ class CacheManager:
             "summarize": True,
             "infer_speaker_names": True,
         }
-        allowed_option_keys = set(normalized_options) | {"chapters"}
+        allowed_option_keys = set(normalized_options) | {
+            "chapters",
+            "contradiction_scan",
+        }
         if processing_options:
             unexpected = set(processing_options) - allowed_option_keys
             if unexpected:

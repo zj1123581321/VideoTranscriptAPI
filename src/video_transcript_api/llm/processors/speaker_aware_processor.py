@@ -77,6 +77,7 @@ class SpeakerAwareProcessor:
         selected_models: Optional[Dict] = None,
         skip_calibration: bool = False,
         infer_speaker_names: bool = True,
+        contradiction_scan: Optional[bool] = None,
         has_speaker: Optional[bool] = None,
     ) -> Dict:
         """处理有说话人文本
@@ -89,12 +90,12 @@ class SpeakerAwareProcessor:
             platform: 平台标识
             media_id: 媒体 ID
             selected_models: 选定的模型
+            contradiction_scan: 任务级语义矛盾扫描开关；None 继承全局配置
             skip_calibration: 是否跳过分块 LLM 校对调用（processing_options.calibrate=False
                 时为 True）。说话人推断、说话人映射、对话规范化合并这些步骤仍会执行——
                 它们属于"转录"交付物（谁在说话）而非"校对"（文字是否准确），跳过的只是
                 逐块把文本喂给 LLM 做文字校正/纠错的那一步。矛盾扫描不受
-                skip_calibration 控制，仍会运行；仅受 contradiction_scan_enabled 与
-                infer_speaker_names 门控。
+                skip_calibration 控制，仍会运行；仅受 has_speaker 与自身开关门控。
             has_speaker: 输入是否携带说话人标签。None（默认）时自动判定——
                 任一原始输入段能解析出说话人标签即为 True（混合输入维持现状
                 行为）；False 时走「无说话人逐段校对」模式：跳过说话人推断、
@@ -292,7 +293,7 @@ class SpeakerAwareProcessor:
                 description=description,
                 selected_models=selected_models,
                 has_speaker=has_speaker,
-                infer_speaker_names=infer_speaker_names,
+                contradiction_scan=contradiction_scan,
             )
         )
         for flag in contradiction_flags:
@@ -345,14 +346,17 @@ class SpeakerAwareProcessor:
         description: str,
         selected_models: Optional[Dict],
         has_speaker: bool,
-        infer_speaker_names: bool,
+        contradiction_scan: Optional[bool],
     ) -> tuple[str, Dict[str, Dict[str, Any]], List[str]]:
         """Run the semantic scan gate after final segment IDs are assigned."""
         if not has_speaker:
             return "skipped", {}, []
-        if not infer_speaker_names or not bool(
-            getattr(self.config, "contradiction_scan_enabled", True)
-        ):
+        scan_enabled = (
+            bool(getattr(self.config, "contradiction_scan_enabled", True))
+            if contradiction_scan is None
+            else bool(contradiction_scan)
+        )
+        if not scan_enabled:
             return "disabled", {}, []
         try:
             result = self.contradiction_scanner.scan_contradictions(
@@ -369,12 +373,12 @@ class SpeakerAwareProcessor:
         if not isinstance(result, dict):
             return "failed", {}, []
         status = result.get("status")
-        if status not in {"completed", "failed", "skipped"}:
+        # In speaker mode, a scanner-level skipped/disabled/unknown result is
+        # not a valid partial outcome: SPEC 7.3 reserves skipped for the
+        # no-speaker gate. Treat every non-completed result as failed and drop
+        # any attached markers so status cannot claim full coverage.
+        if status != "completed":
             return "failed", {}, []
-        if status == "failed":
-            return "failed", {}, []
-        if status == "skipped":
-            return "skipped", {}, []
         known_ids = {
             str(dialog.get("segment_id"))
             for dialog in dialogs

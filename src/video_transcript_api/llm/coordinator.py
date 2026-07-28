@@ -120,6 +120,7 @@ class LLMCoordinator:
         skip_calibration: bool = False,
         speaker_count_hint: Optional[int] = None,
         infer_speaker_names: bool = True,
+        contradiction_scan: Optional[bool] = None,
         skip_chapters: bool = False,
         timeline_segments: Optional[List[Dict]] = None,
     ) -> Dict:
@@ -147,6 +148,7 @@ class LLMCoordinator:
                 丢失结构化对话语境。调用方（llm_ops._handle_llm_task）从缓存的
                 llm_processed.json 里读出真实说话人数回传，None 表示"没有更优信息，
                 按自动推断走"，不影响其余调用方（保持向后兼容）。
+            contradiction_scan: 任务级语义矛盾扫描开关；None 继承全局配置。
             skip_chapters: 是否跳过章节生成（processing_options.chapters=False 或
                 分层缓存层已满足时为 True）。跳过时 chapters_status 保持 None——
                 "本轮未尝试"，由下游合并语义保留旧值。
@@ -190,6 +192,7 @@ class LLMCoordinator:
                 selected_models=selected_models,
                 skip_calibration=skip_calibration,
                 infer_speaker_names=infer_speaker_names,
+                contradiction_scan=contradiction_scan,
             )
 
         # 提取校对文本和说话人信息
@@ -320,6 +323,7 @@ class LLMCoordinator:
         selected_models: Dict,
         skip_calibration: bool = False,
         infer_speaker_names: bool = True,
+        contradiction_scan: Optional[bool] = None,
     ) -> Dict:
         """路由到对应的校对处理器
 
@@ -362,6 +366,7 @@ class LLMCoordinator:
                 selected_models=selected_models,
                 skip_calibration=skip_calibration,
                 infer_speaker_names=infer_speaker_names,
+                contradiction_scan=contradiction_scan,
             )
         elif isinstance(content, dict):
             # 如果传入字典，尝试提取 segments 字段
@@ -381,6 +386,7 @@ class LLMCoordinator:
                     selected_models=selected_models,
                     skip_calibration=skip_calibration,
                     infer_speaker_names=infer_speaker_names,
+                    contradiction_scan=contradiction_scan,
                 )
             else:
                 raise ValueError(
