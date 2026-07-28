@@ -127,6 +127,7 @@ class LLMConfig:
     # positional construction of LLMConfig.
     notes_model: Optional[str] = None
     notes_reasoning_effort: Optional[str] = None
+    notes_concurrency: int = 10
 
     @classmethod
     def from_dict(cls, config_dict: dict) -> "LLMConfig":
@@ -319,6 +320,7 @@ class LLMConfig:
                     llm_config.get("summary_reasoning_effort"),
                 )
             ),
+            notes_concurrency=llm_config.get("notes_concurrency", 10),
         )
 
     def get_models(self) -> dict:

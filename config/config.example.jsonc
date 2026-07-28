@@ -173,11 +173,12 @@
         // ------------------------------------------------------
         // 按需分章详细笔记（可选）
         // ------------------------------------------------------
-        // 未配置时自动复用 summary_model / summary_reasoning_effort。
+        // notes_model 未配置时自动回退 summary_model；推理强度同理回退 summary_reasoning_effort。
         // 详细笔记只由查看页按钮或 POST /api/generate_notes 触发，
         // 不属于 /api/transcribe 的公开 processing_options。
         "notes_model": "deepseek-v4-flash",
         "notes_reasoning_effort": "high",
+        "notes_concurrency": 10,          // 分章并发数上限；按实际章节数自动取较小值
 
         // ------------------------------------------------------
         // 通用配置

@@ -51,8 +51,13 @@ Content-Type: application/json
 - `generated`：所有章节均生成成功，且完整 `llm_notes.txt` 已落盘。
 - `failed`：指纹校验、章节切片或任一章节 LLM 调用失败。
 
-逐章调用串行执行，使用 `task_type="notes"` 记录审计 token。任一章在客户端
-内置重试后仍失败时，整批失败且不写半成品 `llm_notes.txt`。
+逐章调用默认并发执行，使用 `llm.notes_concurrency` 控制 worker 数（默认 10，
+实际取配置值与章节数的较小值），并使用 `task_type="notes"` 记录审计 token。
+最终输出仍严格按章节 index 拼接，与完成顺序无关。任一章在客户端内置重试后
+仍失败或返回空内容时，整批失败且不写半成品 `llm_notes.txt`。
+
+详细笔记默认使用 `llm.notes_model`；未配置时回退到 `summary_model`。示例配置为
+`deepseek-v4-flash`，可通过 `notes_model` 和 `notes_reasoning_effort` 单独调整。
 
 ## 查看与导出
 

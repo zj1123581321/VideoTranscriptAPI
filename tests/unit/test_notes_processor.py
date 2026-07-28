@@ -1,10 +1,13 @@
 """Unit tests for chapter-detailed notes processing."""
 
 import json
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
 from video_transcript_api.llm.core.config import LLMConfig
+from video_transcript_api.llm.core.usage_context import get_context, set_context
 from video_transcript_api.llm.processors.notes_processor import (
     NotesProcessor,
     compute_notes_anchor_fingerprint,
@@ -32,7 +35,7 @@ class FakeNotesClient:
         return response
 
 
-def _config():
+def _config(*, notes_concurrency=10):
     return LLMConfig(
         api_key="test-key",
         base_url="http://localhost",
@@ -41,6 +44,7 @@ def _config():
         summary_reasoning_effort="low",
         notes_model="notes-model",
         notes_reasoning_effort="high",
+        notes_concurrency=notes_concurrency,
     )
 
 
@@ -88,6 +92,39 @@ def _chapter_payload(segments):
             },
         ],
     }
+
+
+def _chapter_batch(count):
+    segments = [
+        {
+            "start_time": index * 10,
+            "end_time": index * 10 + 10,
+            "speaker": "Speaker",
+            "text": f"Chapter {index} source text",
+        }
+        for index in range(count)
+    ]
+    return segments, {
+        "source": {
+            "kind": "dialogs",
+            "fingerprint": compute_notes_anchor_fingerprint(segments),
+        },
+        "chapters": [
+            {
+                "title": f"Chapter {index}",
+                "gist": f"Chapter {index} gist",
+                "start_seg": index,
+                "end_seg": index,
+            }
+            for index in range(count)
+        ],
+    }
+
+
+def _chapter_title(user_prompt):
+    marker = "本章标题："
+    start = user_prompt.index(marker) + len(marker)
+    return user_prompt[start:].splitlines()[0]
 
 
 def test_structured_slice_is_closed_and_calls_notes_sequentially():
@@ -198,6 +235,129 @@ def test_one_chapter_failure_returns_no_partial_text():
     assert result.text is None
     assert result.error.startswith("chapter 1 notes generation failed: provider exploded")
     assert len(client.calls) == 2
+
+
+def test_notes_concurrency_keeps_chapter_order_when_completion_is_out_of_order():
+    segments, chapters = _chapter_batch(4)
+    completed = []
+    delays = {
+        "Chapter 0": 0.04,
+        "Chapter 1": 0.03,
+        "Chapter 2": 0.02,
+        "Chapter 3": 0.01,
+    }
+
+    class DelayedNotesClient:
+        def call(self, **kwargs):
+            title = _chapter_title(kwargs["user_prompt"])
+            time.sleep(delays[title])
+            completed.append(title)
+            return f"- {title} notes"
+
+    result = NotesProcessor(DelayedNotesClient(), _config(notes_concurrency=4)).process(
+        chapters=chapters,
+        source_segments=segments,
+    )
+
+    assert result.status is NotesStatus.GENERATED
+    assert completed == ["Chapter 3", "Chapter 2", "Chapter 1", "Chapter 0"]
+    assert result.text.index("Chapter 0\n- Chapter 0 notes") < result.text.index(
+        "Chapter 1\n- Chapter 1 notes"
+    )
+    assert result.text.index("Chapter 1\n- Chapter 1 notes") < result.text.index(
+        "Chapter 2\n- Chapter 2 notes"
+    )
+    assert result.text.index("Chapter 2\n- Chapter 2 notes") < result.text.index(
+        "Chapter 3\n- Chapter 3 notes"
+    )
+
+
+def test_notes_concurrency_does_not_exceed_configured_worker_limit():
+    segments, chapters = _chapter_batch(5)
+    active = 0
+    peak = 0
+    counter_lock = threading.Lock()
+
+    class CountingNotesClient:
+        def call(self, **kwargs):
+            nonlocal active, peak
+            with counter_lock:
+                active += 1
+                peak = max(peak, active)
+            try:
+                time.sleep(0.02)
+                return "- notes"
+            finally:
+                with counter_lock:
+                    active -= 1
+
+    result = NotesProcessor(CountingNotesClient(), _config(notes_concurrency=2)).process(
+        chapters=chapters,
+        source_segments=segments,
+    )
+
+    assert result.status is NotesStatus.GENERATED
+    assert peak <= 2
+    assert peak > 1
+
+
+def test_notes_concurrency_propagates_usage_context_to_workers():
+    segments, chapters = _chapter_batch(3)
+    seen_contexts = []
+    context_lock = threading.Lock()
+
+    class ContextNotesClient:
+        def call(self, **kwargs):
+            with context_lock:
+                seen_contexts.append(get_context())
+            return "- notes"
+
+    with set_context(task_id="task-123", stage="notes"):
+        result = NotesProcessor(ContextNotesClient(), _config(notes_concurrency=3)).process(
+            chapters=chapters,
+            source_segments=segments,
+        )
+
+    assert result.status is NotesStatus.GENERATED
+    assert seen_contexts == [
+        {"task_id": "task-123", "stage": "notes"},
+        {"task_id": "task-123", "stage": "notes"},
+        {"task_id": "task-123", "stage": "notes"},
+    ]
+
+
+def test_empty_chapter_response_returns_failed_without_partial_text():
+    segments, chapters = _chapter_batch(2)
+
+    class EmptySecondNotesClient:
+        def call(self, **kwargs):
+            return "" if _chapter_title(kwargs["user_prompt"]) == "Chapter 1" else "- first"
+
+    result = NotesProcessor(EmptySecondNotesClient(), _config(notes_concurrency=2)).process(
+        chapters=chapters,
+        source_segments=segments,
+    )
+
+    assert result.status is NotesStatus.FAILED
+    assert result.text is None
+    assert result.error == "chapter 1 notes response is empty"
+
+
+def test_notes_concurrency_config_defaults_to_ten_and_parses_explicit_value():
+    base = {
+        "api_key": "k",
+        "base_url": "u",
+        "calibrate_model": "calibrate",
+        "summary_model": "summary",
+    }
+
+    default_config = LLMConfig.from_dict({"llm": base})
+    explicit_config = LLMConfig.from_dict(
+        {"llm": {**base, "notes_concurrency": 3}}
+    )
+
+    assert default_config.notes_concurrency == 10
+    assert explicit_config.notes_concurrency == 3
 
 
 def test_notes_prompt_contract_contains_context_and_constraints():
