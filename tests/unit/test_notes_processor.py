@@ -344,7 +344,11 @@ def test_empty_chapter_response_returns_failed_without_partial_text():
 
 
 def test_failed_chapter_cancels_queued_chapters_instead_of_burning_quota():
-    """First-chapter failure must not keep spending LLM calls on queued chapters."""
+    """Serialized case: a first-chapter failure must not spend calls on queued chapters.
+
+    Cancellation is best-effort in general (idle workers race to pull the next
+    queued item); this locks the deterministic single-worker case only.
+    """
     segments, chapters = _chapter_batch(5)
     calls = []
 
