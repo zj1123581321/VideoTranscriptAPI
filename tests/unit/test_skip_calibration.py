@@ -122,8 +122,11 @@ class TestSpeakerAwareProcessorSkipCalibration:
         speakers_in_output = {d["speaker"] for d in result["structured_data"]["dialogs"]}
         assert speakers_in_output == {"Alice", "Bob"}
 
-        # No chunk-level LLM calibration call was made.
-        llm_client.call.assert_not_called()
+        # Calibration is disabled, but Increment 2 still performs its single
+        # contradiction scan; a non-structured mock response is reported as
+        # failed without blocking the passthrough result.
+        llm_client.call.assert_called_once()
+        assert result["stats"]["contradiction_scan_status"] == "failed"
 
         assert result["stats"]["calibration_stats"]["calibration_status"] == (
             CalibrationStatus.DISABLED

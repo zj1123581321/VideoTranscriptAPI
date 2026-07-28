@@ -11,6 +11,7 @@ from ...utils.logging import setup_logger
 from ...utils.llm_status import CalibrationStatus
 from ..core.config import LLMConfig
 from ..core.llm_client import LLMClient
+from ..core.contradiction_scanner import ContradictionScanner
 from ..core.key_info_extractor import KeyInfoExtractor, KeyInfo
 from ..core.speaker_inferencer import SpeakerInferencer
 from ..core.speaker_inferencer import build_speaker_risk_flags
@@ -41,6 +42,7 @@ class SpeakerAwareProcessor:
         key_info_extractor: KeyInfoExtractor,
         speaker_inferencer: SpeakerInferencer,
         quality_validator: UnifiedQualityValidator,
+        contradiction_scanner: Optional[ContradictionScanner] = None,
     ):
         """初始化有说话人文本处理器
 
@@ -57,6 +59,12 @@ class SpeakerAwareProcessor:
         self.speaker_inferencer = speaker_inferencer
         self.quality_validator = quality_validator
         self.segmenter = DialogSegmenter(config)
+        self.contradiction_scanner = contradiction_scanner or ContradictionScanner(
+            llm_client=llm_client,
+            model=getattr(config, "speaker_model", None)
+            or getattr(config, "calibrate_model", ""),
+            reasoning_effort=getattr(config, "speaker_reasoning_effort", None),
+        )
 
     def process(
         self,
@@ -273,6 +281,22 @@ class SpeakerAwareProcessor:
             # changing the original start-time-derived base ID.
             calibrated_dialogs = self._deduplicate_segment_ids(calibrated_dialogs)
 
+        contradiction_scan_status, segment_overrides, contradiction_flags = (
+            self._run_contradiction_scan(
+                dialogs=calibrated_dialogs,
+                speaker_mapping=speaker_mapping,
+                speaker_inference_meta=speaker_inference_meta,
+                title=title,
+                description=description,
+                selected_models=selected_models,
+                has_speaker=has_speaker,
+                infer_speaker_names=infer_speaker_names,
+            )
+        )
+        for flag in contradiction_flags:
+            if flag not in speaker_risk_flags:
+                speaker_risk_flags.append(flag)
+
         original_text = self._build_text_from_dialogs(
             normalized_dialogs, has_speaker=has_speaker
         )
@@ -291,7 +315,7 @@ class SpeakerAwareProcessor:
                 "dialogs": calibrated_dialogs,
                 "speaker_mapping": speaker_mapping,
                 "speaker_inference_meta": speaker_inference_meta,
-                "segment_overrides": {},
+                "segment_overrides": segment_overrides,
                 "speaker_risk_flags": speaker_risk_flags,
             },
             "key_info": key_info.to_dict(),
@@ -306,8 +330,106 @@ class SpeakerAwareProcessor:
                 "speaker_inference": speaker_inference_meta,
                 "speaker_inference_source": speaker_inference_source,
                 "speaker_risk_flags": speaker_risk_flags,
+                "contradiction_scan_status": contradiction_scan_status,
             }
         }
+
+    def _run_contradiction_scan(
+        self,
+        dialogs: List[Dict],
+        speaker_mapping: Dict[str, str],
+        speaker_inference_meta: Dict[str, Any],
+        title: str,
+        description: str,
+        selected_models: Optional[Dict],
+        has_speaker: bool,
+        infer_speaker_names: bool,
+    ) -> tuple[str, Dict[str, Dict[str, Any]], List[str]]:
+        """Run the semantic scan gate after final segment IDs are assigned."""
+        if not has_speaker:
+            return "skipped", {}, []
+        if not infer_speaker_names or not bool(
+            getattr(self.config, "contradiction_scan_enabled", True)
+        ):
+            return "disabled", {}, []
+        try:
+            result = self.contradiction_scanner.scan_contradictions(
+                dialogs=dialogs,
+                speaker_mapping=speaker_mapping,
+                speaker_inference_meta=speaker_inference_meta,
+                title=title,
+                description=description,
+                selected_models=selected_models,
+            )
+        except Exception as exc:
+            logger.warning(f"Contradiction scan failed; continuing without overrides: {exc}")
+            return "failed", {}, []
+        if not isinstance(result, dict):
+            return "failed", {}, []
+        status = result.get("status")
+        if status not in {"completed", "failed"}:
+            return "failed", {}, []
+        if status == "failed":
+            return "failed", {}, []
+        known_ids = {
+            str(dialog.get("segment_id"))
+            for dialog in dialogs
+            if dialog.get("segment_id")
+        }
+        overrides = self._sanitize_contradiction_overrides(
+            result.get("segment_overrides"), known_ids
+        )
+        raw_flags = result.get("speaker_risk_flags", [])
+        flags = (
+            [
+                flag
+                for flag in raw_flags
+                if flag
+                in {"semantic_contradiction_detected", "semantic_scan_unreliable"}
+            ]
+            if isinstance(raw_flags, list)
+            else []
+        )
+        return "completed", overrides, list(dict.fromkeys(flags))
+
+    @staticmethod
+    def _sanitize_contradiction_overrides(
+        overrides: Any, known_ids: set[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """Persist only the fixed suspect contract; never persist a name/free text."""
+        if not isinstance(overrides, dict):
+            return {}
+        allowed_reasons = {
+            "direct_address_conflict",
+            "self_reference_conflict",
+            "third_person_conflict",
+            "qa_adjacency_conflict",
+        }
+        sanitized: Dict[str, Dict[str, Any]] = {}
+        for segment_id, override in overrides.items():
+            if (
+                not isinstance(segment_id, str)
+                or segment_id not in known_ids
+                or not isinstance(override, dict)
+                or override.get("status") != "suspect"
+                or override.get("assignment_source") != "semantic_evidence"
+                or override.get("reason") not in allowed_reasons
+            ):
+                continue
+            evidence = override.get("evidence_segment_ids")
+            if (
+                not isinstance(evidence, list)
+                or not evidence
+                or any(not isinstance(item, str) or item not in known_ids for item in evidence)
+            ):
+                continue
+            sanitized[segment_id] = {
+                "status": "suspect",
+                "assignment_source": "semantic_evidence",
+                "reason": override["reason"],
+                "evidence_segment_ids": list(dict.fromkeys(evidence)),
+            }
+        return sanitized
 
     def _coerce_dialogs(self, dialogs: List[Dict], has_speaker: bool = True) -> List[Dict]:
         """将原始对话列表规范化为最小可用格式（speaker/text/start/end/duration）。
