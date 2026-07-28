@@ -353,7 +353,7 @@ def test_processor_sanitizer_derives_reasons_from_scanner(monkeypatch):
     ("extra_field", "extra_value"), [("name", "Alice"), ("reasoning", "free text")]
 )
 def test_processor_sanitizer_discards_contradiction_with_hallucinated_extra_field(
-    extra_field, extra_value
+    extra_field, extra_value, caplog
 ):
     override = {
         "status": "suspect",
@@ -363,11 +363,40 @@ def test_processor_sanitizer_discards_contradiction_with_hallucinated_extra_fiel
         extra_field: extra_value,
     }
 
-    sanitized = SpeakerAwareProcessor._sanitize_contradiction_overrides(
-        {"seg_0": override}, {"seg_0"}
-    )
+    with patch(
+        "video_transcript_api.llm.processors.speaker_aware_processor.logger",
+        logging.getLogger("speaker_aware_processor_field_set_test"),
+    ), caplog.at_level(logging.WARNING):
+        sanitized = SpeakerAwareProcessor._sanitize_contradiction_overrides(
+            {"seg_0": override}, {"seg_0"}
+        )
 
     assert sanitized == {}
+    assert "Contradiction override dropped for segment_id 'seg_0'" in caplog.text
+    assert "field set mismatch" in caplog.text
+
+
+def test_processor_sanitizer_discards_contradiction_with_hallucinated_evidence_id(
+    caplog,
+):
+    override = {
+        "status": "suspect",
+        "assignment_source": "semantic_evidence",
+        "reason": "self_reference_conflict",
+        "evidence_segment_ids": ["seg_missing"],
+    }
+
+    with patch(
+        "video_transcript_api.llm.processors.speaker_aware_processor.logger",
+        logging.getLogger("speaker_aware_processor_evidence_test"),
+    ), caplog.at_level(logging.WARNING):
+        sanitized = SpeakerAwareProcessor._sanitize_contradiction_overrides(
+            {"seg_0": override}, {"seg_0"}
+        )
+
+    assert sanitized == {}
+    assert "Contradiction override dropped for segment_id 'seg_0'" in caplog.text
+    assert "evidence segment id hallucination" in caplog.text
 
 
 def test_processor_preserves_scanner_skipped_status():

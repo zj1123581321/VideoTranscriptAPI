@@ -412,22 +412,30 @@ class SpeakerAwareProcessor:
         }
         sanitized: Dict[str, Dict[str, Any]] = {}
         for segment_id, override in overrides.items():
-            if (
-                not isinstance(segment_id, str)
-                or segment_id not in known_ids
-                or not isinstance(override, dict)
-                or set(override) != allowed_fields
-                or override.get("status") != "suspect"
-                or override.get("assignment_source") != "semantic_evidence"
-                or override.get("reason") not in allowed_reasons
-            ):
+            validation_warning: Optional[str] = None
+            if not isinstance(segment_id, str) or segment_id not in known_ids:
+                validation_warning = f"Contradiction override dropped for segment_id {segment_id!r}: target id hallucination"
+            elif not isinstance(override, dict):
+                validation_warning = f"Contradiction override dropped for segment_id {segment_id!r}: override fields are malformed"
+            elif set(override) != allowed_fields:
+                validation_warning = f"Contradiction override dropped for segment_id {segment_id!r}: field set mismatch"
+            elif override.get("status") != "suspect":
+                validation_warning = f"Contradiction override dropped for segment_id {segment_id!r}: status mismatch"
+            elif override.get("assignment_source") != "semantic_evidence":
+                validation_warning = f"Contradiction override dropped for segment_id {segment_id!r}: assignment source mismatch"
+            elif override.get("reason") not in allowed_reasons:
+                validation_warning = f"Contradiction override dropped for segment_id {segment_id!r}: reason is illegal ({override.get('reason')!r})"
+            if validation_warning is not None:
+                logger.warning(validation_warning)
                 continue
             evidence = override.get("evidence_segment_ids")
-            if (
-                not isinstance(evidence, list)
-                or not evidence
-                or any(not isinstance(item, str) or item not in known_ids for item in evidence)
-            ):
+            evidence_warning: Optional[str] = None
+            if not isinstance(evidence, list) or not evidence:
+                evidence_warning = f"Contradiction override dropped for segment_id {segment_id!r}: evidence fields are malformed"
+            elif any(not isinstance(item, str) or item not in known_ids for item in evidence):
+                evidence_warning = f"Contradiction override dropped for segment_id {segment_id!r}: evidence segment id hallucination"
+            if evidence_warning is not None:
+                logger.warning(evidence_warning)
                 continue
             sanitized[segment_id] = {
                 "status": "suspect",
