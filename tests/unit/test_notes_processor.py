@@ -129,7 +129,9 @@ def _chapter_title(user_prompt):
 def test_structured_slice_is_closed_and_calls_notes_sequentially():
     segments = _structured_segments()
     client = FakeNotesClient(["- **第一章结论**", "- 第二章结论"])
-    processor = NotesProcessor(client, _config())
+    # FakeNotesClient 按队列顺序分发响应，只在串行下确定；本用例锁的是切片闭区间
+    # 与相邻章上下文的提示词契约，并发行为由下面的 concurrency 用例覆盖。
+    processor = NotesProcessor(client, _config(notes_concurrency=1))
 
     result = processor.process(
         chapters=_chapter_payload(segments),
@@ -225,7 +227,8 @@ def test_one_chapter_failure_returns_no_partial_text():
     segments = _structured_segments()
     client = FakeNotesClient(["- first", RuntimeError("provider exploded")])
 
-    result = NotesProcessor(client, _config()).process(
+    # 同上：队列式响应分发只在串行下确定，这里锁的是"任一章失败即整体失败"。
+    result = NotesProcessor(client, _config(notes_concurrency=1)).process(
         chapters=_chapter_payload(segments),
         source_segments=segments,
     )
