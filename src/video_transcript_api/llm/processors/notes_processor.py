@@ -5,7 +5,9 @@ the queue layer.  It deliberately does not write cache files; callers persist
 only a successful ``NotesResult`` through ``CacheManager``.
 """
 
+import contextvars
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
 import json
 import math
 from pathlib import Path
@@ -399,16 +401,11 @@ class NotesProcessor:
                 )
 
             model, reasoning_effort = self._resolve_model(selected_models)
-            notes_sections: List[str] = []
-            for position, chapter in enumerate(mapping.slices):
+            def generate_chapter_notes(position: int, chapter: NotesChapterSlice) -> str:
                 chapter_text = format_notes_segment_slice(chapter.segments)
                 if not chapter_text:
-                    return NotesResult(
-                        text=None,
-                        status=NotesStatus.FAILED,
-                        error=f"chapter {position} has no renderable transcript",
-                        fingerprint=mapping.current_fingerprint,
-                        chapter_count=len(mapping.slices),
+                    raise RuntimeError(
+                        f"chapter {position} has no renderable transcript"
                     )
 
                 previous_title = mapping.slices[position - 1].title if position else ""
@@ -433,13 +430,9 @@ class NotesProcessor:
                         task_type="notes",
                     )
                 except Exception as exc:  # noqa: BLE001 - preserve processor contract
-                    return NotesResult(
-                        text=None,
-                        status=NotesStatus.FAILED,
-                        error=f"chapter {position} notes generation failed: {exc}",
-                        fingerprint=mapping.current_fingerprint,
-                        chapter_count=len(mapping.slices),
-                    )
+                    raise RuntimeError(
+                        f"chapter {position} notes generation failed: {exc}"
+                    ) from exc
 
                 chapter_notes = (
                     response
@@ -447,16 +440,39 @@ class NotesProcessor:
                     else getattr(response, "text", "")
                 )
                 if not isinstance(chapter_notes, str) or not chapter_notes.strip():
-                    return NotesResult(
-                        text=None,
-                        status=NotesStatus.FAILED,
-                        error=f"chapter {position} notes response is empty",
-                        fingerprint=mapping.current_fingerprint,
-                        chapter_count=len(mapping.slices),
+                    raise RuntimeError(f"chapter {position} notes response is empty")
+                return f"{_format_chapter_heading(chapter)}\n{chapter_notes.strip()}"
+
+            max_workers = min(len(mapping.slices), self.config.notes_concurrency)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [
+                    executor.submit(
+                        contextvars.copy_context().run,
+                        generate_chapter_notes,
+                        position,
+                        chapter,
                     )
-                notes_sections.append(
-                    f"{_format_chapter_heading(chapter)}\n{chapter_notes.strip()}"
-                )
+                    for position, chapter in enumerate(mapping.slices)
+                ]
+                notes_sections: List[str] = []
+                for future in futures:
+                    try:
+                        notes_sections.append(future.result())
+                    except Exception as exc:  # noqa: BLE001 - preserve processor contract
+                        # 整批一次性提交，失败时 shutdown(wait=True) 会把排队章节
+                        # 全部跑完。这里尽力取消尚未开始的章节以少烧配额——仅是
+                        # best-effort：空闲 worker 会立刻拉取下一个排队项，与本次
+                        # cancel 天然竞态，且失败按提交顺序察觉（靠后章节先失败时
+                        # 会晚一拍）。要严格保证得改成有界提交，对自用工具不值当。
+                        for pending in futures:
+                            pending.cancel()
+                        return NotesResult(
+                            text=None,
+                            status=NotesStatus.FAILED,
+                            error=str(exc),
+                            fingerprint=mapping.current_fingerprint,
+                            chapter_count=len(mapping.slices),
+                        )
 
             return NotesResult(
                 text="\n\n".join(notes_sections),

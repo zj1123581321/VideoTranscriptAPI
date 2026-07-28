@@ -1,10 +1,12 @@
 """Unit tests for chapter-detailed notes processing."""
 
 import json
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
 from video_transcript_api.llm.core.config import LLMConfig
+from video_transcript_api.llm.core.usage_context import get_context, set_context
 from video_transcript_api.llm.processors.notes_processor import (
     NotesProcessor,
     compute_notes_anchor_fingerprint,
@@ -32,7 +34,7 @@ class FakeNotesClient:
         return response
 
 
-def _config():
+def _config(*, notes_concurrency=10):
     return LLMConfig(
         api_key="test-key",
         base_url="http://localhost",
@@ -41,6 +43,7 @@ def _config():
         summary_reasoning_effort="low",
         notes_model="notes-model",
         notes_reasoning_effort="high",
+        notes_concurrency=notes_concurrency,
     )
 
 
@@ -90,10 +93,45 @@ def _chapter_payload(segments):
     }
 
 
+def _chapter_batch(count):
+    segments = [
+        {
+            "start_time": index * 10,
+            "end_time": index * 10 + 10,
+            "speaker": "Speaker",
+            "text": f"Chapter {index} source text",
+        }
+        for index in range(count)
+    ]
+    return segments, {
+        "source": {
+            "kind": "dialogs",
+            "fingerprint": compute_notes_anchor_fingerprint(segments),
+        },
+        "chapters": [
+            {
+                "title": f"Chapter {index}",
+                "gist": f"Chapter {index} gist",
+                "start_seg": index,
+                "end_seg": index,
+            }
+            for index in range(count)
+        ],
+    }
+
+
+def _chapter_title(user_prompt):
+    marker = "本章标题："
+    start = user_prompt.index(marker) + len(marker)
+    return user_prompt[start:].splitlines()[0]
+
+
 def test_structured_slice_is_closed_and_calls_notes_sequentially():
     segments = _structured_segments()
     client = FakeNotesClient(["- **第一章结论**", "- 第二章结论"])
-    processor = NotesProcessor(client, _config())
+    # FakeNotesClient 按队列顺序分发响应，只在串行下确定；本用例锁的是切片闭区间
+    # 与相邻章上下文的提示词契约，并发行为由下面的 concurrency 用例覆盖。
+    processor = NotesProcessor(client, _config(notes_concurrency=1))
 
     result = processor.process(
         chapters=_chapter_payload(segments),
@@ -189,7 +227,8 @@ def test_one_chapter_failure_returns_no_partial_text():
     segments = _structured_segments()
     client = FakeNotesClient(["- first", RuntimeError("provider exploded")])
 
-    result = NotesProcessor(client, _config()).process(
+    # 同上：队列式响应分发只在串行下确定，这里锁的是"任一章失败即整体失败"。
+    result = NotesProcessor(client, _config(notes_concurrency=1)).process(
         chapters=_chapter_payload(segments),
         source_segments=segments,
     )
@@ -198,6 +237,136 @@ def test_one_chapter_failure_returns_no_partial_text():
     assert result.text is None
     assert result.error.startswith("chapter 1 notes generation failed: provider exploded")
     assert len(client.calls) == 2
+
+
+def test_notes_concurrency_keeps_chapter_order_when_completion_is_out_of_order():
+    segments, chapters = _chapter_batch(4)
+    completed = []
+    completion_events = [threading.Event() for _ in range(4)]
+
+    class ReverseCompletionNotesClient:
+        def call(self, **kwargs):
+            title = _chapter_title(kwargs["user_prompt"])
+            chapter_index = int(title.rsplit(" ", 1)[1])
+            if chapter_index + 1 < len(completion_events):
+                assert completion_events[chapter_index + 1].wait(timeout=5), (
+                    f"Timed out waiting for Chapter {chapter_index + 1}"
+                )
+            completed.append(title)
+            completion_events[chapter_index].set()
+            return f"- {title} notes"
+
+    result = NotesProcessor(
+        ReverseCompletionNotesClient(), _config(notes_concurrency=4)
+    ).process(chapters=chapters, source_segments=segments)
+
+    assert result.status is NotesStatus.GENERATED
+    assert completed == ["Chapter 3", "Chapter 2", "Chapter 1", "Chapter 0"]
+    assert result.text.index("Chapter 0\n- Chapter 0 notes") < result.text.index(
+        "Chapter 1\n- Chapter 1 notes"
+    )
+    assert result.text.index("Chapter 1\n- Chapter 1 notes") < result.text.index(
+        "Chapter 2\n- Chapter 2 notes"
+    )
+    assert result.text.index("Chapter 2\n- Chapter 2 notes") < result.text.index(
+        "Chapter 3\n- Chapter 3 notes"
+    )
+
+
+def test_notes_concurrency_does_not_exceed_configured_worker_limit():
+    notes_concurrency = 2
+    segments, chapters = _chapter_batch(4)
+    expected_concurrency = min(len(chapters["chapters"]), notes_concurrency)
+    concurrent_barrier = threading.Barrier(expected_concurrency, timeout=5)
+    active = 0
+    peak = 0
+    counter_lock = threading.Lock()
+
+    class CountingNotesClient:
+        def call(self, **kwargs):
+            nonlocal active, peak
+            with counter_lock:
+                active += 1
+                peak = max(peak, active)
+            try:
+                concurrent_barrier.wait()
+                return "- notes"
+            finally:
+                with counter_lock:
+                    active -= 1
+
+    result = NotesProcessor(
+        CountingNotesClient(), _config(notes_concurrency=notes_concurrency)
+    ).process(chapters=chapters, source_segments=segments)
+
+    assert result.status is NotesStatus.GENERATED
+    assert peak <= notes_concurrency
+    assert peak == expected_concurrency
+
+
+def test_notes_concurrency_propagates_usage_context_to_workers():
+    segments, chapters = _chapter_batch(3)
+    seen_contexts = []
+    context_lock = threading.Lock()
+
+    class ContextNotesClient:
+        def call(self, **kwargs):
+            with context_lock:
+                seen_contexts.append(get_context())
+            return "- notes"
+
+    with set_context(task_id="task-123", stage="notes"):
+        result = NotesProcessor(ContextNotesClient(), _config(notes_concurrency=3)).process(
+            chapters=chapters,
+            source_segments=segments,
+        )
+
+    assert result.status is NotesStatus.GENERATED
+    assert seen_contexts == [
+        {"task_id": "task-123", "stage": "notes"},
+        {"task_id": "task-123", "stage": "notes"},
+        {"task_id": "task-123", "stage": "notes"},
+    ]
+
+
+def test_empty_chapter_response_returns_failed_without_partial_text():
+    segments, chapters = _chapter_batch(2)
+
+    class EmptySecondNotesClient:
+        def call(self, **kwargs):
+            return "" if _chapter_title(kwargs["user_prompt"]) == "Chapter 1" else "- first"
+
+    result = NotesProcessor(EmptySecondNotesClient(), _config(notes_concurrency=2)).process(
+        chapters=chapters,
+        source_segments=segments,
+    )
+
+    assert result.status is NotesStatus.FAILED
+    assert result.text is None
+    assert result.error == "chapter 1 notes response is empty"
+
+
+# NOTE: 失败后 cancel 排队章节是 best-effort（见 notes_processor 的注释）：主线程
+# cancel 与 worker 的 set_running_or_notify_cancel 本身就是竞态，任何断言"排队章节
+# 未被执行"的测试都只是在赌调度顺序。失败语义由
+# test_one_chapter_failure_returns_no_partial_text 锁定，这里不再断言取消行为。
+
+
+def test_notes_concurrency_config_defaults_to_ten_and_parses_explicit_value():
+    base = {
+        "api_key": "k",
+        "base_url": "u",
+        "calibrate_model": "calibrate",
+        "summary_model": "summary",
+    }
+
+    default_config = LLMConfig.from_dict({"llm": base})
+    explicit_config = LLMConfig.from_dict(
+        {"llm": {**base, "notes_concurrency": 3}}
+    )
+
+    assert default_config.notes_concurrency == 10
+    assert explicit_config.notes_concurrency == 3
 
 
 def test_notes_prompt_contract_contains_context_and_constraints():

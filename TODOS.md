@@ -103,3 +103,23 @@
 **Priority:** P3
 
 **Depends on:** 无
+
+---
+
+## P2: Web Push 后端（任务完成推送，页面关闭也可达）
+
+**What:** VAPID 密钥管理 + 推送订阅存储 + 任务完成时触发 Web Push，让 PWA 在页面关闭后也能收到任务完成通知。
+
+**Why:** PWA 化的 E5 只交付了简化版（页面打开时 Notification API）。"提交后去干别的，完成弹通知"的完整闭环需要真推送。这是 CEO Plan `2026-07-28-pwa-installable` 的 Phase 2。
+
+**Pros:** 完成 10x 路径最后一块；SW 基建、通知权限 UX 在 PWA 化时已就位，边际成本集中在中后端。
+
+**Cons:** 引入订阅存储（SQLite 新表）和推送服务依赖（或自研 VAPID 签名）；需要处理订阅失效清理。
+
+**Context:** 切入点：SW 已监听 push 事件的位置在 `src/web/static/sw.js`（PWA 化落地后）；订阅端点挂在 `/api/` 下并走 Bearer 鉴权；任务完成钩子参考企微/飞书通知的触发点。评审记录见 `~/.gstack/projects/zlxlabs-VideoTranscriptAPI/ceo-plans/2026-07-28-pwa-installable.md`。
+
+**Effort:** L（人工 3-5 天）→ M（CC 2-3 小时）
+
+**Priority:** P2
+
+**Depends on:** PWA 化（feat/pwa-installable）先落地
