@@ -12,6 +12,9 @@ import pytest
 
 from video_transcript_api.api.services import llm_ops
 from video_transcript_api.cache.cache_manager import CacheManager
+from video_transcript_api.llm.processors.notes_processor import (
+    compute_notes_anchor_fingerprint,
+)
 from video_transcript_api.utils.llm_status import (
     CalibrationStatus,
     ChaptersStatus,
@@ -29,6 +32,15 @@ def notes_cache(tmp_path):
 
 
 def _seed_layered_notes_cache(cache_manager):
+    source_segments = [
+        {
+            "start_time": 0,
+            "end_time": 60,
+            "speaker": "Host",
+            "text": "raw transcript",
+        }
+    ]
+    source_fingerprint = compute_notes_anchor_fingerprint(source_segments)
     cache_manager.save_cache(
         platform="youtube",
         url="https://example.com/notes",
@@ -38,6 +50,13 @@ def _seed_layered_notes_cache(cache_manager):
         transcript_type="capswriter",
         title="Notes demo",
         author="Owner",
+    )
+    cache_manager.save_llm_result(
+        platform="youtube",
+        media_id="notes-media",
+        use_speaker_recognition=False,
+        llm_type="structured",
+        content={"dialogs": source_segments},
     )
     cache_manager.save_llm_result(
         platform="youtube",
@@ -61,9 +80,9 @@ def _seed_layered_notes_cache(cache_manager):
         content={
             "format_version": "v1",
             "source": {
-                "kind": "segments",
+                "kind": "dialogs",
                 "segment_count": 1,
-                "fingerprint": "fingerprint",
+                "fingerprint": source_fingerprint,
             },
             "chapters": [
                 {
@@ -83,10 +102,13 @@ def _seed_layered_notes_cache(cache_manager):
         summary_status=SummaryStatus.GENERATED,
         chapters_status=ChaptersStatus.GENERATED,
     )
-    return cache_manager.get_cache(
-        "youtube",
-        "notes-media",
-        use_speaker_recognition=False,
+    return (
+        cache_manager.get_cache(
+            "youtube",
+            "notes-media",
+            use_speaker_recognition=False,
+        ),
+        source_fingerprint,
     )
 
 
@@ -138,7 +160,7 @@ def _notes_patches(cache_manager, processor_result):
 
 
 def test_notes_task_only_adds_notes_layer(notes_cache):
-    snapshot = _seed_layered_notes_cache(notes_cache)
+    snapshot, source_fingerprint = _seed_layered_notes_cache(notes_cache)
     task_id = notes_cache.create_task(
         url="https://example.com/notes",
         platform="youtube",
@@ -167,7 +189,7 @@ def test_notes_task_only_adds_notes_layer(notes_cache):
         status=NotesStatus.GENERATED,
         text="## [00:00:00 - 00:01:00] Chapter\n- Notes",
         error=None,
-        fingerprint="fingerprint",
+        fingerprint=source_fingerprint,
         chapter_count=1,
     )
     processor, notification_router, contexts = _notes_patches(notes_cache, result)
@@ -208,7 +230,7 @@ def test_notes_task_only_adds_notes_layer(notes_cache):
 
 
 def test_notes_task_failure_writes_failed_status_without_artifact(notes_cache):
-    snapshot = _seed_layered_notes_cache(notes_cache)
+    snapshot, source_fingerprint = _seed_layered_notes_cache(notes_cache)
     task_id = notes_cache.create_task(
         url="https://example.com/notes",
         platform="youtube",
@@ -219,7 +241,7 @@ def test_notes_task_failure_writes_failed_status_without_artifact(notes_cache):
         status=NotesStatus.FAILED,
         text=None,
         error="chapter 1 notes generation failed",
-        fingerprint="fingerprint",
+        fingerprint=source_fingerprint,
         chapter_count=1,
     )
     _, notification_router, contexts = _notes_patches(notes_cache, result)
@@ -245,3 +267,91 @@ def test_notes_task_failure_writes_failed_status_without_artifact(notes_cache):
     )
     notification_router.send_long_text.assert_not_called()
     notification_router.send_text.assert_called_once()
+
+
+def test_notes_task_discards_result_when_chapters_change_before_persist(
+    notes_cache,
+):
+    snapshot, source_fingerprint = _seed_layered_notes_cache(notes_cache)
+    task_id = notes_cache.create_task(
+        url="https://example.com/notes",
+        platform="youtube",
+        media_id="notes-media",
+    )["task_id"]
+    notes_cache.update_task_status(task_id, TaskStatus.CALIBRATING)
+    result = SimpleNamespace(
+        status=NotesStatus.GENERATED,
+        text="## [00:00:00 - 00:01:00] Chapter\n- Stale notes",
+        error=None,
+        fingerprint=source_fingerprint,
+        chapter_count=1,
+    )
+    processor, notification_router, contexts = _notes_patches(notes_cache, result)
+
+    def replace_chapters_before_persist(**_kwargs):
+        changed_segments = [
+            {
+                "start_time": 0,
+                "end_time": 60,
+                "speaker": "Host",
+                "text": "changed transcript",
+            }
+        ]
+        changed_fingerprint = compute_notes_anchor_fingerprint(changed_segments)
+        assert changed_fingerprint != source_fingerprint
+        assert notes_cache.save_llm_result(
+            platform="youtube",
+            media_id="notes-media",
+            use_speaker_recognition=False,
+            llm_type="structured",
+            content={"dialogs": changed_segments},
+        )
+        assert notes_cache.save_llm_result(
+            platform="youtube",
+            media_id="notes-media",
+            use_speaker_recognition=False,
+            llm_type="chapters",
+            content={
+                "format_version": "v1",
+                "source": {
+                    "kind": "dialogs",
+                    "segment_count": 1,
+                    "fingerprint": changed_fingerprint,
+                },
+                "chapters": [
+                    {
+                        "title": "Changed chapter",
+                        "gist": "Changed gist",
+                        "start_seg": 0,
+                        "end_seg": 0,
+                    }
+                ],
+            },
+        )
+        return result
+
+    processor.process.side_effect = replace_chapters_before_persist
+    for context in contexts:
+        context.start()
+    try:
+        llm_ops._handle_llm_task(_notes_task(task_id, snapshot["file_path"]))
+    finally:
+        for context in contexts:
+            context.stop()
+
+    updated = notes_cache.get_cache(
+        "youtube",
+        "notes-media",
+        use_speaker_recognition=False,
+    )
+    failed_task = notes_cache.get_task_by_id(task_id)
+    expected_error = (
+        "chapters changed during notes generation, "
+        "notes discarded to avoid misalignment"
+    )
+    assert "llm_notes" not in updated
+    assert updated["llm_status"]["notes_status"] == NotesStatus.FAILED
+    assert failed_task["status"] == TaskStatus.FAILED
+    assert expected_error in failed_task["error_message"]
+    assert expected_error in failed_task["terminal_snapshot"]["error_message"]
+    notification_router.send_long_text.assert_not_called()

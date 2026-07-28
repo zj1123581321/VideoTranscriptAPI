@@ -9,6 +9,7 @@
   - 企微通知发送
 """
 
+import json
 import queue
 import re
 import time
@@ -28,7 +29,11 @@ from ..context import (
 )
 from ..processing_options import normalize_processing_options
 from ...llm.core.usage_context import bind_task_id, set_context
-from ...llm.processors.notes_processor import NotesProcessor
+from ...llm.processors.notes_processor import (
+    NotesProcessor,
+    compute_notes_anchor_fingerprint,
+    load_notes_source_segments,
+)
 from ...utils.notifications import (
     WechatNotifier,
     send_long_text_wechat,
@@ -52,6 +57,11 @@ cache_manager = lazy_resource(get_cache_manager)
 llm_coordinator = lazy_resource(get_llm_coordinator)
 llm_task_queue = lazy_resource(get_llm_queue)
 llm_executor = lazy_resource(get_llm_executor)
+
+_NOTES_STALE_CHAPTERS_ERROR = (
+    "chapters changed during notes generation, "
+    "notes discarded to avoid misalignment"
+)
 
 
 def _requires_llm_title(
@@ -319,6 +329,37 @@ def process_llm_queue():
             time.sleep(1)
 
 
+def _validate_notes_commit_fingerprint(
+    *,
+    cache_dir: str,
+    generated_fingerprint: Optional[str],
+) -> None:
+    """Reject notes generated against a chapter anchor that is no longer current."""
+    try:
+        chapters_payload = json.loads(
+            (Path(cache_dir) / "llm_chapters.json").read_text(encoding="utf-8")
+        )
+        source = chapters_payload.get("source")
+        stored_fingerprint = source.get("fingerprint")
+        source_kind = source.get("kind")
+        current_segments, _ = load_notes_source_segments(
+            cache_dir,
+            source_kind=source_kind,
+        )
+        current_fingerprint = compute_notes_anchor_fingerprint(
+            current_segments or []
+        )
+    except Exception as exc:
+        raise RuntimeError(_NOTES_STALE_CHAPTERS_ERROR) from exc
+
+    if (
+        not generated_fingerprint
+        or generated_fingerprint != stored_fingerprint
+        or generated_fingerprint != current_fingerprint
+    ):
+        raise RuntimeError(_NOTES_STALE_CHAPTERS_ERROR)
+
+
 def _handle_notes_generation(
     *,
     llm_task: dict,
@@ -368,21 +409,30 @@ def _handle_notes_generation(
             )
             raise RuntimeError(error_message)
 
-        if not cache_manager.save_llm_result(
-            platform=platform,
-            media_id=media_id,
-            use_speaker_recognition=use_speaker_recognition,
-            llm_type="notes",
-            content=notes_result.text,
-        ):
-            raise OSError("Failed to persist detailed notes artifact")
+        # Keep the commit-time anchor recheck, notes artifact write, and honest
+        # status merge in the existing per-media critical section. Normal
+        # chapters writers use this same lock, so they cannot change the source
+        # snapshot between this check and the notes commit.
+        with cache_manager.media_lock(platform, media_id):
+            _validate_notes_commit_fingerprint(
+                cache_dir=cache_dir,
+                generated_fingerprint=notes_result.fingerprint,
+            )
+            if not cache_manager.save_llm_result(
+                platform=platform,
+                media_id=media_id,
+                use_speaker_recognition=use_speaker_recognition,
+                llm_type="notes",
+                content=notes_result.text,
+            ):
+                raise OSError("Failed to persist detailed notes artifact")
 
-        cache_manager.save_llm_status(
-            platform=platform,
-            media_id=media_id,
-            use_speaker_recognition=use_speaker_recognition,
-            notes_status=NotesStatus.GENERATED,
-        )
+            cache_manager.save_llm_status(
+                platform=platform,
+                media_id=media_id,
+                use_speaker_recognition=use_speaker_recognition,
+                notes_status=NotesStatus.GENERATED,
+            )
         status_written = cache_manager.update_task_status(
             task_id,
             TaskStatus.SUCCESS,
