@@ -88,3 +88,39 @@ flag 名写完整字面量，禁止模板拼接（grep 可检索）。
 
 - 分支 `feat/speaker-obs-inc1`，Codex（`codex exec`，workspace-write）实现；TDD，测试绿即 commit（[codex] 署名），**不 push、不动 main**。
 - 主会话审查后走本地漏斗（lint/test → 可选 OCR → review 循环）再开 draft PR。
+
+## 7. Increment 2 实施细则（2026-07-28 追加；Inc1 已合并部署后拆卡）
+
+**目标：语义矛盾检测——只标记可疑段，不改任何姓名。** 覆盖 Inc1 风险信号的盲区：置信度高但实际错了的簇（如生产实证里 S2=大卫 却说「刚才大卫」）。
+
+### 7.1 新模块与调用时机
+
+- 新模块 `src/video_transcript_api/llm/core/contradiction_scanner.py`：导出 `ContradictionScanner`（域名词命名，禁裸 helper/util）。
+- prompt 与 JSON schema 按 speaker_mapping 现有模式放 `llm/prompts/` 与 `llm/prompts/schemas/`。
+- 调用时机：`speaker_aware_processor.process` 中 segment_id 落定（去重完成）之后；单次 LLM 调用。
+- 输入：每条 dialog 的 `segment_id + 展示名 + speaker_id + 文本前 100 字符`，附 speaker_mapping 与 meta。
+
+### 7.2 输出契约（写入 `segment_overrides`）
+
+```json
+{"status": "suspect", "assignment_source": "semantic_evidence",
+ "reason": "direct_address_conflict",
+ "evidence_segment_ids": ["seg_..."]}
+```
+
+- **不写 `name` 字段**——渲染层 name 缺失时保持原展示名，只挂「待核实」徽标（机制 Inc1 已就位，渲染层零改动）。
+- `reason` 枚举：`direct_address_conflict` | `self_reference_conflict` | `third_person_conflict` | `qa_adjacency_conflict`。不落盘自由推理文本（I2）。
+- `evidence_segment_ids` 必须是本集真实存在的 segment_id：schema 约束 + 代码侧过滤幻觉 id（引用不存在 id 的条目整条丢弃并记日志）。
+
+### 7.3 失控保护与状态诚实
+
+- 可疑段占比 > 20% → 判扫描不可靠：丢弃全部逐段标记，仅落 flag `semantic_scan_unreliable`。
+- 可疑段 ≥ 3 条或 ≥ 段数 3% → 追加 flag `semantic_contradiction_detected`（横幅复用 Inc1 机制）。
+- LLM 调用失败/超时/解析失败 → 不阻塞流水线；stats 里记 `contradiction_scan_status`（completed/failed/disabled/skipped），沿用诚实状态模型。
+- 开关沿用 processing_options/config 现有模式，默认开启（单次调用成本可忽略）。
+
+### 7.4 验收
+
+- 单测（mock LLM）：正常标记路径；幻觉 evidence id 被过滤；>20% 丢弃；失败不阻塞且状态落盘；flag 触发边界。
+- fixture 场景：基于生产 slice，mock 返回 S2「刚才大卫」direct_address_conflict，断言 override 与 flag 产出、渲染出「待核实」徽标与横幅。
+- 全量 unit + tests/llm 绿；行数预算同 §3。
