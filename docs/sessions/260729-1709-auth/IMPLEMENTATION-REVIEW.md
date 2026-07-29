@@ -172,6 +172,15 @@ transcript-auth-integration targeted 共 53 例全绿，并通过 Python structu
 随后 `npm run test:web` 为 10 files / 138 tests 全绿，`uv run pytest tests/unit/web
 tests/unit/test_detailed_notes_view.py` 为 60 passed，`git diff --check` 通过。
 
+后续 Stack2 local gate review 发现：`34908c4` 只覆盖首动作仍 pending 时的第二次点击，
+未覆盖 success 回调到 500ms reload timer 执行之间的窗口。`aeaf6c3`（`[codex] 闭合受保护
+操作刷新前并发窗口`）在首个 handler 同步禁用全部受保护按钮，仅将 active area 标为
+`aria-busy`/running；reload 只把该 active area 标为完成，失败 catch 后恢复全部按钮。
+回归新增 pending、success→reload 前点击和失败全量恢复三条断言：旧实现 targeted RED
+为 10 tests 中 2 failures，修复后 targeted GREEN 10/10；随后 `npm run test:web` 为
+10 files / 139 tests 全绿，Python Web 单测仍为 60 passed。该 finding 与修复属于同一
+Stack2 local gate 循环，不计为 R9。
+
 ### 其他 finding 分诊
 
 - **POST body `code=202`（P3/误报，接受不修）**：真实三个后端成功响应均返回
