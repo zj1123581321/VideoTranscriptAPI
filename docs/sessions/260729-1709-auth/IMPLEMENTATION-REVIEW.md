@@ -150,3 +150,32 @@ transcript-auth-integration targeted 共 53 例全绿，并通过 Python structu
    并由页面显示失败，不静默宣称清除成功。内存 token 只属于当前 document，关闭或重载
    标签页即可清掉；存储恢复后重新输入/更换 token，或清理站点存储后再输入，可恢复。
    用户分诊接受不修，不增加新的回滚协议或持久键。
+
+## Stack2 local gate review
+
+本节是 Stack 2 的本地 gate review 记录，不计为 R9；原独立 review 的 8 轮上限保持不变。
+
+### P1 修复：转录页受保护操作并发
+
+发现：转录页每个按钮原先只禁用自身；多个受保护操作可并发启动。任一操作成功后
+`scheduleSafeReload()` 会把所有 disabled 按钮误标为“处理完成”，500ms 刷新又会因
+`pagehide` 中止其余轮询，造成 `task_id`、失败提示和实际结果静默丢失。
+
+修复提交：`34908c4`（`[codex] 阻止转录页受保护操作并发`）。三个受保护按钮统一带
+`data-protected-action` 标记，handler 在自身同步 disabled 前检查
+`[data-protected-action]:disabled`；已有 in-flight 操作时直接忽略后续点击，沿用既有
+`finally` 恢复路径，不新增业务状态、协议或持久键。
+
+回归证据：旧实现 targeted RED 为 9 个测试中 1 个失败（首个动作 pending 时第二次
+调用 controller）；修复后 `transcript-auth-integration.test.js` 9/9 GREEN。映射测试已
+改为三个动作逐次 await/settle 后验证 action/view token，避免把并发点击当成契约。
+随后 `npm run test:web` 为 10 files / 138 tests 全绿，`uv run pytest tests/unit/web
+tests/unit/test_detailed_notes_view.py` 为 60 passed，`git diff --check` 通过。
+
+### 其他 finding 分诊
+
+- **POST body `code=202`（P3/误报，接受不修）**：真实三个后端成功响应均返回
+  `code=202` 与 `data.task_id`；controller 已显式校验两者，不改实现。
+- **poll 401 后 prompt 取消或 token save 失败（P2，接受不修）**：最多多进行一次
+  3 秒轮询，随后以可见错误终止；不会造成数据丢失、静默错误或崩溃。按分诊结论不为
+  该边界增加新机制、状态或持久键。
