@@ -42,15 +42,26 @@ cookie、OIDC、CSP/CORS、rate limit、TTL/rotation 或全量本地历史删除
 10. 提供 clear/change 入口；dialog 支持 focus、Escape、Enter、ARIA；日志不得记录
     token 或完整敏感 URL。
 
-## 已接受 P2 边界
+## 已接受 P2/P3 边界
 
-以下两项按 R8 接受不修，不把它们表述为已修复，也不新增状态、回滚机制或持久键：
+以下边界按 R8 或个人项目分诊接受不修，不把它们表述为已修复，也不新增状态、回滚
+机制或持久键：
 
 - canonical 写入成功后，别名删除或 migration marker 写入可能逐操作失败而残留；此时
   `writeAuthToken` 仍返回 `true`，当前 canonical 身份正确，只有 canonical 后续缺失时
   残留别名才可能复活。
 - 当前 document 存储不可用时，memory 降级的 clear 返回 `false` 并保留 token，页面显示
   错误；关闭/重载，或存储恢复后重新输入 token，可恢复。
+- P2 跨标签降级例外：标签 A 因 `SecurityError`/`QuotaExceededError` 进入 memory
+  fallback 并持有 token，标签 B 在 canonical 已缺失时成功 clear，跨标签可见的写入仅为
+  migration seal；
+  A 收到 marker `storage` 事件后仍因 `memoryFallbackActive` 返回 memory token，可能继续
+  发送旧 Bearer。真实触发需上述三条件组合，不造成数据丢失、静默错误或崩溃；关闭/重载
+  A（document 内存消失），或存储恢复后在 A 重新输入/clear 可恢复。接受不修，不新增
+  跨标签状态、协议或持久键。
+- P3：`StorageEvent.key === null`（外部 `localStorage.clear()`）被固定键白名单忽略；仓库
+  无主动 `localStorage.clear()` 路径，真实触发仅外部脚本、控制台或站点数据清理，重载
+  后恢复。接受不修。
 
 ## 工程与交付约束
 
