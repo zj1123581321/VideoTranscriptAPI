@@ -212,7 +212,7 @@
     /**
      * Persist a selected token canonically, remove every legacy alias, and seal
      * migration.  Replacement clears the old canonical first; if that clear
-     * fails, return false while retaining the new token only in page memory.
+     * fails, return false while retaining the previous identity.
      * Other storage failures retain the token only in page memory.
      */
     function writeAuthToken(token, _options) {

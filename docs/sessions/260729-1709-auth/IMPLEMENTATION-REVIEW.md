@@ -71,11 +71,11 @@ empty input is queried` 锁死；其余 OCR finding 分别为 P2/P3 或误报，
 | R2 | 发现 1 个未闭合竞态 | 迟到 `401` 可能清掉另一标签页已持久化的新 token；`b133263` 增加 persisted canonical compare，`auth-storage.test.js` 的 `does not clear a newer persisted canonical token before its storage event arrives` 锁死。 |
 | R3 | 无新增 P1 | 补充审查 token 术语、响应/状态白名单、脚本加载顺序、XSS 与 focus/disabled 行为；未扩大范围。 |
 | R4 | 无新增 P1 | `/tmp/vta-codex-review-round4.txt` 记录“本轮无新增 P1”，覆盖存储/迁移/CAS、history reset/请求代际、POST/pagehide、600 秒轮询、XSS/敏感日志和 PWA 缓存；与 R3 连续两轮收敛。 |
-| R6 | 发现 2 个 P1，已在本增量修复，尚未宣告最终收敛 | (1) 持久 canonical A 被替换为 B 时 `setItem` 失败，内存 B 刷新后会静默恢复 A；(2) 未封存迁移窗口内 legacy alias storage 事件未触发 history 原子 reset。回归测试覆盖 set 失败与旧 canonical 无法清除两个 storage 场景，以及 `api_key`/`vta_api_key_persist`/`vta_api_key` 三个事件键；修复提交：`e3fdf6b`。 |
+| R6 | 发现 2 个 P1，已在本增量修复，尚未宣告最终收敛 | (1) 持久 canonical A 被替换为 B 时 `setItem` 失败，内存 B 刷新后会静默恢复 A；(2) 未封存迁移窗口内 legacy alias storage 事件未触发 history 原子 reset。回归测试覆盖 set 失败与旧 canonical 无法清除两个 storage 场景，以及 `api_key`/`vta_api_key_persist`/`vta_api_key` 三个事件键；修复提交：`30705e3`。 |
 
 R6 修复证据：旧实现 targeted RED 为 4 例（首个 storage 1 例、legacy 事件 3 例；旧
 canonical 无法清除的边界由同一不变式锁死）；实现后
-`auth-storage.test.js` 与 `history-auth-race.test.js` 共 36 例全绿，随后复跑 Web 与
+`auth-storage.test.js` 与 `history-auth-race.test.js` 共 41 例全绿，随后复跑 Web 与
 Python Web 单测确认无回归。
 
 ## CI 主审 finding 修复记录
