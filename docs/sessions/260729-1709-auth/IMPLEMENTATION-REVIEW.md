@@ -80,7 +80,7 @@ empty input is queried` 锁死；其余 OCR finding 分别为 P2/P3 或误报，
 - RED：新增 `auth-storage.test.js` 的 `migrates canonical first when canonical coexists...`
   回归（单个 alias 与全部 alias 两种场景），旧实现 2 例失败。
 - Fix：`migrateAuthToken()` 无显式 token 时先解码 canonical，再回退 legacy；沿用现有
-  `writeAuthToken()` 清理 alias 并 sealed marker。修复提交：`2104ece`。
+  `writeAuthToken()` 清理 alias 并 sealed marker。修复提交：`d238107`。
 
 ## P2/P3 backlog（接受不修）
 
