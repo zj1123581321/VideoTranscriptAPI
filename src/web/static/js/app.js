@@ -852,6 +852,15 @@ async function submitTranscription(event) {
             
             // 添加到历史记录
             const historyResult = TaskHistoryManager.addTask(taskData);
+
+            // PWA E5 钩子（additive）：pwa.js 监听此事件做任务完成通知；
+            // 无监听者时为零成本空操作
+            document.dispatchEvent(new CustomEvent('vta:task-submitted', {
+                detail: {
+                    task_id: response.data.task_id,
+                    view_token: response.data.view_token
+                }
+            }));
             
             // 根据是否重复显示不同的提示
             let statusMessage = '任务提交成功！';
@@ -871,8 +880,17 @@ async function submitTranscription(event) {
             document.getElementById('url-preview').innerHTML = '<div class="no-urls">请输入包含视频链接的内容</div>';
             
             // 3秒后跳转到查看页面
+            // PWA standalone 模式下同窗口跳转（独立窗口里 _blank 会逃逸到浏览器）；
+            // 浏览器内既有行为（新标签页打开）不变
             setTimeout(() => {
-                window.open(`/view/${response.data.view_token}`, '_blank');
+                const viewUrl = `/view/${response.data.view_token}`;
+                const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                    || window.navigator.standalone === true;
+                if (isStandalone) {
+                    window.location.href = viewUrl;
+                } else {
+                    window.open(viewUrl, '_blank');
+                }
             }, 3000);
             
         } else {

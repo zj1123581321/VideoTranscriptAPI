@@ -199,6 +199,162 @@
     document.body.appendChild(hint);
   }
 
+  // ---- E5 任务完成通知（T8，简化版：页面打开期间，仅 index 页激活） ----
+
+  var POLL_INTERVAL_MS = 15000;
+  var MAX_CONSECUTIVE_FAILURES = 5;
+  var NOTIFY_DENIED_HINT_KEY = 'vta_pwa_notify_denied_hint';
+
+  /**
+   * Judge terminal state from the GET /api/task/{id} response BODY.
+   * Failed tasks are HTTP 200 with body code=500, data.status='failed',
+   * so the HTTP status is useless here (design E5, OV round-2 #1).
+   *
+   * @param {?object} body Parsed response body.
+   * @returns {?string} 'success' | 'failed' when terminal, else null.
+   */
+  function taskTerminalState(body) {
+    if (!body || typeof body !== 'object') {
+      return null;
+    }
+    var data = body.data;
+    if (!data || typeof data !== 'object') {
+      return null;
+    }
+    if (data.status === 'success') {
+      return 'success';
+    }
+    if (data.status === 'failed') {
+      return 'failed';
+    }
+    return null;
+  }
+
+  /**
+   * Notification toggle (explicit user gesture, per design E5) plus the
+   * in-memory task tracker listening for app.js 'vta:task-submitted'.
+   * In-memory by design: a page refresh loses tracking (accepted trade-off).
+   */
+  function initTaskNotifications() {
+    if (!('Notification' in window)) {
+      return; // capability detection: hide the entry entirely
+    }
+    var group = document.getElementById('pwa-notify-group');
+    var btn = document.getElementById('pwa-notify-btn');
+    if (!group || !btn) {
+      return; // history.html has no toggle and no APIManager: stay inactive
+    }
+    group.style.display = '';
+
+    function renderButton() {
+      if (Notification.permission === 'granted') {
+        btn.textContent = '通知已开启';
+        btn.disabled = true;
+      } else if (Notification.permission === 'denied') {
+        // 永久隐藏入口 + 一次性提示去系统设置开
+        group.style.display = 'none';
+        var hinted = false;
+        try {
+          hinted = !!window.localStorage.getItem(NOTIFY_DENIED_HINT_KEY);
+        } catch (e) { /* storage unavailable */ }
+        if (!hinted) {
+          try {
+            window.localStorage.setItem(NOTIFY_DENIED_HINT_KEY, '1');
+          } catch (e) { /* storage unavailable */ }
+          if (typeof UIManager !== 'undefined') {
+            UIManager.showStatus(
+              'error',
+              '通知权限已被拒绝',
+              '请在浏览器/系统设置中允许本站通知后刷新页面'
+            );
+          }
+        }
+      } else {
+        btn.textContent = '开启通知';
+        btn.disabled = false;
+      }
+    }
+
+    renderButton();
+    btn.addEventListener('click', function () {
+      // 权限请求必须由用户手势触发（本按钮点击即手势）
+      Notification.requestPermission().then(renderButton);
+    });
+
+    // ---- 任务跟踪轮询（内存态，刷新即丢，预期行为） ----
+    var tracked = [];
+    var timer = null;
+
+    document.addEventListener('vta:task-submitted', function (event) {
+      if (Notification.permission !== 'granted') {
+        return;
+      }
+      if (typeof APIManager === 'undefined') {
+        return; // E5 仅 index 页激活（复用 APIManager.getTaskStatus）
+      }
+      var detail = event.detail || {};
+      if (!detail.task_id) {
+        return;
+      }
+      tracked.push({ taskId: detail.task_id, viewToken: detail.view_token, failures: 0 });
+      if (!timer) {
+        timer = setInterval(pollTracked, POLL_INTERVAL_MS);
+      }
+    });
+
+    async function pollTracked() {
+      for (var i = tracked.length - 1; i >= 0; i--) {
+        var item = tracked[i];
+        try {
+          var body = await APIManager.getTaskStatus(item.taskId);
+          var state = taskTerminalState(body);
+          if (state === 'success') {
+            notifySuccess(item);
+            tracked.splice(i, 1);
+          } else if (state === 'failed') {
+            tracked.splice(i, 1); // 失败静默停止
+          } else {
+            item.failures = 0;
+          }
+        } catch (err) {
+          item.failures += 1;
+          if (item.failures >= MAX_CONSECUTIVE_FAILURES) {
+            console.warn('E5 polling stopped after 5 failures:', item.taskId, err);
+            tracked.splice(i, 1);
+          }
+        }
+      }
+      if (tracked.length === 0 && timer) {
+        clearInterval(timer); // 列表空即停
+        timer = null;
+      }
+    }
+
+    function notifySuccess(item) {
+      try {
+        var n = new Notification('转录任务完成', {
+          body: '点击查看转录结果',
+          icon: '/static/icons/icon-192.png',
+        });
+        n.onclick = function () {
+          window.focus();
+          window.location.href = '/view/' + item.viewToken;
+        };
+      } catch (err) {
+        console.warn('notification failed:', err);
+      }
+    }
+  }
+
+  // Export pure functions for vitest (plain node, CJS via createRequire).
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      taskTerminalState: taskTerminalState,
+      POLL_INTERVAL_MS: POLL_INTERVAL_MS,
+      MAX_CONSECUTIVE_FAILURES: MAX_CONSECUTIVE_FAILURES,
+    };
+  }
+
   if (typeof document === 'undefined') {
     return; // imported under vitest (node): no DOM, nothing to wire
   }
@@ -206,5 +362,6 @@
     registerServiceWorker();
     initInstallButton();
     initSharePrefill();
+    initTaskNotifications();
   });
 })();

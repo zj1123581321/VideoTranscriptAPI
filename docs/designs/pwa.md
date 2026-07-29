@@ -206,7 +206,7 @@ main 新分支 + 独立 worktree、分 3 阶段 commit。
   - Surfaced by: E1/E2 + 对抗评审（iOS 无 beforeinstallprompt）+ Eng A2（双 meta）
   - Files: `src/web/static/pwa.js`, `index.html`, `history.html`
   - Verify: Chrome/Edge 出现安装按钮；iOS 模拟器显示图文引导
-- [ ] **T6 (P2, human: ~1h / CC: ~15min)** — app.js 钩子 — CustomEvent + standalone 同窗口跳转
+- [x] **T6 (P2, human: ~1h / CC: ~15min)** — app.js 钩子 — CustomEvent + standalone 同窗口跳转
   - Surfaced by: Codex#5/#6
   - Files: `src/web/static/js/app.js`
   - Verify: standalone 模式提交后同窗口打开结果页；浏览器内行为无回归
@@ -214,11 +214,11 @@ main 新分支 + 独立 worktree、分 3 阶段 commit。
   - Surfaced by: E4 + S3-1 三道校验 + 边界文档化
   - Files: `src/web/static/js/pwa-share.js`（纯函数）, `src/web/static/pwa.js`
   - Verify: vitest URL 提取/校验 + B站、抖音真实分享各一次
-- [ ] **T8 (P2, human: ~2h / CC: ~30min)** — E5 通知（commit 3）
+- [x] **T8 (P2, human: ~2h / CC: ~30min)** — E5 通知（commit 3）
   - Surfaced by: E5 + S2-1 + OV 两轮修正（body 终态判定、页面 Notification、显式开关、仅 index 页）
   - Files: `src/web/static/pwa.js`, `src/web/tests/`
   - Verify: vitest 终态判定 + 手测（成功通知、失败静默停止、点击跳结果页）
-- [ ] **T9 (P2, human: ~30min / CC: ~10min)** — 手测清单 + 部署验证 + 回滚 runbook
+- [x] **T9 (P2, human: ~30min / CC: ~10min)** — 手测清单 + 部署验证 + 回滚 runbook
   - Surfaced by: S1-1 + 部署评审
   - Files: `docs/guides/pwa.md`（或并入 README）
   - Verify: 部署后 curl /sw.js 200、无痕注册 SW、回滚演练文档化
