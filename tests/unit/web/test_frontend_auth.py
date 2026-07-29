@@ -105,6 +105,17 @@ def test_transcript_has_one_accessible_credential_dialog_and_three_actions():
     assert 'createProtectedActionController' in source
 
 
+def test_transcript_auth_controls_have_explicit_theme_owned_layout():
+    source = TRANSCRIPT_HTML.read_text(encoding="utf-8")
+    assert ".protected-action-auth-tools {" in source
+    assert "margin: 24px 0;" in source
+    assert "padding: 12px 16px;" in source
+    assert "border: 1px solid var(--border-primary);" in source
+    assert "background: var(--bg-secondary);" in source
+    assert "var(--border-color" not in source
+    assert "var(--accent-color" not in source
+
+
 def test_transcript_removes_private_credential_and_handwritten_polling_paths():
     source = TRANSCRIPT_HTML.read_text(encoding="utf-8")
     for legacy in (

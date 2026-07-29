@@ -15,7 +15,7 @@
 /* Recalibrate button */
 .recalibrate-btn {
     background: var(--bg-secondary, #f5f5f5);
-    border: 1px solid var(--border-color, #ddd);
+    border: 1px solid var(--border-primary);
     border-radius: 6px;
     padding: 6px 14px;
     cursor: pointer;
@@ -24,6 +24,20 @@
     transition: background 0.2s;
 }
 .recalibrate-btn:hover { background: var(--bg-tertiary, #e8e8e8); }
+
+/* Protected-action controls own their spacing so auth state stays attached to the transcript. */
+.protected-action-auth-tools {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin: 24px 0;
+    padding: 12px 16px;
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+}
+.protected-action-auth-tools .dialog-status { flex: 1 1 100%; margin-top: 0; }
 
 /* Copy content button (shares base look with recalibrate button) */
 .copy-content-btn.copied {
@@ -43,8 +57,8 @@
     max-width: 420px;
     width: 90%;
     box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-    background: var(--bg-primary, #fff);
-    color: var(--text-primary, #333);
+    background: var(--bg-primary);
+    color: var(--text-primary);
 }
 .recalibrate-dialog::backdrop { background: rgba(0,0,0,0.4); }
 .recalibrate-dialog h3 { margin: 0 0 8px; font-size: 1.1rem; }
@@ -53,23 +67,23 @@
 .recalibrate-dialog input {
     width: 100%;
     padding: 8px 10px;
-    border: 1px solid var(--border-color, #ddd);
+    border: 1px solid var(--border-primary);
     border-radius: 6px;
     font-size: 0.9rem;
     box-sizing: border-box;
-    background: var(--bg-secondary, #f9f9f9);
-    color: var(--text-primary, #333);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
 }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .dialog-btn {
     padding: 7px 18px;
     border-radius: 6px;
-    border: 1px solid var(--border-color, #ddd);
+    border: 1px solid var(--border-primary);
     cursor: pointer;
     font-size: 0.9rem;
 }
 .dialog-btn-cancel { background: var(--bg-secondary, #f5f5f5); color: var(--text-primary, #333); }
-.dialog-btn-confirm { background: var(--accent-color, #4a90d9); color: #fff; border-color: transparent; }
+.dialog-btn-confirm { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-primary); }
 .dialog-btn-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
 .dialog-status { margin-top: 12px; font-size: 0.82rem; color: var(--text-secondary, #666); }
 .dialog-status-error { color: #d9534f; }
