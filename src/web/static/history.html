@@ -927,7 +927,8 @@ async function loadHistory(page = 0) {
     const keyInput = document.getElementById('apiKeyInput').value.trim();
     const canonical = storage.readAuthToken() || '';
     if (!keyInput) {
-        clearHistoryAuth();
+        resetPrivateHistoryState();
+        showStatus('err', '请输入访问令牌');
         return;
     }
     if (keyInput !== canonical) {

@@ -91,6 +91,19 @@ async function flushPromises() {
 }
 
 describe('history private request generation guards', () => {
+  it('does not clear the canonical token when an empty input is queried', async () => {
+    const fixture = createHistoryFixture({ token: 'canonical-token' });
+    const input = fixture.dom.window.document.getElementById('apiKeyInput');
+    input.value = '';
+
+    await fixture.dom.window.loadHistory(0);
+
+    expect(fixture.authStorage.clearAuthToken).not.toHaveBeenCalled();
+    expect(fixture.state.token).toBe('canonical-token');
+    expect(fixture.dom.window.document.getElementById('authStatus').textContent)
+      .toBe('请输入访问令牌');
+  });
+
   it('does not apply late filter options after reset invalidates the request', async () => {
     const fixture = createHistoryFixture();
     const oldFilter = deferred();
