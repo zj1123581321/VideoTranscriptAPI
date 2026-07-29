@@ -7,6 +7,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 APP_JS = PROJECT_ROOT / "src" / "web" / "static" / "js" / "app.js"
 AUTH_JS = PROJECT_ROOT / "src" / "web" / "static" / "js" / "auth-storage.js"
 INDEX_HTML = PROJECT_ROOT / "src" / "web" / "static" / "index.html"
+HISTORY_HTML = PROJECT_ROOT / "src" / "web" / "static" / "history.html"
 
 
 def test_homepage_loads_auth_storage_before_app():
@@ -50,3 +51,23 @@ def test_auth_module_keeps_canonical_storage_contract_literal():
     assert "vta_bearer_token" in source
     assert "vta_encrypt_key_2024" in source
     assert "vta_auth_migration_v1" in source
+
+
+def test_history_uses_shared_auth_without_remember_dual_track():
+    source = HISTORY_HTML.read_text(encoding="utf-8")
+    assert source.index('/static/js/auth-storage.js') < source.index('<script>\n// ===================== 状态 =====================')
+    assert "rememberKey" not in source
+    assert "vta_api_key_persist" not in source
+    assert "sessionStorage.setItem('vta_api_key'" not in source
+    assert "authStorage.buildAuthHeaders()" in source
+
+
+def test_history_reset_and_401_contracts_are_explicit():
+    source = HISTORY_HTML.read_text(encoding="utf-8")
+    assert "function resetPrivateHistoryState" in source
+    assert "abortPrivateHistoryRequests" in source
+    assert "const requestSnapshot = authStorage.snapshotAuthToken()" in source
+    assert "authStorage.clearAuthTokenIfMatch(requestSnapshot)" in source
+    assert "安全错误：统一鉴权模块加载失败，已禁用历史私有操作" in source
+    assert "esc(item.title)" in source
+    assert "esc(item.view_token)" in source
