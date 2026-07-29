@@ -305,11 +305,11 @@
      */
     function handleAuthStorageEvent(event) {
         const key = event && event.key;
-        if (key === AUTH_STORAGE_KEYS.canonical && event.newValue === null) {
-            memoryToken = null;
+        if (key === AUTH_STORAGE_KEYS.canonical) {
+            const syncedToken = event.newValue === null ? null : decodeAuthToken(event.newValue);
+            memoryToken = syncedToken;
             memoryFallbackActive = false;
             memorySealed = true;
-            removeStorageValue('sessionStorage', AUTH_STORAGE_KEYS.legacySession);
         }
         if (
             key === AUTH_STORAGE_KEYS.migration ||

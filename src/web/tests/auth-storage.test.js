@@ -184,6 +184,58 @@ describe('auth storage failure degradation', () => {
 });
 
 describe('auth storage events and browser compatibility', () => {
+  it('syncs a valid canonical storage event after memory fallback', () => {
+    localStorage.removeItem('vta_auth_migration_v1');
+    const storagePrototype = Object.getPrototypeOf(localStorage);
+    const originalSetItem = storagePrototype.setItem;
+    vi.spyOn(storagePrototype, 'setItem').mockImplementation(function setItem(key, value) {
+      if (key === 'vta_auth_migration_v1') {
+        const error = new Error('full');
+        error.name = 'QuotaExceededError';
+        throw error;
+      }
+      return originalSetItem.call(this, key, value);
+    });
+    expect(authStorage.writeAuthToken('old-memory-token')).toBe(true);
+    vi.restoreAllMocks();
+    expect(authStorage.snapshotAuthToken()).toBe('old-memory-token');
+
+    const encodedNewToken = authStorage.encodeAuthToken('new-canonical-token');
+    localStorage.setItem('vta_bearer_token', encodedNewToken);
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: 'vta_bearer_token',
+      newValue: encodedNewToken,
+    }));
+
+    expect(authStorage.snapshotAuthToken()).toBe('new-canonical-token');
+    expect(authStorage.clearAuthTokenIfMatch('old-memory-token')).toBe(false);
+    expect(localStorage.getItem('vta_bearer_token')).toBe(encodedNewToken);
+  });
+
+  it('rejects a malformed canonical storage event while in memory fallback', () => {
+    localStorage.removeItem('vta_auth_migration_v1');
+    const storagePrototype = Object.getPrototypeOf(localStorage);
+    const originalSetItem = storagePrototype.setItem;
+    vi.spyOn(storagePrototype, 'setItem').mockImplementation(function setItem(key, value) {
+      if (key === 'vta_auth_migration_v1') {
+        const error = new Error('full');
+        error.name = 'QuotaExceededError';
+        throw error;
+      }
+      return originalSetItem.call(this, key, value);
+    });
+    expect(authStorage.writeAuthToken('old-memory-token')).toBe(true);
+    vi.restoreAllMocks();
+
+    localStorage.setItem('vta_bearer_token', 'corrupted-canonical-value');
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: 'vta_bearer_token',
+      newValue: 'corrupted-canonical-value',
+    }));
+
+    expect(authStorage.snapshotAuthToken()).toBeNull();
+  });
+
   it('clears session aliases on storage events and does not revive stale credentials', () => {
     authStorage.migrateAuthToken('migrated-token');
     sessionStorage.setItem('vta_api_key', 'stale-session');
