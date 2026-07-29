@@ -64,6 +64,20 @@ function simpleDecrypt(encoded) {
 }
 
 /**
+ * HTML 转义（属性/元素上下文通用）：& < > " '
+ * 提取出的 URL/标题插入 innerHTML 前必须过此函数（Codex R6-1：系统分享
+ * 可把带 <>/引号 的 URL 投进预览，不转义即同源 XSS）
+ */
+function escapeHTML(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
  * 本地存储管理类
  */
 class StorageManager {
@@ -728,10 +742,10 @@ function handleTextInput(textarea) {
     urlResults.forEach((result, index) => {
         const isDefault = index === 0;
         html += `
-            <div class="url-option ${isDefault ? 'selected' : ''}" data-url="${result.url}">
-                <input type="radio" name="selected-url" value="${result.url}" ${isDefault ? 'checked' : ''}>
+            <div class="url-option ${isDefault ? 'selected' : ''}" data-url="${escapeHTML(result.url)}">
+                <input type="radio" name="selected-url" value="${escapeHTML(result.url)}" ${isDefault ? 'checked' : ''}>
                 <label>
-                    <span class="url-display">${result.display}</span>
+                    <span class="url-display">${escapeHTML(result.display)}</span>
                     <span class="url-score">评分: ${result.score}</span>
                 </label>
             </div>
@@ -1001,8 +1015,17 @@ function initializePage() {
     console.log('视频转录Web应用初始化完成');
 }
 
-// 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', initializePage);
+// 页面加载完成后初始化（vitest 无 DOM 环境跳过接线）
+if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', initializePage);
+}
 
 // 导出全局函数供HTML使用
-window.copyToClipboard = copyToClipboard;
+if (typeof window !== 'undefined') {
+    window.copyToClipboard = copyToClipboard;
+}
+
+// 导出纯函数供 vitest（CJS，经 createRequire 加载）
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { escapeHTML };
+}

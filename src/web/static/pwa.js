@@ -312,6 +312,11 @@
     if (!group || !btn) {
       return; // history.html has no toggle and no APIManager: stay inactive
     }
+    // iOS 通知需 >=16.4 且必须从已安装 PWA（standalone）内请求；
+    // 非 standalone 时按能力检测隐藏入口（设计 E5 / Codex R6-2）
+    if (isIOS() && !isStandalone()) {
+      return;
+    }
     group.style.display = '';
 
     function renderButton() {
@@ -347,10 +352,22 @@
     btn.addEventListener('click', function () {
       // 权限请求必须由用户手势触发（本按钮点击即手势）；
       // 授权成功后恢复/启动已持久化任务的轮询（Codex R5-1）
-      Notification.requestPermission().then(function () {
-        renderButton();
-        resumePolling();
-      });
+      Notification.requestPermission()
+        .then(function () {
+          renderButton();
+          resumePolling();
+        })
+        .catch(function (err) {
+          // iOS 非 standalone 等场景 requestPermission 会直接 reject（Codex R6-2）
+          console.warn('notification permission request failed:', err);
+          if (typeof UIManager !== 'undefined') {
+            UIManager.showStatus(
+              'error',
+              '通知授权失败',
+              '请在已安装的应用内或浏览器设置中开启通知'
+            );
+          }
+        });
     });
 
     // ---- 任务跟踪轮询（持久化到 localStorage，跨页面跳转/刷新存活） ----
