@@ -73,7 +73,7 @@ empty input is queried` 锁死；其余 OCR finding 分别为 P2/P3 或误报，
 | R3 | 无新增 P1 | 补充审查 token 术语、响应/状态白名单、脚本加载顺序、XSS 与 focus/disabled 行为；未扩大范围。 |
 | R4 | 无新增 P1 | `/tmp/vta-codex-review-round4.txt` 记录“本轮无新增 P1”，覆盖存储/迁移/CAS、history reset/请求代际、POST/pagehide、600 秒轮询、XSS/敏感日志和 PWA 缓存；与 R3 连续两轮收敛。 |
 | R6 | 发现 2 个 P1，已在本增量修复，尚未宣告最终收敛 | (1) 持久 canonical A 被替换为 B 时 `setItem` 失败，内存 B 刷新后会静默恢复 A；(2) 未封存迁移窗口内 legacy alias storage 事件未触发 history 原子 reset。回归测试覆盖 set 失败与旧 canonical 无法清除两个 storage 场景，以及 `api_key`/`vta_api_key_persist`/`vta_api_key` 三个事件键；修复提交：`30705e3`。 |
-| R7 | 发现 3 个 P1，已在本增量修复，尚未宣告最终收敛 | (1) clear canonical/alias/marker 删除或封存失败曾假报成功；(2) 首页未同步共享 storage 事件；(3) 首页、history、transcript 未消费 clear/save false，可能显示新身份或成功文案。回归测试覆盖 canonical remove SecurityError、alias/marker failure、CAS propagation、首页事件/save/empty clear、history/transcript clear；修复提交：`5b880d3`。 |
+| R7 | 发现 3 个 P1，已在本增量修复，尚未宣告最终收敛 | (1) clear canonical/alias/marker 删除或封存失败曾假报成功；(2) 首页未同步共享 storage 事件；(3) 首页、history、transcript 未消费 clear/save false，可能显示新身份或成功文案。回归测试覆盖 canonical remove SecurityError、alias/marker failure、CAS propagation、首页事件/save/empty clear、history/transcript clear；修复提交：`1126152`。 |
 
 R6 修复证据：旧实现 targeted RED 为 4 例（首个 storage 1 例、legacy 事件 3 例；旧
 canonical 无法清除的边界由同一不变式锁死）；实现后
@@ -111,5 +111,6 @@ transcript-auth-integration targeted 共 53 例全绿，并通过 Python structu
 5. **首次 SecurityError 读取后的下一次 header 一致性**（P2）：当前实现沿用既有
    memory fallback 与单次告警，未为跨次可观测性增加状态或机制；自用场景可接受，后续
    可在独立存储可用性迭代补充。
-6. **TextDecoder 非法 UTF-8 细分诊断**（P2）：非法 payload 按 absent 处理，不影响
-   当前鉴权安全边界；不为本次 P1 清除流程新增解码状态，后续可补独立数据完整性测试。
+6. **TextDecoder 非法 UTF-8 细分诊断**（P2）：会成为含替换字符的无效 bearer，通常得到
+   可见 401，不会静默切换到另一有效身份；因此在 personal 下接受不修，不为本次 P1 清除
+   流程新增解码机制，后续可补独立数据完整性测试。
