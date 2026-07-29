@@ -418,6 +418,7 @@
 
     function restoreActionButton(elements, originalLabel, message) {
         if (!elements.area || !elements.button) return;
+        var restoreFocus = elements.button === document.activeElement;
         elements.area.textContent = '';
         if (message) {
             var status = document.createElement('span');
@@ -429,6 +430,7 @@
         elements.button.textContent = originalLabel;
         elements.area.appendChild(elements.button);
         elements.area.removeAttribute('aria-busy');
+        if (restoreFocus && typeof elements.button.focus === 'function') elements.button.focus();
     }
 
     function closeAuthDialog() {
@@ -499,6 +501,7 @@
 
     function formatActionError(error) {
         var message = error && error.message ? error.message : '';
+        if (message === 'Protected action token prompt cancelled') return '';
         if (message === 'HTTP 403') return '无权限，凭据不会更换。';
         if (message === 'HTTP 404') return '未找到转录数据，凭据不会更换。';
         if (message === 'HTTP 409') return '当前任务状态不允许操作，凭据不会更换。';

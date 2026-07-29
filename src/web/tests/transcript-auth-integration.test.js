@@ -137,6 +137,28 @@ describe('transcript protected action page adapter', () => {
     expect(dialog.hasAttribute('open')).toBe(false);
   });
 
+  it('Escape silently restores the action trigger and its focus', async () => {
+    const fixture = createFixture({ token: null });
+    fixture.controller.runProtectedAction.mockImplementation(() => (
+      fixture.getDependencies().promptToken()
+    ));
+    const button = fixture.dom.window.document.querySelector('#recalibrateBtn');
+    const area = fixture.dom.window.document.querySelector('#recalibrateArea');
+    button.focus();
+    button.click();
+
+    const dialog = fixture.dom.window.document.querySelector('#protectedActionAuthDialog');
+    dialog.dispatchEvent(new fixture.dom.window.Event('cancel', { bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(dialog.hasAttribute('open')).toBe(false);
+    expect(button.disabled).toBe(false);
+    expect(fixture.dom.window.document.activeElement).toBe(button);
+    expect(area.querySelector('.recalibrate-error')).toBeNull();
+    expect(area.textContent).toBe('recalibrate');
+  });
+
   it('fails closed when either shared browser script is unavailable', () => {
     const fixture = createFixture({ withAuth: false });
 
