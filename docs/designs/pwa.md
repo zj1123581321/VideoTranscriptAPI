@@ -217,7 +217,7 @@ main 新分支 + 独立 worktree、分 3 阶段 commit。
     浏览器内既有行为（3 秒后新标签页打开）不变。
   - Surfaced by: Codex#5/#6
   - Files: `src/web/static/js/app.js`
-  - Verify: standalone 模式提交后同窗口打开结果页；浏览器内行为无回归
+  - Verify: standalone 模式提交后停留提交页（不自动跳转）、success 提示里的结果页链接同窗口打开；浏览器内行为无回归
 - [x] **T7 (P2, human: ~2h / CC: ~30min)** — E4 分享预填（commit 2）
   - Surfaced by: E4 + S3-1 三道校验 + 边界文档化
   - Files: `src/web/static/js/pwa-share.js`（纯函数）, `src/web/static/pwa.js`

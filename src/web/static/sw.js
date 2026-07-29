@@ -174,8 +174,12 @@ async function staleWhileRevalidate(request, event) {
   const cached = await cache.match(request);
   const revalidate = fetch(request).then((response) => {
     if (response.ok) {
-      // await 写入后再算作 revalidate 完成（Codex R1-5）
-      return cache.put(request, response.clone()).then(() => response);
+      // await 写入后再算作 revalidate 完成（Codex R1-5）；
+      // 写缓存失败不影响把网络响应交给页面（Codex R4-2）
+      return cache
+        .put(request, response.clone())
+        .catch((putErr) => console.warn('icon cache put failed:', putErr))
+        .then(() => response);
     }
     return response;
   });

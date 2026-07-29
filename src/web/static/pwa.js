@@ -205,6 +205,7 @@
 
   var POLL_INTERVAL_MS = 15000;
   var MAX_CONSECUTIVE_FAILURES = 5;
+  var SW_READY_TIMEOUT_MS = 5000;
   var NOTIFY_DENIED_HINT_KEY = 'vta_pwa_notify_denied_hint';
   var TRACKED_TASKS_KEY = 'vta_pwa_tracked_tasks';
 
@@ -494,7 +495,16 @@
         // 回退经 Service Worker 发系统通知，点击由 sw.js notificationclick 处理；
         // await 投递结果，失败向上抛由轮询计数
         if ('serviceWorker' in window.navigator) {
-          var reg = await window.navigator.serviceWorker.ready;
+          // SW 注册失败时 ready 永不 resolve：加超时让异常进入既有
+          // failures 计数，避免 pollInFlight 卡死、轮询永久停摆（Codex R4-1）
+          var reg = await Promise.race([
+            window.navigator.serviceWorker.ready,
+            new Promise(function (resolve, reject) {
+              setTimeout(function () {
+                reject(new Error('serviceWorker.ready timeout'));
+              }, SW_READY_TIMEOUT_MS);
+            }),
+          ]);
           await reg.showNotification(
             title,
             Object.assign({}, options, { data: { url: viewUrl } })
@@ -512,6 +522,7 @@
       taskTerminalState: taskTerminalState,
       POLL_INTERVAL_MS: POLL_INTERVAL_MS,
       MAX_CONSECUTIVE_FAILURES: MAX_CONSECUTIVE_FAILURES,
+      SW_READY_TIMEOUT_MS: SW_READY_TIMEOUT_MS,
       TRACKED_TASKS_KEY: TRACKED_TASKS_KEY,
       parseTrackedTasks: parseTrackedTasks,
       upsertTrackedTask: upsertTrackedTask,

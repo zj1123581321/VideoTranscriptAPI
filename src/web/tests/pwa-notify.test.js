@@ -14,6 +14,7 @@ const {
   taskTerminalState,
   POLL_INTERVAL_MS,
   MAX_CONSECUTIVE_FAILURES,
+  SW_READY_TIMEOUT_MS,
   TRACKED_TASKS_KEY,
   parseTrackedTasks,
   upsertTrackedTask,
@@ -49,6 +50,11 @@ describe('polling constants', () => {
   it('polls every 15s and gives up after 5 consecutive failures', () => {
     expect(POLL_INTERVAL_MS).toBe(15000);
     expect(MAX_CONSECUTIVE_FAILURES).toBe(5);
+  });
+
+  it('bounds the serviceWorker.ready wait so polling can not wedge (Codex R4-1)', () => {
+    expect(SW_READY_TIMEOUT_MS).toBeGreaterThan(0);
+    expect(SW_READY_TIMEOUT_MS).toBeLessThanOrEqual(10000);
   });
 });
 
