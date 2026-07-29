@@ -2,7 +2,7 @@
 
 > Session：`260729-1709-auth` · 风险等级：`personal`（自用工具）· stacked 交付基线：
 > Stack1 PR #40（`main` → `49f26a0`），Stack2 PR #39（`49f26a0` → 代码 HEAD
-> `1db63357`）。当前提交仅同步本文档，不改变代码状态。
+> `21d13cb`）。当前提交仅同步本文档，不改变代码状态。
 
 ## 结论
 
@@ -13,19 +13,21 @@
 降为 personal 风险下的 P2 后，只有 R8 这一轮按分诊结果 clean；原独立循环未满足
 连续两轮无 P1 的收敛门槛，不虚构最终收敛。之后是用户要求的 local gate/CI 循环，
 不计为 R9。Stack2 local gate 发现并修复了真实的转录页受保护操作并发 reload 窗口；
-其余 P2/P3 接受不修项已列入本文档 backlog。最终 exact local review pass 为
-`findings=[]`，交付以 stacked PR 的门禁全绿为准。
+其余 P2/P3 接受不修项已列入本文档 backlog。此前代码状态的 exact local review pass
+为 `findings=[]`，交付以 stacked PR 的门禁
+全绿为准；本次 POST 超时修复后按流程重新运行 gate。
 
 ## Stacked PR 与门禁证据
 
 - **Stack1 PR #40**：`main` → `49f26a0`，11 files，`+2367/-128=2495`；runs
   `30472569111`（primary/quality/gate）与 `30472569865`（shadow）均绿。
-- **Stack2 PR #39 代码状态**：`49f26a0` → `1db63357`，10 files，
-  `+2032/-254=2286`；local audit `base=49f26a0`、`head=1db63357`、
+- **Stack2 PR #39 代码状态**：`49f26a0` → `21d13cb`，10 files，
+  `+2118/-254=2372`；local audit `base=49f26a0`、`head=1db63357`、
   `registry=5fcbd`、`policy=2298cd`、`verdict=pass`、`findings=[]`；runs
-  `30477520968` 与 `30477520730` 均绿。
-- 最终代码状态验证：JS 139 tests、Python 60 tests、`git diff --check` 均通过。
-  并发 P1 的初修提交为 `34908c4`，success→reload 窗口闭合提交为 `aeaf6c3`。
+  `30477520968` 与 `30477520730` 均绿（均为此前代码状态证据，本次修复后需重新 gate）。
+- 最终代码状态验证：JS 141 tests、Python 60 tests、`git diff --check` 均通过。
+  并发 P1 的初修提交为 `34908c4`，success→reload 窗口闭合提交为 `aeaf6c3`，
+  POST/response.json 绝对超时提交为 `21d13cb`。
   后续 stacked 重组与本文档同步不声称 TDD 新实现。
 - 本次提交仅修改本文档；按流程仍需重新运行 local review/CI。上列 run 与
   `findings=[]` 是此前代码状态的证据，不把本次文档提交自指为已通过 CI。
@@ -196,6 +198,15 @@ tests/unit/test_detailed_notes_view.py` 为 60 passed，`git diff --check` 通�
 为 10 tests 中 2 failures，修复后 targeted GREEN 10/10；随后 `npm run test:web` 为
 10 files / 139 tests 全绿，Python Web 单测仍为 60 passed。该 finding 与修复属于同一
 Stack2 local gate 循环，不计为 R9。
+
+随后 Stack2 local gate 又发现一个 personal P1：POST fetch 或 `response.json()` 永不
+resolve 时，原有 600 秒 absolute deadline 只覆盖 polling，action promise 可能永久 pending。
+`21d13cb`（`[codex] 覆盖受保护操作 POST 绝对超时`）将既有 `context.timer`、
+`startedAt`、`AbortController` 和 `finishContext` 复用到 POST fetch/body 与 polling；完整
+response/body 或进入 401 refresh 前清 timer，deadline 触发后晚返回不会二次 finish 或启动
+poll，不新增独立状态。两项假时钟回归在旧实现均 RED，修复后 targeted 29/29 GREEN；全量
+`npm run test:web` 141 tests、Python Web 单测 60 passed、`git diff --check` 均通过。
+该 P1 与修复属于同一 Stack2 local gate 循环，不计为 R9。
 
 ### 其他 finding 分诊
 
