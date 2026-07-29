@@ -1,7 +1,7 @@
 # 统一浏览器 Bearer 鉴权：实现与评审记录
 
 > Session：`260729-1709-auth` · 风险等级：`personal`（自用工具）· 记录基于
-> `origin/main...b133263` 的最终 diff。
+> `origin/main...d5672d2` 的当前 diff。
 
 ## 结论
 
@@ -10,7 +10,10 @@
 重新总结和详细笔记等操作继续使用 Bearer 头。统一模块、历史页状态切换、受保护操作
 控制器和 PWA 资产刷新契约均已落地，独立 review 在 R3/R4 连续两轮没有新增 P1，按
 `personal` 规则曾收敛；后续 R6 发现两项 P1，已在本增量修复，当前不宣告最终收敛。
-R7 又发现三项 P1，已在本增量修复，仍不宣告最终收敛。
+R7 又发现三项 P1，已在本增量修复，仍不宣告最终收敛。R8 的最新 CI primary audit
+报告两项 major；经用户分诊均降为 personal 风险下的 P2、接受不修，未新增代码修复。
+按原始 8 轮上限，R7 后当前阶段仅 R8 这一轮按分诊结果 clean，不声称两轮无 P1 或
+最终收敛；后续按用户要求继续 CI Agent Review 循环。
 
 ## 实现清单
 
@@ -74,6 +77,7 @@ empty input is queried` 锁死；其余 OCR finding 分别为 P2/P3 或误报，
 | R4 | 无新增 P1 | `/tmp/vta-codex-review-round4.txt` 记录“本轮无新增 P1”，覆盖存储/迁移/CAS、history reset/请求代际、POST/pagehide、600 秒轮询、XSS/敏感日志和 PWA 缓存；与 R3 连续两轮收敛。 |
 | R6 | 发现 2 个 P1，已在本增量修复，尚未宣告最终收敛 | (1) 持久 canonical A 被替换为 B 时 `setItem` 失败，内存 B 刷新后会静默恢复 A；(2) 未封存迁移窗口内 legacy alias storage 事件未触发 history 原子 reset。回归测试覆盖 set 失败与旧 canonical 无法清除两个 storage 场景，以及 `api_key`/`vta_api_key_persist`/`vta_api_key` 三个事件键；修复提交：`30705e3`。 |
 | R7 | 发现 3 个 P1，已在本增量修复，尚未宣告最终收敛 | (1) clear canonical/alias/marker 删除或封存失败曾假报成功；(2) 首页未同步共享 storage 事件；(3) 首页、history、transcript 未消费 clear/save false，可能显示新身份或成功文案。回归测试覆盖 canonical remove SecurityError、alias/marker failure、CAS propagation、首页事件/save/empty clear、history/transcript clear；修复提交：`1126152`。 |
+| R8（用户分诊） | 无新增 P1（两项 CI primary audit major 均降为 P2，接受不修） | A：canonical 写成功后 alias 删除或 migration marker 写入失败，后续仅在 canonical 缺失/损坏时旧 alias 才可能复活；B：存储不可用进入当前页内存降级后 clear 失败恢复 `previousMemoryToken`。两项均只在逐键存储异常、浏览器策略或故障下触发；不新增状态、回滚协议或持久键。R7 后当前阶段仅 R8 这一轮按分诊结果 clean，后续继续 CI Agent Review 循环。 |
 
 R6 修复证据：旧实现 targeted RED 为 4 例（首个 storage 1 例、legacy 事件 3 例；旧
 canonical 无法清除的边界由同一不变式锁死）；实现后
@@ -92,6 +96,28 @@ transcript-auth-integration targeted 共 53 例全绿，并通过 Python structu
   回归（单个 alias 与全部 alias 两种场景），旧实现 2 例失败。
 - Fix：`migrateAuthToken()` 无显式 token 时先解码 canonical，再回退 legacy；沿用现有
   `writeAuthToken()` 清理 alias 并 sealed marker。修复提交：`d238107`。
+
+## 最新 CI primary audit findings（R8 用户分诊）
+
+最新 CI primary audit 针对当前 HEAD `d5672d2` 报告两项 major。用户已将两项均按
+`personal` 风险分诊为 P2，接受不修；本记录不声称新增代码修复，也不引入新的状态、
+回滚协议或持久键。
+
+1. **canonical 成功写入后的 alias/marker 部分失败**（P2，接受不修）：触发条件是
+   canonical `setItem` 已成功，但某个 legacy alias 的 `removeItem` 或迁移 marker 的
+   `setItem` 因逐键存储异常、浏览器策略或暂时故障失败。此时 `writeAuthToken()` 仍返回
+   `true`；只要 canonical 后续仍可读，新 token 继续生效，只有 canonical 日后缺失或
+   损坏时，未清掉的旧 alias 才可能被读取而复活旧身份。存储辅助层会把单键异常转为
+   布尔结果并按既有策略告警；canonical 写入或 clear 的失败路径由页面检查布尔返回值并
+   显式报错，不是静默地宣称已完成。该 finding 特指 canonical 成功后的 alias/marker
+   部分成功边界，当前不为其增加汇总状态。恢复存储后重新输入/更换 token，或清理站点
+   存储后再输入，可清除残留 alias 并恢复一致身份。
+2. **内存降级 clear 失败恢复旧 token**（P2，接受不修）：触发条件是
+   `localStorage`/`sessionStorage` 因逐键 `SecurityError`、浏览器策略或故障不可用，
+   当前 document 已进入内存降级，随后用户执行 clear，而删除或 marker 写入仍失败。
+   `clearAuthToken()`/CAS 会返回 `false`，页面沿用现有失败文案；内存 token 仅存在于
+   当前 document 生命周期，关闭或重载标签页即可清掉。存储恢复后重新输入/更换 token，
+   或清理站点存储后重新输入，可恢复正常持久化与清除能力；不为此增加新的回滚协议。
 
 ## P2/P3 backlog（接受不修）
 
@@ -114,3 +140,13 @@ transcript-auth-integration targeted 共 53 例全绿，并通过 Python structu
 6. **TextDecoder 非法 UTF-8 细分诊断**（P2）：会成为含替换字符的无效 bearer，通常得到
    可见 401，不会静默切换到另一有效身份；因此在 personal 下接受不修，不为本次 P1 清除
    流程新增解码机制，后续可补独立数据完整性测试。
+7. **canonical 写成功后的 alias/marker 部分失败**（P2）：逐键存储异常、浏览器策略或
+   暂时故障才会触发；canonical 仍可读时不会改变当前身份，只有 canonical 日后缺失或
+   损坏才可能让残留旧 alias 复活。页面已对 canonical write/clear 的失败检查布尔结果并
+   报错，故障可由浏览器告警和页面错误观察；不新增部分成功汇总状态。恢复存储后重新
+   输入/更换 token，或清理站点存储后再输入，可恢复一致状态。用户分诊接受不修。
+8. **内存降级 clear 失败恢复 `previousMemoryToken`**（P2）：localStorage/sessionStorage
+   受逐键 SecurityError、浏览器策略或故障影响而不可用时才触发；clear/CAS 返回 `false`
+   并由页面显示失败，不静默宣称清除成功。内存 token 只属于当前 document，关闭或重载
+   标签页即可清掉；存储恢复后重新输入/更换 token，或清理站点存储后再输入，可恢复。
+   用户分诊接受不修，不增加新的回滚协议或持久键。
