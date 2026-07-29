@@ -169,6 +169,24 @@
             }, POLL_INTERVAL_MS);
         }
 
+        function armPollingDeadline(context) {
+            if (context.finished || context.aborted) return false;
+            const remainingMs = POLL_TIMEOUT_MS - (now() - context.startedAt);
+            clearTimer(context);
+            if (remainingMs <= 0) {
+                if (context.abortController) context.abortController.abort();
+                finishContext(context, new Error('Polling timeout'));
+                return false;
+            }
+            context.timer = setTimeoutImpl(() => {
+                context.timer = null;
+                if (context.finished || context.aborted) return;
+                if (context.abortController) context.abortController.abort();
+                finishContext(context, new Error('Polling timeout'));
+            }, remainingMs);
+            return true;
+        }
+
         async function pollTask(context, taskId) {
             const pollOnce = async () => {
                 if (context.finished || context.aborted || context.inFlight) return;
@@ -177,8 +195,9 @@
                     return;
                 }
                 context.inFlight = true;
-                const snapshot = authStorage.snapshotAuthToken();
                 try {
+                    if (!armPollingDeadline(context)) return;
+                    const snapshot = authStorage.snapshotAuthToken();
                     const response = await runFetch(
                         fetchImpl,
                         `/api/task/${encodeURIComponent(taskId)}`,

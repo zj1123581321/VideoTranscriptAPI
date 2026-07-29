@@ -416,7 +416,7 @@ describe('transcript protected action controller', () => {
     const deps = dependencies({
       now: () => clock,
       setTimeoutImpl: vi.fn((callback, delay) => {
-        expect(delay).toBe(3000);
+        expect([3000, 600000]).toContain(delay);
         timerCallback = callback;
         return 1;
       }),
@@ -433,6 +433,28 @@ describe('transcript protected action controller', () => {
 
     await expect(pending).rejects.toThrow('Polling timeout');
     expect(deps.fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('aborts an unresolved polling fetch at the absolute 600000ms deadline', async () => {
+    vi.useFakeTimers();
+    const api = loadController();
+    const deps = dependencies();
+    deps.fetchImpl
+      .mockResolvedValueOnce(response(202, { code: 202, data: { task_id: 'task-unresolved-poll' } }))
+      .mockImplementationOnce(() => new Promise(() => {}));
+    const controller = api.createProtectedActionController(deps);
+    const pending = controller.runProtectedAction('recalibrate', 'view-unresolved-poll');
+    let rejection;
+    pending.catch((error) => { rejection = error; });
+    await flushPromises();
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(600000);
+    await flushPromises();
+
+    expect(rejection).toMatchObject({ message: 'Polling timeout' });
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(2);
+    expect(deps.fetchImpl.mock.calls[1][1].signal.aborted).toBe(true);
   });
 
   it('aborts private POST and polling when pagehide fires', async () => {
