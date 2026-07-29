@@ -65,6 +65,13 @@ function createHistoryFixture({ token = '' } = {}) {
   });
   const state = { token };
   const authStorage = {
+    AUTH_STORAGE_KEYS: {
+      canonical: 'vta_bearer_token',
+      migration: 'vta_auth_migration_v1',
+      legacyApi: 'api_key',
+      legacyPersistent: 'vta_api_key_persist',
+      legacySession: 'vta_api_key',
+    },
     readAuthToken: vi.fn(() => state.token),
     writeAuthToken: vi.fn((nextToken) => {
       state.token = nextToken;
@@ -157,6 +164,44 @@ describe('history private request generation guards', () => {
     expect(fixture.dom.window.document.getElementById('authStatus').textContent)
       .not.toContain('网络错误');
   });
+
+  it.each(['api_key', 'vta_api_key_persist', 'vta_api_key'])(
+    'resets private state when an unsealed legacy alias changes: %s',
+    async (key) => {
+      const fixture = createHistoryFixture();
+      const oldFilter = deferred();
+      fixture.state.token = 'old-token';
+      const input = fixture.dom.window.document.getElementById('apiKeyInput');
+      input.value = 'old-token';
+      fixture.fetchMock
+        .mockReturnValueOnce(oldFilter.promise)
+        .mockResolvedValueOnce(filterResponse('new-mask'))
+        .mockResolvedValueOnce(historyResponse('new title', 'new-view'));
+
+      const oldLoad = fixture.dom.window.loadHistory(0);
+      await flushPromises();
+      expect(fixture.fetchMock).toHaveBeenCalledTimes(1);
+
+      fixture.state.token = 'new-token';
+      fixture.dom.window.dispatchEvent(new fixture.dom.window.StorageEvent('storage', {
+        key,
+        newValue: 'new-token',
+      }));
+      await flushPromises();
+
+      expect(fixture.fetchMock).toHaveBeenCalledTimes(3);
+      expect(fixture.fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
+      expect(input.value).toBe('new-token');
+
+      oldFilter.resolve(filterResponse('old-mask'));
+      await oldLoad;
+      await flushPromises();
+      expect(fixture.dom.window.document.getElementById('listArea').textContent)
+        .toContain('new title');
+      expect(fixture.dom.window.document.getElementById('listArea').textContent)
+        .not.toContain('请输入访问令牌后点击查询');
+    }
+  );
 
   it('allows a new token generation to render after the old one is reset', async () => {
     const fixture = createHistoryFixture();

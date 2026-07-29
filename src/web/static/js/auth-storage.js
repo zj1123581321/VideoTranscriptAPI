@@ -211,14 +211,27 @@
 
     /**
      * Persist a selected token canonically, remove every legacy alias, and seal
-     * migration.  Storage failures retain the token only in page memory.
+     * migration.  Replacement clears the old canonical first; if that clear
+     * fails, return false while retaining the new token only in page memory.
+     * Other storage failures retain the token only in page memory.
      */
     function writeAuthToken(token, _options) {
         if (typeof token !== 'string' || !token || hasControlCharacter(token)) return false;
         const encoded = encodeAuthToken(token);
         if (!encoded) return false;
+        const previousMemoryToken = memoryToken;
+        const previousMemorySealed = memorySealed;
+        const previousMemoryFallbackActive = memoryFallbackActive;
         memoryToken = token;
         memorySealed = true;
+        const previousCanonical = readStorageValue('localStorage', AUTH_STORAGE_KEYS.canonical);
+        if (previousCanonical && !removeStorageValue('localStorage', AUTH_STORAGE_KEYS.canonical)) {
+            warnStorageFallback();
+            memoryToken = previousMemoryToken;
+            memorySealed = previousMemorySealed;
+            memoryFallbackActive = previousMemoryFallbackActive;
+            return false;
+        }
         const persisted = writeStorageValue(
             'localStorage',
             AUTH_STORAGE_KEYS.canonical,
@@ -227,6 +240,10 @@
         if (!persisted) {
             memoryFallbackActive = true;
             warnStorageFallback();
+            removeStorageValue('localStorage', AUTH_STORAGE_KEYS.legacyApi);
+            removeStorageValue('localStorage', AUTH_STORAGE_KEYS.legacyPersistent);
+            removeStorageValue('sessionStorage', AUTH_STORAGE_KEYS.legacySession);
+            writeStorageValue('localStorage', AUTH_STORAGE_KEYS.migration, '1');
             return true;
         }
         memoryFallbackActive = false;

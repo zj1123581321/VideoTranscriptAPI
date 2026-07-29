@@ -243,6 +243,44 @@ describe('auth storage failure degradation', () => {
     expect(authStorage.writeAuthToken('quota-secret', { remember: true })).toBe(true);
     expect(authStorage.readAuthToken()).toBe('quota-secret');
   });
+
+  it('does not resurrect persisted canonical after a failed replacement write', () => {
+    expect(authStorage.writeAuthToken('persisted-canonical-a', { remember: true })).toBe(true);
+    const storagePrototype = Object.getPrototypeOf(localStorage);
+    const originalSetItem = storagePrototype.setItem;
+    vi.spyOn(storagePrototype, 'setItem').mockImplementation(function setItem(key, value) {
+      if (key === 'vta_bearer_token') {
+        const error = new Error('full');
+        error.name = 'QuotaExceededError';
+        throw error;
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    expect(authStorage.writeAuthToken('memory-canonical-b', { remember: true })).toBe(true);
+    expect(authStorage.readAuthToken()).toBe('memory-canonical-b');
+
+    vi.restoreAllMocks();
+    authStorage = loadAuthStorage();
+    expect(authStorage.readAuthToken()).toBeNull();
+  });
+
+  it('keeps the previous identity when persisted canonical cannot be cleared', () => {
+    expect(authStorage.writeAuthToken('persisted-canonical-a', { remember: true })).toBe(true);
+    const storagePrototype = Object.getPrototypeOf(localStorage);
+    const originalRemoveItem = storagePrototype.removeItem;
+    vi.spyOn(storagePrototype, 'removeItem').mockImplementation(function removeItem(key) {
+      if (key === 'vta_bearer_token') {
+        const error = new Error('full');
+        error.name = 'QuotaExceededError';
+        throw error;
+      }
+      return originalRemoveItem.call(this, key);
+    });
+
+    expect(authStorage.writeAuthToken('memory-canonical-b', { remember: true })).toBe(false);
+    expect(authStorage.readAuthToken()).toBe('persisted-canonical-a');
+  });
 });
 
 describe('auth storage events and browser compatibility', () => {
