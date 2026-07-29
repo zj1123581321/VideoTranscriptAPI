@@ -1,19 +1,34 @@
 # 统一浏览器 Bearer 鉴权：实现与评审记录
 
-> Session：`260729-1709-auth` · 风险等级：`personal`（自用工具）· 记录基于
-> `origin/main...d5672d2` 的当前 diff。
+> Session：`260729-1709-auth` · 风险等级：`personal`（自用工具）· stacked 交付基线：
+> Stack1 PR #40（`main` → `49f26a0`），Stack2 PR #39（`49f26a0` → 代码 HEAD
+> `1db63357`）。当前提交仅同步本文档，不改变代码状态。
 
 ## 结论
 
 首页、任务历史页和转录结果页现在共享一个浏览器访问令牌模块。公开结果页和导出
 链接仍是 `view_token` capability 的 GET 只读路径；提交任务、私有历史、重新校对、
 重新总结和详细笔记等操作继续使用 Bearer 头。统一模块、历史页状态切换、受保护操作
-控制器和 PWA 资产刷新契约均已落地，独立 review 在 R3/R4 连续两轮没有新增 P1，按
-`personal` 规则曾收敛；后续 R6 发现两项 P1，已在本增量修复，当前不宣告最终收敛。
-R7 又发现三项 P1，已在本增量修复，仍不宣告最终收敛。R8 的最新 CI primary audit
-报告两项 major；经用户分诊均降为 personal 风险下的 P2、接受不修，未新增代码修复。
-按原始 8 轮上限，R7 后当前阶段仅 R8 这一轮按分诊结果 clean，不声称两轮无 P1 或
-最终收敛；后续按用户要求继续 CI Agent Review 循环。
+控制器和 PWA 资产刷新契约均已落地。原独立 review 的 8 轮在用户将 R8 两项 major
+降为 personal 风险下的 P2 后，只有 R8 这一轮按分诊结果 clean；原独立循环未满足
+连续两轮无 P1 的收敛门槛，不虚构最终收敛。之后是用户要求的 local gate/CI 循环，
+不计为 R9。Stack2 local gate 发现并修复了真实的转录页受保护操作并发 reload 窗口；
+其余 P2/P3 接受不修项已列入本文档 backlog。最终 exact local review pass 为
+`findings=[]`，交付以 stacked PR 的门禁全绿为准。
+
+## Stacked PR 与门禁证据
+
+- **Stack1 PR #40**：`main` → `49f26a0`，11 files，`+2367/-128=2495`；runs
+  `30472569111`（primary/quality/gate）与 `30472569865`（shadow）均绿。
+- **Stack2 PR #39 代码状态**：`49f26a0` → `1db63357`，10 files，
+  `+2032/-254=2286`；local audit `base=49f26a0`、`head=1db63357`、
+  `registry=5fcbd`、`policy=2298cd`、`verdict=pass`、`findings=[]`；runs
+  `30477520968` 与 `30477520730` 均绿。
+- 最终代码状态验证：JS 139 tests、Python 60 tests、`git diff --check` 均通过。
+  并发 P1 的初修提交为 `34908c4`，success→reload 窗口闭合提交为 `aeaf6c3`。
+  后续 stacked 重组与本文档同步不声称 TDD 新实现。
+- 本次提交仅修改本文档；按流程仍需重新运行 local review/CI。上列 run 与
+  `findings=[]` 是此前代码状态的证据，不把本次文档提交自指为已通过 CI。
 
 ## 实现清单
 
@@ -67,7 +82,8 @@ empty input is queried` 锁死；其余 OCR finding 分别为 P2/P3 或误报，
 
 ## 独立 review 收敛记录
 
-本次只审 `origin/main...HEAD`，规格为 `SPEC.md`，风险等级为 `personal`。
+原独立 review 只审当时主干增量，规格为 `SPEC.md`，风险等级为 `personal`；其 8 轮上限
+不延长。Stack2 后续 local gate/CI 循环不计为 R9。
 
 | 轮次 | 结果 | 处理 |
 | --- | --- | --- |
@@ -77,7 +93,7 @@ empty input is queried` 锁死；其余 OCR finding 分别为 P2/P3 或误报，
 | R4 | 无新增 P1 | `/tmp/vta-codex-review-round4.txt` 记录“本轮无新增 P1”，覆盖存储/迁移/CAS、history reset/请求代际、POST/pagehide、600 秒轮询、XSS/敏感日志和 PWA 缓存；与 R3 连续两轮收敛。 |
 | R6 | 发现 2 个 P1，已在本增量修复，尚未宣告最终收敛 | (1) 持久 canonical A 被替换为 B 时 `setItem` 失败，内存 B 刷新后会静默恢复 A；(2) 未封存迁移窗口内 legacy alias storage 事件未触发 history 原子 reset。回归测试覆盖 set 失败与旧 canonical 无法清除两个 storage 场景，以及 `api_key`/`vta_api_key_persist`/`vta_api_key` 三个事件键；修复提交：`30705e3`。 |
 | R7 | 发现 3 个 P1，已在本增量修复，尚未宣告最终收敛 | (1) clear canonical/alias/marker 删除或封存失败曾假报成功；(2) 首页未同步共享 storage 事件；(3) 首页、history、transcript 未消费 clear/save false，可能显示新身份或成功文案。回归测试覆盖 canonical remove SecurityError、alias/marker failure、CAS propagation、首页事件/save/empty clear、history/transcript clear；修复提交：`1126152`。 |
-| R8（用户分诊） | 无新增 P1（两项 CI primary audit major 均降为 P2，接受不修） | A：canonical 写成功后 alias 删除或 migration marker 写入失败，后续仅在 canonical 缺失/损坏时旧 alias 才可能复活；B：存储不可用进入当前页内存降级后 clear 失败恢复 `previousMemoryToken`。两项均只在逐键存储异常、浏览器策略或故障下触发；不新增状态、回滚协议或持久键。R7 后当前阶段仅 R8 这一轮按分诊结果 clean，后续继续 CI Agent Review 循环。 |
+| R8（用户分诊） | 无新增 P1（两项 CI primary audit major 均降为 P2，接受不修） | A：canonical 写成功后 alias 删除或 migration marker 写入失败，后续仅在 canonical 缺失/损坏时旧 alias 才可能复活；B：存储不可用进入当前页内存降级后 clear 失败恢复 `previousMemoryToken`。两项均只在逐键存储异常、浏览器策略或故障下触发；不新增状态、回滚协议或持久键。R7 后原独立循环仅 R8 这一轮按分诊结果 clean，未满足连续两轮门槛；用户随后要求转入 local gate/CI 循环，该循环不计为 R9。 |
 
 R6 修复证据：旧实现 targeted RED 为 4 例（首个 storage 1 例、legacy 事件 3 例；旧
 canonical 无法清除的边界由同一不变式锁死）；实现后
@@ -97,9 +113,9 @@ transcript-auth-integration targeted 共 53 例全绿，并通过 Python structu
 - Fix：`migrateAuthToken()` 无显式 token 时先解码 canonical，再回退 legacy；沿用现有
   `writeAuthToken()` 清理 alias 并 sealed marker。修复提交：`d238107`。
 
-## 最新 CI primary audit findings（R8 用户分诊）
+## R8 CI primary audit findings（历史代码状态，用户分诊）
 
-最新 CI primary audit 针对当前 HEAD `d5672d2` 报告两项 major。用户已将两项均按
+R8 CI primary audit 针对当时的代码 HEAD `d5672d2` 报告两项 major。用户已将两项均按
 `personal` 风险分诊为 P2，接受不修；本记录不声称新增代码修复，也不引入新的状态、
 回滚协议或持久键。
 
