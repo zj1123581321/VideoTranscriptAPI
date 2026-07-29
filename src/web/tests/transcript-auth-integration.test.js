@@ -18,7 +18,7 @@ function adapterSource() {
     .replace('{{ view_token|tojson }}', JSON.stringify('view-token-1'));
 }
 
-function createFixture({ token = 'cached-token', withAuth = true, withController = true } = {}) {
+function createFixture({ token = 'cached-token', withAuth = true, withController = true, deferTimers = false } = {}) {
   const dom = new JSDOM(`<!doctype html><body>
     <div id="protectedActionAuthStatus"></div>
     <dialog id="protectedActionAuthDialog" aria-labelledby="protectedActionAuthTitle" aria-describedby="protectedActionAuthDescription">
@@ -59,12 +59,23 @@ function createFixture({ token = 'cached-token', withAuth = true, withController
       }),
     };
   }
+  const deferredTimers = [];
   dom.window.setTimeout = (callback) => {
+    if (deferTimers) {
+      deferredTimers.push(callback);
+      return deferredTimers.length;
+    }
     callback();
     return 1;
   };
   dom.window.eval(adapterSource());
-  return { dom, authStorage, controller, getDependencies: () => capturedDependencies };
+  return {
+    dom,
+    authStorage,
+    controller,
+    getDependencies: () => capturedDependencies,
+    runDeferredTimers: () => deferredTimers.splice(0).forEach((callback) => callback()),
+  };
 }
 
 describe('transcript protected action page adapter', () => {
@@ -96,7 +107,7 @@ describe('transcript protected action page adapter', () => {
   });
 
   it('blocks a second protected action while the first is pending and keeps it out of reload completion', async () => {
-    const fixture = createFixture();
+    const fixture = createFixture({ deferTimers: true });
     let finishFirst;
     fixture.controller.runProtectedAction.mockImplementationOnce(() => new Promise((resolve) => {
       finishFirst = () => {
@@ -112,16 +123,39 @@ describe('transcript protected action page adapter', () => {
     secondButton.click();
 
     expect(fixture.controller.runProtectedAction).toHaveBeenCalledTimes(1);
-    expect(secondButton.disabled).toBe(false);
+    expect(secondButton.disabled).toBe(true);
     expect(secondButton.textContent).toBe('resummarize');
 
     finishFirst();
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(secondButton.disabled).toBe(false);
+    expect(secondButton.disabled).toBe(true);
     expect(secondButton.textContent).toBe('resummarize');
     expect(secondArea.querySelector('.recalibrate-done')).toBeNull();
+
+    secondButton.click();
+    expect(fixture.controller.runProtectedAction).toHaveBeenCalledTimes(1);
+    fixture.runDeferredTimers();
+  });
+
+  it('restores every protected action button after the active action fails', async () => {
+    const fixture = createFixture();
+    fixture.controller.runProtectedAction.mockRejectedValueOnce(new Error('POST network failure'));
+    const buttons = [...fixture.dom.window.document.querySelectorAll('[data-protected-action]')];
+
+    buttons[0].click();
+    expect(buttons.every((button) => button.disabled)).toBe(true);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(buttons.every((button) => !button.disabled)).toBe(true);
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      'recalibrate',
+      'resummarize',
+      'generate notes',
+    ]);
   });
 
   it('does not open the prompt for a cached-token action', async () => {

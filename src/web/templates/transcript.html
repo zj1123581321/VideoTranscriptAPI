@@ -481,6 +481,16 @@
         if (restoreFocus && typeof elements.button.focus === 'function') elements.button.focus();
     }
 
+    function disableProtectedActionButtons() {
+        var buttons = document.querySelectorAll('[data-protected-action]');
+        for (var index = 0; index < buttons.length; index += 1) buttons[index].disabled = true;
+    }
+
+    function enableProtectedActionButtons() {
+        var buttons = document.querySelectorAll('[data-protected-action]');
+        for (var index = 0; index < buttons.length; index += 1) buttons[index].disabled = false;
+    }
+
     function closeAuthDialog() {
         if (!authDialog) return;
         if (typeof authDialog.close === 'function' && authDialog.open) authDialog.close();
@@ -563,7 +573,7 @@
         reloadScheduled = true;
         Object.keys(actionDefinitions).forEach(function(actionName) {
             var elements = actionElements(actionDefinitions[actionName]);
-            if (elements.area && elements.button && elements.button.disabled) {
+            if (elements.area && elements.button && elements.area.getAttribute('aria-busy') === 'true') {
                 setActionStatus(elements, '处理完成，正在刷新...', 'recalibrate-status recalibrate-done');
             }
         });
@@ -612,12 +622,13 @@
             var originalLabel = elements.button.textContent;
             elements.button.addEventListener('click', function() {
                 if (document.querySelector('[data-protected-action]:disabled')) return;
+                disableProtectedActionButtons();
                 if (!activePrompt) promptTrigger = elements.button;
-                elements.button.disabled = true;
                 elements.area.setAttribute('aria-busy', 'true');
                 elements.button.textContent = definition.running;
                 controller.runProtectedAction(actionName, transcriptViewToken).catch(function(error) {
                     restoreActionButton(elements, originalLabel, formatActionError(error));
+                    enableProtectedActionButtons();
                 });
             });
         });
