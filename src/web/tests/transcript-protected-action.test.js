@@ -77,6 +77,56 @@ describe('transcript protected action controller', () => {
     expect(deps.authStorage.writeAuthToken).toHaveBeenCalledWith('prompted-token');
   });
 
+  it('does not POST when pagehide aborts while the initial token prompt is pending', async () => {
+    const api = loadController();
+    let resolvePrompt;
+    const promptPending = new Promise((resolve) => { resolvePrompt = resolve; });
+    const listeners = {};
+    const deps = dependencies({
+      eventTarget: {
+        addEventListener: vi.fn((name, listener) => { listeners[name] = listener; }),
+        removeEventListener: vi.fn(),
+      },
+      promptToken: vi.fn(() => promptPending),
+    });
+    deps.authStorage.readAuthToken.mockReturnValue(null);
+    const controller = api.createProtectedActionController(deps);
+
+    const pending = controller.runProtectedAction('recalibrate', 'view-prompt-abort');
+    await flushPromises();
+    listeners.pagehide();
+    resolvePrompt('late-token');
+    await expect(pending).rejects.toThrow('aborted');
+    await flushPromises();
+
+    expect(deps.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('does not replay POST when pagehide aborts while a 401 refresh prompt is pending', async () => {
+    const api = loadController();
+    let resolvePrompt;
+    const promptPending = new Promise((resolve) => { resolvePrompt = resolve; });
+    const listeners = {};
+    const deps = dependencies({
+      eventTarget: {
+        addEventListener: vi.fn((name, listener) => { listeners[name] = listener; }),
+        removeEventListener: vi.fn(),
+      },
+      promptToken: vi.fn(() => promptPending),
+    });
+    deps.fetchImpl.mockResolvedValueOnce(response(401, { detail: 'expired' }));
+    const controller = api.createProtectedActionController(deps);
+
+    const pending = controller.runProtectedAction('resummarize', 'view-refresh-abort');
+    await flushPromises();
+    listeners.pagehide();
+    resolvePrompt('late-refresh-token');
+    await expect(pending).rejects.toThrow('aborted');
+    await flushPromises();
+
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('shares one prompt across concurrent 401 responses and replays each POST once', async () => {
     const api = loadController();
     const deps = dependencies();

@@ -254,6 +254,7 @@
             const token = authStorage.readAuthToken();
             if (!isNonEmptyToken(token)) {
                 await promptForToken();
+                if (context.aborted || context.finished) throw makeAbortError();
             }
             const snapshot = authStorage.snapshotAuthToken();
             let response;
@@ -280,6 +281,7 @@
                 if (attempt >= 1 || context.replayed) throw new Error('HTTP 401 after one replay');
                 context.replayed = true;
                 await refreshTokenAfter401(snapshot);
+                if (context.aborted || context.finished) throw makeAbortError();
                 return postAction(context, actionName, viewToken, attempt + 1);
             }
             if ([403, 404, 409].includes(response.status)) throw new Error(`HTTP ${response.status}`);
