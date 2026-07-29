@@ -34,9 +34,9 @@ function createFixture({ token = 'cached-token', withAuth = true, withController
     </dialog>
     <button id="protectedActionAuthChange">change</button>
     <button id="protectedActionAuthClear">clear</button>
-    <span id="recalibrateArea"><button id="recalibrateBtn">recalibrate</button></span>
-    <span id="resummarizeArea"><button id="resummarizeBtn">resummarize</button></span>
-    <span id="generateNotesArea"><button id="generateNotesBtn">generate notes</button></span>
+    <span id="recalibrateArea"><button id="recalibrateBtn" data-protected-action="recalibrate">recalibrate</button></span>
+    <span id="resummarizeArea"><button id="resummarizeBtn" data-protected-action="resummarize">resummarize</button></span>
+    <span id="generateNotesArea"><button id="generateNotesBtn" data-protected-action="generate_notes">generate notes</button></span>
   </body>`, { runScripts: 'outside-only', url: 'https://example.test/view/view-token-1' });
   const authStorage = {
     readAuthToken: vi.fn(() => token),
@@ -70,18 +70,58 @@ function createFixture({ token = 'cached-token', withAuth = true, withController
 describe('transcript protected action page adapter', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('maps all three actions and sends the Jinja view token to the controller', async () => {
-    const fixture = createFixture();
-    fixture.dom.window.document.querySelector('#recalibrateBtn').click();
-    fixture.dom.window.document.querySelector('#resummarizeBtn').click();
-    fixture.dom.window.document.querySelector('#generateNotesBtn').click();
-    await Promise.resolve();
+  it('maps each action and sends the Jinja view token to the controller after settling', async () => {
+    const actionCases = [
+      ['#recalibrateBtn', 'recalibrate'],
+      ['#resummarizeBtn', 'resummarize'],
+      ['#generateNotesBtn', 'generate_notes'],
+    ];
+    const calls = [];
 
-    expect(fixture.controller.runProtectedAction.mock.calls.map(([action, token]) => [action, token])).toEqual([
+    for (const [selector, action] of actionCases) {
+      const fixture = createFixture();
+      fixture.dom.window.document.querySelector(selector).click();
+      await Promise.resolve();
+      await Promise.resolve();
+      calls.push(...fixture.controller.runProtectedAction.mock.calls.map(([name, token]) => [name, token]));
+      expect(fixture.controller.runProtectedAction).toHaveBeenCalledTimes(1);
+      expect(calls.at(-1)).toEqual([action, 'view-token-1']);
+    }
+
+    expect(calls).toEqual([
       ['recalibrate', 'view-token-1'],
       ['resummarize', 'view-token-1'],
       ['generate_notes', 'view-token-1'],
     ]);
+  });
+
+  it('blocks a second protected action while the first is pending and keeps it out of reload completion', async () => {
+    const fixture = createFixture();
+    let finishFirst;
+    fixture.controller.runProtectedAction.mockImplementationOnce(() => new Promise((resolve) => {
+      finishFirst = () => {
+        resolve();
+        fixture.getDependencies().onSuccess({ taskId: 'task-1' });
+      };
+    }));
+    const firstButton = fixture.dom.window.document.querySelector('#recalibrateBtn');
+    const secondButton = fixture.dom.window.document.querySelector('#resummarizeBtn');
+    const secondArea = fixture.dom.window.document.querySelector('#resummarizeArea');
+
+    firstButton.click();
+    secondButton.click();
+
+    expect(fixture.controller.runProtectedAction).toHaveBeenCalledTimes(1);
+    expect(secondButton.disabled).toBe(false);
+    expect(secondButton.textContent).toBe('resummarize');
+
+    finishFirst();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(secondButton.disabled).toBe(false);
+    expect(secondButton.textContent).toBe('resummarize');
+    expect(secondArea.querySelector('.recalibrate-done')).toBeNull();
   });
 
   it('does not open the prompt for a cached-token action', async () => {

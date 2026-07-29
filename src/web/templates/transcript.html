@@ -305,7 +305,7 @@
                 <p style="color: #991b1b; font-style: italic;">⚠️ 总结生成失败。</p>
                 {% if view_token %}
                 <span id="resummarizeArea">
-                    <button class="recalibrate-btn" id="resummarizeBtn" type="button">🔄 重新生成总结</button>
+                    <button class="recalibrate-btn" id="resummarizeBtn" type="button" data-protected-action="resummarize">🔄 重新生成总结</button>
                 </span>
                 {% endif %}
             {% elif summary_state == 'skipped_short' %}
@@ -338,7 +338,7 @@
             <h2>📚 详细笔记</h2>
             {% if view_token %}
             <span id="generateNotesArea">
-                <button class="recalibrate-btn" id="generateNotesBtn" type="button">
+                <button class="recalibrate-btn" id="generateNotesBtn" type="button" data-protected-action="generate_notes">
                     {% if notes_state|default(None) == 'failed' %}🔄 详细笔记生成失败，可重试{% else %}🧭 生成详细笔记{% endif %}
                 </button>
             </span>
@@ -367,7 +367,7 @@
                 <button class="recalibrate-btn copy-content-btn" type="button" data-copy-target="calibrated-content-block" title="复制校对文本正文">📋 复制内容</button>
                 {% if view_token %}
                 <span id="recalibrateArea">
-                    <button class="recalibrate-btn" id="recalibrateBtn" type="button">🔄 重新校对</button>
+                    <button class="recalibrate-btn" id="recalibrateBtn" type="button" data-protected-action="recalibrate">🔄 重新校对</button>
                 </span>
                 {% endif %}
             </div>
@@ -611,6 +611,7 @@
             if (!elements.button || !elements.area) return;
             var originalLabel = elements.button.textContent;
             elements.button.addEventListener('click', function() {
+                if (document.querySelector('[data-protected-action]:disabled')) return;
                 if (!activePrompt) promptTrigger = elements.button;
                 elements.button.disabled = true;
                 elements.area.setAttribute('aria-busy', 'true');
