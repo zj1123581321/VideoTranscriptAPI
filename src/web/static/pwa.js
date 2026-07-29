@@ -204,6 +204,7 @@
   var POLL_INTERVAL_MS = 15000;
   var MAX_CONSECUTIVE_FAILURES = 5;
   var NOTIFY_DENIED_HINT_KEY = 'vta_pwa_notify_denied_hint';
+  var TRACKED_TASKS_KEY = 'vta_pwa_tracked_tasks';
 
   /**
    * Judge terminal state from the GET /api/task/{id} response BODY.
@@ -231,9 +232,73 @@
   }
 
   /**
+   * Parse the persisted tracked-task list from localStorage JSON.
+   * The list survives the standalone same-window jump to /view and page
+   * refreshes (Codex R1-1), so it must tolerate junk writes.
+   *
+   * @param {?string} json Raw localStorage value.
+   * @returns {Array<{task_id: string, view_token: string}>}
+   */
+  function parseTrackedTasks(json) {
+    if (!json) {
+      return [];
+    }
+    var list;
+    try {
+      list = JSON.parse(json);
+    } catch (e) {
+      return [];
+    }
+    if (!Array.isArray(list)) {
+      return [];
+    }
+    return list
+      .filter(function (t) {
+        return t && typeof t.task_id === 'string' && t.task_id;
+      })
+      .map(function (t) {
+        return {
+          task_id: t.task_id,
+          view_token: typeof t.view_token === 'string' ? t.view_token : '',
+        };
+      });
+  }
+
+  /**
+   * Add a task to the list, deduping by task_id (latest wins).
+   *
+   * @param {Array} list Current list.
+   * @param {{task_id: string, view_token: string}} task Task to track.
+   * @returns {Array} New list.
+   */
+  function upsertTrackedTask(list, task) {
+    var filtered = list.filter(function (t) {
+      return t.task_id !== task.task_id;
+    });
+    filtered.push({ task_id: task.task_id, view_token: task.view_token || '' });
+    return filtered;
+  }
+
+  /**
+   * Remove a task by key (never by index: indices go stale across awaits,
+   * Codex R1-3).
+   *
+   * @param {Array} list Current list.
+   * @param {string} taskId Task id to remove.
+   * @returns {Array} New list.
+   */
+  function removeTrackedTask(list, taskId) {
+    return list.filter(function (t) {
+      return t.task_id !== taskId;
+    });
+  }
+
+  /**
    * Notification toggle (explicit user gesture, per design E5) plus the
-   * in-memory task tracker listening for app.js 'vta:task-submitted'.
-   * In-memory by design: a page refresh loses tracking (accepted trade-off).
+   * task tracker listening for app.js 'vta:task-submitted'. The tracked
+   * list is persisted to localStorage (Codex R1-1): the standalone
+   * same-window jump to /view unloads this page, and an in-memory list
+   * would silently drop every notification.
    */
   function initTaskNotifications() {
     if (!('Notification' in window)) {
@@ -281,9 +346,45 @@
       Notification.requestPermission().then(renderButton);
     });
 
-    // ---- 任务跟踪轮询（内存态，刷新即丢，预期行为） ----
-    var tracked = [];
+    // ---- 任务跟踪轮询（持久化到 localStorage，跨页面跳转/刷新存活） ----
+    var tracked = []; // {task_id, view_token, failures}
     var timer = null;
+    var pollInFlight = false;
+
+    function persistTracked() {
+      try {
+        var list = tracked.map(function (t) {
+          return { task_id: t.task_id, view_token: t.view_token };
+        });
+        if (list.length === 0) {
+          window.localStorage.removeItem(TRACKED_TASKS_KEY);
+        } else {
+          window.localStorage.setItem(TRACKED_TASKS_KEY, JSON.stringify(list));
+        }
+      } catch (e) { /* storage unavailable: tracking stays in memory */ }
+    }
+
+    function addTracked(taskId, viewToken) {
+      var raw = upsertTrackedTask(
+        tracked.map(function (t) {
+          return { task_id: t.task_id, view_token: t.view_token };
+        }),
+        { task_id: taskId, view_token: viewToken }
+      );
+      // 保留已在跟踪项的 failures 计数
+      tracked = raw.map(function (u) {
+        for (var i = 0; i < tracked.length; i++) {
+          if (tracked[i].task_id === u.task_id) {
+            return tracked[i];
+          }
+        }
+        return { task_id: u.task_id, view_token: u.view_token, failures: 0 };
+      });
+      persistTracked();
+      if (!timer) {
+        timer = setInterval(pollTracked, POLL_INTERVAL_MS);
+      }
+    }
 
     document.addEventListener('vta:task-submitted', function (event) {
       if (Notification.permission !== 'granted') {
@@ -296,33 +397,57 @@
       if (!detail.task_id) {
         return;
       }
-      tracked.push({ taskId: detail.task_id, viewToken: detail.view_token, failures: 0 });
-      if (!timer) {
-        timer = setInterval(pollTracked, POLL_INTERVAL_MS);
-      }
+      addTracked(detail.task_id, detail.view_token);
     });
 
+    // 恢复上次页面（standalone 跳转 /view 前、刷新前）未终态的任务
+    if (Notification.permission === 'granted' && typeof APIManager !== 'undefined') {
+      var persisted = [];
+      try {
+        persisted = parseTrackedTasks(window.localStorage.getItem(TRACKED_TASKS_KEY));
+      } catch (e) { /* storage unavailable */ }
+      persisted.forEach(function (u) {
+        addTracked(u.task_id, u.view_token);
+      });
+    }
+
     async function pollTracked() {
-      for (var i = tracked.length - 1; i >= 0; i--) {
-        var item = tracked[i];
-        try {
-          var body = await APIManager.getTaskStatus(item.taskId);
-          var state = taskTerminalState(body);
-          if (state === 'success') {
-            notifySuccess(item);
-            tracked.splice(i, 1);
-          } else if (state === 'failed') {
-            tracked.splice(i, 1); // 失败静默停止
-          } else {
-            item.failures = 0;
-          }
-        } catch (err) {
-          item.failures += 1;
-          if (item.failures >= MAX_CONSECUTIVE_FAILURES) {
-            console.warn('E5 polling stopped after 5 failures:', item.taskId, err);
-            tracked.splice(i, 1);
+      if (pollInFlight) {
+        return; // 单飞：上一轮慢请求未结束不重入（Codex R1-3）
+      }
+      pollInFlight = true;
+      try {
+        var toRemove = [];
+        for (var i = 0; i < tracked.length; i++) {
+          var item = tracked[i];
+          try {
+            var body = await APIManager.getTaskStatus(item.task_id);
+            var state = taskTerminalState(body);
+            if (state === 'success') {
+              notifySuccess(item);
+              toRemove.push(item.task_id);
+            } else if (state === 'failed') {
+              toRemove.push(item.task_id); // 失败静默停止
+            } else {
+              item.failures = 0;
+            }
+          } catch (err) {
+            item.failures += 1;
+            if (item.failures >= MAX_CONSECUTIVE_FAILURES) {
+              console.warn('E5 polling stopped after 5 failures:', item.task_id, err);
+              toRemove.push(item.task_id);
+            }
           }
         }
+        // 按键值删除，不按 await 之前的下标 splice（Codex R1-3）
+        toRemove.forEach(function (taskId) {
+          tracked = removeTrackedTask(tracked, taskId);
+        });
+        if (toRemove.length) {
+          persistTracked();
+        }
+      } finally {
+        pollInFlight = false;
       }
       if (tracked.length === 0 && timer) {
         clearInterval(timer); // 列表空即停
@@ -331,17 +456,36 @@
     }
 
     function notifySuccess(item) {
+      var title = '转录任务完成';
+      var options = {
+        body: '点击查看转录结果',
+        icon: '/static/icons/icon-192.png',
+      };
+      var viewUrl = '/view/' + item.view_token;
       try {
-        var n = new Notification('转录任务完成', {
-          body: '点击查看转录结果',
-          icon: '/static/icons/icon-192.png',
-        });
+        // 页面级 Notification：桌面可用，保留裁决的 onclick 跳 /view 行为
+        var n = new Notification(title, options);
         n.onclick = function () {
           window.focus();
-          window.location.href = '/view/' + item.viewToken;
+          window.location.href = viewUrl;
         };
       } catch (err) {
-        console.warn('notification failed:', err);
+        // Android Chrome：页面上下文构造器直接抛 TypeError（Codex R1-2），
+        // 回退经 Service Worker 发系统通知，点击由 sw.js notificationclick 处理
+        if ('serviceWorker' in window.navigator) {
+          window.navigator.serviceWorker.ready
+            .then(function (reg) {
+              return reg.showNotification(
+                title,
+                Object.assign({}, options, { data: { url: viewUrl } })
+              );
+            })
+            .catch(function (swErr) {
+              console.warn('SW notification failed:', swErr);
+            });
+        } else {
+          console.warn('notification failed:', err);
+        }
       }
     }
   }
@@ -352,6 +496,10 @@
       taskTerminalState: taskTerminalState,
       POLL_INTERVAL_MS: POLL_INTERVAL_MS,
       MAX_CONSECUTIVE_FAILURES: MAX_CONSECUTIVE_FAILURES,
+      TRACKED_TASKS_KEY: TRACKED_TASKS_KEY,
+      parseTrackedTasks: parseTrackedTasks,
+      upsertTrackedTask: upsertTrackedTask,
+      removeTrackedTask: removeTrackedTask,
     };
   }
 

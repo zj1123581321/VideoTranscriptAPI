@@ -18,7 +18,7 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { CACHE_NAME, decideFetchStrategy, shouldPruneCache } = require('../static/sw.js');
+const { CACHE_NAME, decideFetchStrategy, shouldPruneCache, cacheKeyFor } = require('../static/sw.js');
 
 const nav = (pathname) => ({ method: 'GET', mode: 'navigate', pathname, sameOrigin: true });
 const get = (pathname) => ({ method: 'GET', mode: 'no-cors', pathname, sameOrigin: true });
@@ -68,5 +68,23 @@ describe('cache versioning', () => {
     expect(shouldPruneCache('vta-static-v99')).toBe(true);
     expect(shouldPruneCache(CACHE_NAME)).toBe(false);
     expect(shouldPruneCache('some-other-app-cache')).toBe(false);
+  });
+});
+
+describe('cacheKeyFor (Codex R1-4)', () => {
+  it('navigation cache key drops the query string (share-target params)', () => {
+    const shared = cacheKeyFor({
+      mode: 'navigate',
+      url: 'https://vta.example.com/add_task_by_web?url=https%3A%2F%2Fb23.tv%2Fx&title=t&text=s',
+    });
+    expect(shared).toBe('/add_task_by_web');
+    // every share reuses ONE cache entry instead of persisting share content
+    expect(cacheKeyFor({ mode: 'navigate', url: 'https://vta.example.com/add_task_by_web?url=other' }))
+      .toBe(shared);
+  });
+
+  it('non-navigation requests keep the full URL as key', () => {
+    expect(cacheKeyFor({ mode: 'no-cors', url: 'https://vta.example.com/static/manifest.webmanifest' }))
+      .toBe('https://vta.example.com/static/manifest.webmanifest');
   });
 });

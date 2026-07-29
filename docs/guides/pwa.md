@@ -29,7 +29,7 @@
 9. iOS Safari：未安装时按钮位置显示「添加到主屏幕」引导；安装后从主屏幕打开为全屏。
 10. iOS ≥16.4：从已安装 PWA 内点「开启通知」能弹系统授权。
 11. 无痕窗口（无 token）：打开页面，DevTools → Application → Service Workers 显示 `/sw.js` 注册成功。
-12. DevTools → Application → Cache Storage：只有 `vta-static-v1`，且只缓存入口页导航 / manifest / icons，
+12. DevTools → Application → Cache Storage：只有当前版本的 `vta-static-v<N>`（旧版本已被 activate 清理），且只缓存入口页导航 / manifest / icons，
     `/api/*` 与 `/view/*` 不落盘。
 13. 图标/manifest 变更后：确认已 bump `sw.js` 里 `CACHE_NAME` 版本号，旧 cache 在 activate 时被清理。
 

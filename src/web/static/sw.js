@@ -21,7 +21,7 @@
  */
 
 // Bump this version whenever sw.js, icons or the manifest change.
-const CACHE_NAME = 'vta-static-v1';
+const CACHE_NAME = 'vta-static-v2';
 const CACHE_PREFIX = 'vta-static-';
 
 // Navigation entry pages eligible for the network-first cache.
@@ -70,6 +70,22 @@ function shouldPruneCache(name) {
   return name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME;
 }
 
+/**
+ * Normalize the Cache Storage key for a request (Codex R1-4).
+ * Navigations (share-target launches carry ?url=&title=&text=) key by
+ * pathname only, so every share reuses one entry and share content is
+ * never persisted into Cache Storage.
+ *
+ * @param {{mode: string, url: string}} request Request-like descriptor.
+ * @returns {string} Cache key.
+ */
+function cacheKeyFor(request) {
+  if (request.mode === 'navigate') {
+    return new URL(request.url).pathname;
+  }
+  return request.url;
+}
+
 // ---- SW glue (skipped outside a service worker global scope, e.g. vitest) ----
 
 const IS_SERVICE_WORKER =
@@ -102,25 +118,50 @@ if (IS_SERVICE_WORKER) {
     });
 
     if (strategy === 'network-first') {
-      event.respondWith(networkFirst(event.request));
+      event.respondWith(networkFirst(event.request, event));
     } else if (strategy === 'stale-while-revalidate') {
-      event.respondWith(staleWhileRevalidate(event.request));
+      event.respondWith(staleWhileRevalidate(event.request, event));
     }
     // network-only: do not call respondWith -> default browser fetch,
     // nothing is written to Cache Storage.
   });
+
+  // E5 回退通道（Codex R1-2）：Android Chrome 上通知经
+  // reg.showNotification 发出，点击在这里聚焦/打开结果页。
+  self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const targetUrl =
+      (event.notification.data && event.notification.data.url) || '/add_task_by_web';
+    event.waitUntil(
+      self.clients
+        .matchAll({ type: 'window', includeUncontrolled: true })
+        .then((windowClients) => {
+          if (windowClients.length > 0) {
+            return windowClients[0].focus().then((client) => {
+              if (client && 'navigate' in client) {
+                return client.navigate(targetUrl);
+              }
+              return client;
+            });
+          }
+          return self.clients.openWindow(targetUrl);
+        })
+    );
+  });
 }
 
-async function networkFirst(request) {
+async function networkFirst(request, event) {
   const cache = await caches.open(CACHE_NAME);
+  const cacheKey = cacheKeyFor(request);
   try {
     const response = await fetch(request);
     if (response.ok) {
-      cache.put(request, response.clone());
+      // 不阻塞响应；waitUntil 保证 worker 活到写入完成（Codex R1-5）
+      event.waitUntil(cache.put(cacheKey, response.clone()));
     }
     return response;
   } catch (err) {
-    const cached = await cache.match(request, { ignoreSearch: true });
+    const cached = await cache.match(cacheKey, { ignoreSearch: true });
     if (cached) {
       return cached;
     }
@@ -128,21 +169,25 @@ async function networkFirst(request) {
   }
 }
 
-async function staleWhileRevalidate(request) {
+async function staleWhileRevalidate(request, event) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
-  const fetched = fetch(request)
-    .then((response) => {
-      if (response.ok) {
-        cache.put(request, response.clone());
-      }
-      return response;
-    })
-    .catch(() => cached);
-  return cached || fetched;
+  const revalidate = fetch(request).then((response) => {
+    if (response.ok) {
+      // await 写入后再算作 revalidate 完成（Codex R1-5）
+      return cache.put(request, response.clone()).then(() => response);
+    }
+    return response;
+  });
+  // 后台 revalidate 期间保持 worker 存活
+  event.waitUntil(revalidate.catch(() => {}));
+  if (cached) {
+    return cached;
+  }
+  return revalidate;
 }
 
 // Export for vitest (plain node, CJS interop via createRequire).
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { CACHE_NAME, ENTRY_PAGES, decideFetchStrategy, shouldPruneCache };
+  module.exports = { CACHE_NAME, ENTRY_PAGES, decideFetchStrategy, shouldPruneCache, cacheKeyFor };
 }

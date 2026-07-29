@@ -10,8 +10,15 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { taskTerminalState, POLL_INTERVAL_MS, MAX_CONSECUTIVE_FAILURES } =
-  require('../static/pwa.js');
+const {
+  taskTerminalState,
+  POLL_INTERVAL_MS,
+  MAX_CONSECUTIVE_FAILURES,
+  TRACKED_TASKS_KEY,
+  parseTrackedTasks,
+  upsertTrackedTask,
+  removeTrackedTask,
+} = require('../static/pwa.js');
 
 describe('taskTerminalState', () => {
   it('success body is terminal success', () => {
@@ -42,5 +49,53 @@ describe('polling constants', () => {
   it('polls every 15s and gives up after 5 consecutive failures', () => {
     expect(POLL_INTERVAL_MS).toBe(15000);
     expect(MAX_CONSECUTIVE_FAILURES).toBe(5);
+  });
+});
+
+describe('tracked-task persistence (Codex R1-1)', () => {
+  it('storage key is stable', () => {
+    expect(TRACKED_TASKS_KEY).toBe('vta_pwa_tracked_tasks');
+  });
+
+  it('parseTrackedTasks round-trips a persisted list', () => {
+    const list = [
+      { task_id: 'a', view_token: 'va' },
+      { task_id: 'b', view_token: 'vb' },
+    ];
+    expect(parseTrackedTasks(JSON.stringify(list))).toEqual(list);
+  });
+
+  it('parseTrackedTasks tolerates junk', () => {
+    expect(parseTrackedTasks(null)).toEqual([]);
+    expect(parseTrackedTasks('')).toEqual([]);
+    expect(parseTrackedTasks('not-json')).toEqual([]);
+    expect(parseTrackedTasks('{"x":1}')).toEqual([]);
+    expect(parseTrackedTasks('[{"view_token":"v"},{"task_id":""},null]')).toEqual([]);
+    expect(parseTrackedTasks('[{"task_id":"a"}]')).toEqual([{ task_id: 'a', view_token: '' }]);
+  });
+
+  it('upsertTrackedTask appends new tasks', () => {
+    const out = upsertTrackedTask([], { task_id: 'a', view_token: 'va' });
+    expect(out).toEqual([{ task_id: 'a', view_token: 'va' }]);
+  });
+
+  it('upsertTrackedTask dedupes by task_id, keeping the latest', () => {
+    const base = [{ task_id: 'a', view_token: 'va' }, { task_id: 'b', view_token: 'vb' }];
+    const out = upsertTrackedTask(base, { task_id: 'a', view_token: 'va2' });
+    expect(out).toEqual([{ task_id: 'b', view_token: 'vb' }, { task_id: 'a', view_token: 'va2' }]);
+  });
+
+  it('removeTrackedTask removes by key, not by index (Codex R1-3)', () => {
+    const list = [
+      { task_id: 'a', view_token: 'va' },
+      { task_id: 'b', view_token: 'vb' },
+      { task_id: 'c', view_token: 'vc' },
+    ];
+    expect(removeTrackedTask(list, 'b')).toEqual([
+      { task_id: 'a', view_token: 'va' },
+      { task_id: 'c', view_token: 'vc' },
+    ]);
+    // unknown id is a no-op
+    expect(removeTrackedTask(list, 'zzz')).toEqual(list);
   });
 });
