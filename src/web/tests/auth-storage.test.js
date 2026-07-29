@@ -7,6 +7,15 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const authStoragePath = require.resolve('../static/js/auth-storage.js');
+const appPath = require.resolve('../static/js/app.js');
+const appSource = readFileSync(
+  fileURLToPath(new URL('../static/js/app.js', import.meta.url)),
+  'utf8'
+);
+const indexSource = readFileSync(
+  fileURLToPath(new URL('../static/index.html', import.meta.url)),
+  'utf8'
+);
 
 let dom;
 let authStorage;
@@ -14,6 +23,11 @@ let authStorage;
 function loadAuthStorage() {
   delete require.cache[authStoragePath];
   return require(authStoragePath);
+}
+
+function loadApp() {
+  delete require.cache[appPath];
+  return require(appPath);
 }
 
 function installDom() {
@@ -28,6 +42,7 @@ function installDom() {
 function uninstallDom() {
   dom?.window.close();
   delete globalThis.window;
+  delete globalThis.document;
   delete globalThis.localStorage;
   delete globalThis.sessionStorage;
   delete globalThis.StorageEvent;
@@ -186,5 +201,85 @@ describe('auth storage events and browser compatibility', () => {
     vm.runInNewContext(source, context, { filename: 'auth-storage.js' });
     expect(context.VideoTranscriptAuthStorage).toBeDefined();
     expect(context.VideoTranscriptAuthStorage.buildAuthHeaders()).toEqual({});
+  });
+});
+
+describe('homepage auth integration contract', () => {
+  it('delegates token reads, writes, and clears to the shared auth module', () => {
+    const app = loadApp();
+    const key = 'vta_bearer_token';
+    expect(app.StorageManager.get(key)).toBeNull();
+    expect(app.StorageManager.set(key, 'homepage-token')).toBe(true);
+    expect(authStorage.readAuthToken()).toBe('homepage-token');
+    expect(app.StorageManager.get(key)).toBe('homepage-token');
+    expect(app.StorageManager.remove(key)).toBe(true);
+    expect(authStorage.readAuthToken()).toBeNull();
+  });
+
+  it('constructs API Authorization through buildAuthHeaders', async () => {
+    const app = loadApp();
+    authStorage.writeAuthToken('request-token', { remember: true });
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ code: 202, data: { task_id: 'task-1' } }),
+    });
+    await app.APIManager.submitTranscription('https://example.com/video', false);
+    const [, request] = globalThis.fetch.mock.calls[0];
+    expect(request.headers.Authorization).toBe('Bearer request-token');
+    expect(appSource).toContain('authStorage.buildAuthHeaders()');
+  });
+
+  it('uses a cached token without an API-key prompt', async () => {
+    const app = loadApp();
+    authStorage.writeAuthToken('cached-token', { remember: true });
+    const prompt = vi.spyOn(window, 'prompt').mockImplementation(() => {
+      throw new Error('unexpected API-key prompt');
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ code: 202, data: { task_id: 'task-2' } }),
+    });
+    await app.APIManager.submitTranscription('https://example.com/video', false);
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it('loads auth-storage before app.js and has an explicit bootstrap failure path', () => {
+    const authIndex = indexSource.indexOf('/static/js/auth-storage.js');
+    const appIndex = indexSource.indexOf('/static/js/app.js');
+    expect(authIndex).toBeGreaterThanOrEqual(0);
+    expect(authIndex).toBeLessThan(appIndex);
+    expect(appSource).toContain('VideoTranscriptAuthStorage');
+    expect(appSource).toContain('安全错误：统一鉴权模块加载失败，已禁用受保护操作');
+    expect(appSource).toContain('禁用受保护操作');
+  });
+
+  it('fails closed when the shared auth script is unavailable', async () => {
+    const app = loadApp();
+    globalThis.document = dom.window.document;
+    dom.window.document.body.innerHTML = `
+      <button id="submit-btn"><span class="btn-icon"></span><span class="btn-text"></span></button>
+      <input id="bearer-token">
+      <div id="status-container"><div id="status-content"></div></div>
+    `;
+    dom.window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    delete globalThis.VideoTranscriptAuthStorage;
+    app.disableProtectedActions();
+    expect(document.getElementById('submit-btn').disabled).toBe(true);
+    expect(document.getElementById('bearer-token').disabled).toBe(true);
+    expect(document.getElementById('status-content').textContent).toContain(
+      '安全错误：统一鉴权模块加载失败，已禁用受保护操作'
+    );
+    expect(app.StorageManager.get('vta_bearer_token')).toBeNull();
+    expect(app.StorageManager.set('vta_bearer_token', 'must-not-persist')).toBe(false);
+    await expect(
+      app.APIManager.submitTranscription('https://example.com/video', false)
+    ).rejects.toThrow('安全错误：统一鉴权模块加载失败，已禁用受保护操作');
+  });
+
+  it('keeps URL preview escaping and removes the legacy token implementation', () => {
+    expect(appSource).toContain('escapeHTML(result.url)');
+    expect(appSource).toContain('escapeHTML(result.display)');
+    expect(appSource).not.toContain('simpleEncrypt(value)');
+    expect(appSource).not.toContain('simpleDecrypt(value)');
   });
 });
