@@ -116,6 +116,25 @@ describe('auth token storage contract', () => {
     expect(authStorage.readAuthToken()).toBeNull();
   });
 
+  it.each([
+    ['one legacy alias', ['api_key']],
+    ['all legacy aliases', ['api_key', 'vta_api_key_persist', 'vta_api_key']],
+  ])('migrates canonical first when canonical coexists with %s', (_label, aliases) => {
+    const canonicalToken = 'canonical-before-migration';
+    localStorage.setItem('vta_bearer_token', authStorage.encodeAuthToken(canonicalToken));
+    for (const alias of aliases) {
+      const storage = alias === 'vta_api_key' ? sessionStorage : localStorage;
+      storage.setItem(alias, `stale-${alias}`);
+    }
+
+    expect(authStorage.migrateAuthToken()).toBe(canonicalToken);
+    expect(authStorage.readAuthToken()).toBe(canonicalToken);
+    expect(localStorage.getItem('api_key')).toBeNull();
+    expect(localStorage.getItem('vta_api_key_persist')).toBeNull();
+    expect(sessionStorage.getItem('vta_api_key')).toBeNull();
+    expect(localStorage.getItem('vta_auth_migration_v1')).toBe('1');
+  });
+
   it('clear seals aliases and removes canonical credentials', () => {
     authStorage.writeAuthToken('token-to-clear', { remember: true });
     expect(authStorage.clearAuthToken()).toBe(true);

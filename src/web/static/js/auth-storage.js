@@ -238,14 +238,17 @@
     }
 
     /**
-     * Migrate the highest-priority legacy alias exactly once into canonical
-     * storage; an explicit token is treated as the user's selected value.
+     * Migrate a valid canonical token first, otherwise the highest-priority
+     * legacy alias, exactly once into canonical storage; an explicit token is
+     * treated as the user's selected value.
      */
     function migrateAuthToken(selectedToken) {
         if (memorySealed || readStorageValue('localStorage', AUTH_STORAGE_KEYS.migration) === '1') {
             return readAuthToken();
         }
-        const token = selectedToken === undefined ? readLegacyToken() : selectedToken;
+        const token = selectedToken === undefined
+            ? decodeAuthToken(readStorageValue('localStorage', AUTH_STORAGE_KEYS.canonical)) || readLegacyToken()
+            : selectedToken;
         if (!token || !writeAuthToken(token, { remember: true })) return null;
         return token;
     }

@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | 1 | canonical 键必须是完整字面量 `vta_bearer_token`；编码为 Base64+反转+固定后缀，后缀错误按 absent。 | `auth-storage.js:9-17,141-179` | `src/web/tests/auth-storage.test.js` 的 `auth token encoding` 两例；`tests/unit/web/test_frontend_auth.py::test_auth_module_keeps_canonical_storage_contract_literal`。 |
 | 2 | 读取优先级为 canonical → `api_key` → `vta_api_key_persist` → `vta_api_key`；成功写 canonical 删除别名。 | `auth-storage.js:181-209,212-237` | `auth-storage.test.js` 的 `uses canonical...`、`falls back in ... priority`、`writes canonical storage...`。 |
-| 3 | 主动选择/迁移写 `vta_auth_migration_v1`；迁移成功或 clear 后旧键不可复活；storage 事件清 session alias。 | `auth-storage.js:240-268,322-346` | `auth-storage.test.js` 的 `migrates... never resurrects`、`clear seals aliases...`、`clears session aliases on storage events...`。 |
+| 3 | 主动选择/迁移优先复用有效 canonical；仅无 canonical 时才读取 legacy alias；迁移写 `vta_auth_migration_v1`，成功或 clear 后旧键不可复活；storage 事件清 session alias。 | `auth-storage.js:240-270,322-346` | `auth-storage.test.js` 的 `migrates... never resurrects`、`migrates canonical first...`、`clear seals aliases...`、`clears session aliases on storage events...`。 |
 | 4 | `SecurityError`/`QuotaExceededError` 仅降级内存并单次告警；拒绝控制字符；Bearer 头可复用；401 仅 CAS 清相同快照。 | `auth-storage.js:25-107,109-111,270-319` | `auth-storage.test.js` 的控制字符、memory fallback、`builds the unified Bearer header`、`compare-and-clears...`、`does not clear a newer persisted...`；`tests/unit/web/test_frontend_auth.py::test_api_requests_use_shared_header_builder`。 |
 | 5 | 首页只适配 token 路径，其他 `StorageManager` 偏好不变；共享脚本先于页面脚本，缺失时 fail-closed。 | `app.js:40-83,133-200`；`index.html:167-170`；`base.html:1072-1074` | `auth-storage.test.js` homepage integration 四例；`test_frontend_auth.py` 的首页加载顺序、StorageManager 委托、缺失脚本安全错误、base 模板顺序。 |
 | 6 | history clear/change abort 私有请求并原子清空私有状态，不删除主题/无关历史；迟到响应不得覆盖新身份。 | `history.html:654-733,1118-1148,1478-1492` | `src/web/tests/history-auth.test.js` 三例；`src/web/tests/history-auth-race.test.js` 六例（空查询、reset 后迟到 filter/history、new generation、分页/筛选乱序）；`test_frontend_auth.py::test_history_reset_and_401_contracts_are_explicit`。 |
@@ -72,22 +72,28 @@ empty input is queried` 锁死；其余 OCR finding 分别为 P2/P3 或误报，
 | R3 | 无新增 P1 | 补充审查 token 术语、响应/状态白名单、脚本加载顺序、XSS 与 focus/disabled 行为；未扩大范围。 |
 | R4 | 无新增 P1 | `/tmp/vta-codex-review-round4.txt` 记录“本轮无新增 P1”，覆盖存储/迁移/CAS、history reset/请求代际、POST/pagehide、600 秒轮询、XSS/敏感日志和 PWA 缓存；与 R3 连续两轮收敛。 |
 
+## CI 主审 finding 修复记录
+
+- Finding：`migrateAuthToken()` 在 migration marker 尚未 sealed 且 canonical 与 legacy alias
+  并存时按 legacy-first 选值，会用旧 alias 覆盖有效 canonical，违反统一存储的
+  canonical-first 不变式。
+- RED：新增 `auth-storage.test.js` 的 `migrates canonical first when canonical coexists...`
+  回归（单个 alias 与全部 alias 两种场景），旧实现 2 例失败。
+- Fix：`migrateAuthToken()` 无显式 token 时先解码 canonical，再回退 legacy；沿用现有
+  `writeAuthToken()` 清理 alias 并 sealed marker。修复提交：`2104ece`。
+
 ## P2/P3 backlog（接受不修）
 
 以下项目不触及 personal 风险等级的 P1 红线，接受不修，不把已修复问题重复记入 backlog：
 
-1. **迁移 API 未自动调用/优先级**（P2）：生产路径没有调用 `migrateAuthToken`；该
-   显式 API 当前按 legacy-first 选值，与正常读取的 canonical-first 契约不一致。当前
-   正常 read/write/clear 路径已经安全，因此不在本增量擅自启用；若未来接入迁移 API，
-   需先调整其优先级与契约并补测试。
-2. **清除后隐藏过滤选项仍留在 DOM**（P2）：history clear 已清空私有结果/统计等
+1. **清除后隐藏过滤选项仍留在 DOM**（P2）：history clear 已清空私有结果/统计等
    状态并隐藏过滤栏，但既有 filter option DOM 节点仍存在；这只是清除后视觉/DOM 清理
    的细节，不影响令牌或私有请求安全，留待独立 UX/DOM 清理任务。
-3. **静态长任务反馈、缺少动态操作上下文**（P2）：结果页沿用“提交中/处理完成，
+2. **静态长任务反馈、缺少动态操作上下文**（P2）：结果页沿用“提交中/处理完成，
    正在刷新”等静态文案，controller 已明确状态和错误边界，但不引入新的后端进度协议
    或额外状态机；自用场景可接受，后续可在独立产品迭代增强。
-4. **跨页视觉组件复用**（P2）：首页/历史页/结果页的令牌控件保持页面内样式和主题
+3. **跨页视觉组件复用**（P2）：首页/历史页/结果页的令牌控件保持页面内样式和主题
    token，避免为本次安全修复引入共享 UI 构建链；视觉重复不改变行为，暂不扩 scope。
-5. **SW 缓存写告警吞掉**（P2）：鉴权脚本读取仍 network-first，API/结果页不缓存；
+4. **SW 缓存写告警吞掉**（P2）：鉴权脚本读取仍 network-first，API/结果页不缓存；
    `cache.put(...).catch(() => {})` 的写失败只影响缓存命中，不影响当前网络响应或 token
    安全，故不为 P2 增加新的状态/配置，后续可补可观测性。
