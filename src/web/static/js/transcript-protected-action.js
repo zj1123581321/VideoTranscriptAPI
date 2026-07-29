@@ -134,6 +134,13 @@
             return promptInFlight;
         }
 
+        async function refreshTokenAfter401(snapshot) {
+            const cleared = authStorage.clearAuthTokenIfMatch(snapshot);
+            if (cleared || !isNonEmptyToken(authStorage.readAuthToken())) {
+                await promptForToken();
+            }
+        }
+
         function clearTimer(context) {
             if (context.timer === null) return;
             clearTimeoutImpl(context.timer);
@@ -184,8 +191,7 @@
                     if (response.status === 401) {
                         if (context.replayed) throw new Error('HTTP 401 after one replay');
                         context.replayed = true;
-                        authStorage.clearAuthTokenIfMatch(snapshot);
-                        await promptForToken();
+                        await refreshTokenAfter401(snapshot);
                         context.inFlight = false;
                         return pollOnce();
                     }
@@ -223,6 +229,7 @@
                             error.message === 'unknown task status' ||
                             error.message === 'non-JSON polling response' ||
                             error.message === 'Task failed' ||
+                            error.message === 'HTTP 401 after one replay' ||
                             /^HTTP (403|404|409)/.test(error.message) ||
                             error.message === 'Polling timeout')
                     ) {
@@ -272,8 +279,7 @@
             if (response.status === 401) {
                 if (attempt >= 1 || context.replayed) throw new Error('HTTP 401 after one replay');
                 context.replayed = true;
-                authStorage.clearAuthTokenIfMatch(snapshot);
-                await promptForToken();
+                await refreshTokenAfter401(snapshot);
                 return postAction(context, actionName, viewToken, attempt + 1);
             }
             if ([403, 404, 409].includes(response.status)) throw new Error(`HTTP ${response.status}`);
@@ -344,7 +350,10 @@
     }
 
     return {
-        /** Create a dependency-injected controller for authenticated transcript actions. */
+        /**
+         * Create an authenticated transcript-action controller; polling timers
+         * use milliseconds, allow one replay per action, and abort on pagehide.
+         */
         createProtectedActionController,
     };
 });

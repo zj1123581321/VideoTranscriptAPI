@@ -38,6 +38,10 @@ function dependencies(overrides = {}) {
   };
 }
 
+async function flushPromises() {
+  for (let index = 0; index < 20; index += 1) await Promise.resolve();
+}
+
 describe('transcript protected action controller', () => {
   beforeEach(() => vi.useRealTimers());
   afterEach(() => vi.restoreAllMocks());
@@ -98,6 +102,112 @@ describe('transcript protected action controller', () => {
     expect(deps.promptToken).toHaveBeenCalledTimes(1);
     expect(deps.authStorage.clearAuthTokenIfMatch).toHaveBeenCalledTimes(2);
     expect(deps.fetchImpl).toHaveBeenCalledTimes(6);
+  });
+
+  it('replays a late stale-token 401 with the newer token without prompting again', async () => {
+    const api = loadController();
+    let currentToken = 'old-token';
+    let releaseLate401;
+    const late401 = new Promise((resolve) => { releaseLate401 = resolve; });
+    const authStorage = authState();
+    authStorage.readAuthToken.mockImplementation(() => currentToken);
+    authStorage.snapshotAuthToken.mockImplementation(() => currentToken);
+    authStorage.buildAuthHeaders.mockImplementation(() => (
+      currentToken ? { Authorization: `Bearer ${currentToken}` } : {}
+    ));
+    authStorage.clearAuthTokenIfMatch.mockImplementation((snapshot) => {
+      if (currentToken !== snapshot) return false;
+      currentToken = null;
+      return true;
+    });
+    authStorage.writeAuthToken.mockImplementation((token) => {
+      currentToken = token;
+      return true;
+    });
+    const deps = dependencies({ authStorage });
+    deps.promptToken = vi.fn(async () => 'new-token');
+    deps.fetchImpl
+      .mockResolvedValueOnce(response(401, { detail: 'expired' }))
+      .mockImplementationOnce(() => late401)
+      .mockResolvedValueOnce(response(202, { code: 202, data: { task_id: 'task-late-a' } }))
+      .mockResolvedValueOnce(response(200, { data: { status: 'success' } }))
+      .mockResolvedValueOnce(response(202, { code: 202, data: { task_id: 'task-late-b' } }))
+      .mockResolvedValueOnce(response(200, { data: { status: 'success' } }));
+    const controller = api.createProtectedActionController(deps);
+
+    const first = controller.runProtectedAction('recalibrate', 'view-late-a');
+    const second = controller.runProtectedAction('resummarize', 'view-late-b');
+    await flushPromises();
+    expect(deps.promptToken).toHaveBeenCalledTimes(1);
+    expect(currentToken).toBe('new-token');
+
+    releaseLate401(response(401, { detail: 'expired' }));
+    await Promise.all([first, second]);
+
+    expect(deps.promptToken).toHaveBeenCalledTimes(1);
+    expect(currentToken).toBe('new-token');
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(6);
+    expect(deps.fetchImpl.mock.calls[4][1].headers.Authorization).toBe('Bearer new-token');
+  });
+
+  it('stops POST after the one permitted 401 replay', async () => {
+    const api = loadController();
+    const deps = dependencies();
+    deps.fetchImpl
+      .mockResolvedValueOnce(response(401, { detail: 'expired' }))
+      .mockResolvedValueOnce(response(401, { detail: 'expired again' }));
+    const controller = api.createProtectedActionController(deps);
+
+    await expect(controller.runProtectedAction('recalibrate', 'view-post-401')).rejects.toThrow(
+      'HTTP 401 after one replay'
+    );
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('reuses a newer token when a concurrent poll receives a late stale-token 401', async () => {
+    const api = loadController();
+    let currentToken = 'old-token';
+    let releaseLate401;
+    const late401 = new Promise((resolve) => { releaseLate401 = resolve; });
+    const authStorage = authState();
+    authStorage.readAuthToken.mockImplementation(() => currentToken);
+    authStorage.snapshotAuthToken.mockImplementation(() => currentToken);
+    authStorage.buildAuthHeaders.mockImplementation(() => (
+      currentToken ? { Authorization: `Bearer ${currentToken}` } : {}
+    ));
+    authStorage.clearAuthTokenIfMatch.mockImplementation((snapshot) => {
+      if (currentToken !== snapshot) return false;
+      currentToken = null;
+      return true;
+    });
+    authStorage.writeAuthToken.mockImplementation((token) => {
+      currentToken = token;
+      return true;
+    });
+    const deps = dependencies({ authStorage });
+    deps.promptToken = vi.fn(async () => 'new-token');
+    deps.fetchImpl
+      .mockResolvedValueOnce(response(202, { code: 202, data: { task_id: 'task-poll-late-a' } }))
+      .mockResolvedValueOnce(response(202, { code: 202, data: { task_id: 'task-poll-late-b' } }))
+      .mockResolvedValueOnce(response(401, { detail: 'expired' }))
+      .mockImplementationOnce(() => late401)
+      .mockResolvedValueOnce(response(200, { data: { status: 'success' } }))
+      .mockResolvedValueOnce(response(200, { data: { status: 'success' } }));
+    const controller = api.createProtectedActionController(deps);
+
+    const first = controller.runProtectedAction('recalibrate', 'view-poll-late-a');
+    const second = controller.runProtectedAction('resummarize', 'view-poll-late-b');
+    await flushPromises();
+    expect(deps.promptToken).toHaveBeenCalledTimes(1);
+    expect(currentToken).toBe('new-token');
+
+    releaseLate401(response(401, { detail: 'expired' }));
+    await Promise.all([first, second]);
+
+    expect(deps.promptToken).toHaveBeenCalledTimes(1);
+    expect(currentToken).toBe('new-token');
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(6);
+    expect(deps.fetchImpl.mock.calls[5][1].headers.Authorization).toBe('Bearer new-token');
   });
 
   it.each([403, 404, 409])('does not prompt or replay on HTTP %s', async (status) => {
@@ -167,6 +277,19 @@ describe('transcript protected action controller', () => {
     expect(success).toHaveBeenCalledTimes(1);
   });
 
+  it('accepts an HTTP 200 POST when the response body code is 202', async () => {
+    const api = loadController();
+    const deps = dependencies();
+    deps.fetchImpl
+      .mockResolvedValueOnce(response(200, { code: 202, data: { task_id: 'task-http-200' } }))
+      .mockResolvedValueOnce(response(200, { data: { status: 'success' } }));
+    const controller = api.createProtectedActionController(deps);
+
+    await expect(controller.runProtectedAction('resummarize', 'view-http-200')).resolves.toMatchObject({
+      data: { status: 'success' },
+    });
+  });
+
   it('treats HTTP 200 body code 500 failed as a terminal failure', async () => {
     const api = loadController();
     const deps = dependencies();
@@ -218,6 +341,48 @@ describe('transcript protected action controller', () => {
     for (let index = 0; index < 10; index += 1) await vi.advanceTimersByTimeAsync(3000);
     await expect(pending).rejects.toThrow('consecutive polling errors');
     expect(deps.fetchImpl).toHaveBeenCalledTimes(11);
+  });
+
+  it('stops polling immediately after the one permitted 401 replay', async () => {
+    vi.useFakeTimers();
+    const api = loadController();
+    const deps = dependencies();
+    deps.fetchImpl
+      .mockResolvedValueOnce(response(202, { code: 202, data: { task_id: 'task-poll-401' } }))
+      .mockResolvedValueOnce(response(401, { detail: 'expired' }))
+      .mockResolvedValueOnce(response(401, { detail: 'expired again' }));
+    const controller = api.createProtectedActionController(deps);
+    const pending = controller.runProtectedAction('generate_notes', 'view-poll-401');
+    await flushPromises();
+    for (let index = 0; index < 10; index += 1) await vi.advanceTimersByTimeAsync(3000);
+    await expect(pending).rejects.toThrow('HTTP 401 after one replay');
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it('enforces the 600000ms polling timeout before another request', async () => {
+    let clock = 0;
+    let timerCallback;
+    const api = loadController();
+    const deps = dependencies({
+      now: () => clock,
+      setTimeoutImpl: vi.fn((callback, delay) => {
+        expect(delay).toBe(3000);
+        timerCallback = callback;
+        return 1;
+      }),
+      clearTimeoutImpl: vi.fn(),
+    });
+    deps.fetchImpl
+      .mockResolvedValueOnce(response(202, { code: 202, data: { task_id: 'task-timeout' } }))
+      .mockResolvedValueOnce(response(200, { data: { status: 'queued' } }));
+    const controller = api.createProtectedActionController(deps);
+    const pending = controller.runProtectedAction('recalibrate', 'view-timeout');
+    await flushPromises();
+    clock = 600000;
+    timerCallback();
+
+    await expect(pending).rejects.toThrow('Polling timeout');
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it('aborts private POST and polling when pagehide fires', async () => {
