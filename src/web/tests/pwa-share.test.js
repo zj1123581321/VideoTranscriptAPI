@@ -67,6 +67,18 @@ describe('sanitizeSharedUrl', () => {
     expect(result).not.toBeNull();
     expect(result.length).toBe(MAX_SHARED_URL_LENGTH);
   });
+
+  it('normalizes via URL.href (Codex R10-1)', () => {
+    // mixed-case protocol: app.js cleanURL's scheme check is case-sensitive
+    // and would mis-parse "https://HTTPS://x.io"; parsed.href normalizes it
+    expect(sanitizeSharedUrl('HTTPS://x.io/Path')).toBe('https://x.io/Path');
+    // unicode domains normalize to punycode
+    expect(sanitizeSharedUrl('https://例子.公司/路径')).toBe(
+      'https://xn--fsqu00a.xn--55qx5d/%E8%B7%AF%E5%BE%84'
+    );
+    // plain URLs pass through unchanged
+    expect(sanitizeSharedUrl('https://b23.tv/abc123')).toBe('https://b23.tv/abc123');
+  });
 });
 
 describe('getSharedUrl', () => {

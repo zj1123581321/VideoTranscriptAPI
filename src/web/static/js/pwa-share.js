@@ -69,6 +69,10 @@
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return null;
     }
+    // 返回规范化结果（Codex R10-1）：混合大小写协议（HTTPS://...）会被
+    // app.js cleanURL 的大小写敏感判断误拼成 https://HTTPS://...；
+    // parsed.href 顺带归一化 Unicode 域名（punycode）与默认端口
+    url = parsed.href;
     if (url.length > MAX_SHARED_URL_LENGTH) {
       url = url.slice(0, MAX_SHARED_URL_LENGTH);
     }

@@ -158,27 +158,42 @@ if (IS_SERVICE_WORKER) {
 }
 
 async function networkFirst(request, event) {
-  const cache = await caches.open(CACHE_NAME);
+  let cache = null;
+  try {
+    cache = await caches.open(CACHE_NAME);
+  } catch (cacheErr) {
+    // Cache Storage 被禁用/已满：缓存不可用不拖垮请求，回退纯网络（Codex R10-3）
+    console.warn('cache open failed, network-only fallback:', cacheErr);
+  }
   const cacheKey = cacheKeyFor(request);
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    if (response.ok && cache) {
       // 不阻塞响应；waitUntil 保证 worker 活到写入完成（Codex R1-5）
-      event.waitUntil(cache.put(cacheKey, response.clone()));
+      event.waitUntil(cache.put(cacheKey, response.clone()).catch(() => {}));
     }
     return response;
   } catch (err) {
-    const cached = await cache.match(cacheKey, { ignoreSearch: true });
-    if (cached) {
-      return cached;
+    if (cache) {
+      const cached = await cache.match(cacheKey, { ignoreSearch: true }).catch(() => null);
+      if (cached) {
+        return cached;
+      }
     }
-    throw err;
+    throw err; // 网络错误本身不吞
   }
 }
 
 async function staleWhileRevalidate(request, event) {
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(request);
+  let cache = null;
+  try {
+    cache = await caches.open(CACHE_NAME);
+  } catch (cacheErr) {
+    // 同上（Codex R10-3）：直接回退网络，网络错误自然向上抛
+    console.warn('cache open failed, network-only fallback:', cacheErr);
+    return fetch(request);
+  }
+  const cached = await cache.match(request).catch(() => null);
   const revalidate = fetch(request).then((response) => {
     if (response.ok) {
       // await 写入后再算作 revalidate 完成（Codex R1-5）；

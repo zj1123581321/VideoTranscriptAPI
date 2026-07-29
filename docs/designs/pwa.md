@@ -260,4 +260,13 @@ main 新分支 + 独立 worktree、分 3 阶段 commit。
 - **CROSS-MODEL:** R2（Claude subagent）推翻 R1 一条已接受结论（failed 任务 HTTP 500 → 实为 200+body code），证明二轮独立复核的价值；其余 8 条为新增修正并已并入。
 - **VERDICT:** CEO + ENG + DESIGN CLEARED — ready to implement
 
+### 实施期 Codex review 循环（2026-07-29 补记）
+
+T1-T9 实施完成后对 `feat/pwa-installable` 全 diff 跑了 10 轮 Codex review
+（第 8 轮达上限时仍有 P1，用户授权追加 2 轮确认；第 10 轮为最终轮，无 P1）。
+共发现 8 个 P1，全部修复——含 3 个 XSS 链（分享预填 → URL 预览 innerHTML、
+renderHistory 存储型、copyToClipboard 回显）与 E5 通知链路的投递/持久化/竞态缺陷。
+P2/P3 修复 15 条、接受不修 5 条（登记于 docs/guides/pwa.md「已知限制与 Backlog」）。
+每轮修复后 pytest（2664）+ vitest 全绿，单 commit 落地（`eb14847` 起 10 个修复 commit）。
+
 NO UNRESOLVED DECISIONS

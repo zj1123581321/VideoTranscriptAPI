@@ -90,3 +90,8 @@ self.addEventListener('activate', (event) => {
   `url` 元数据仍带完整分享 URL，严格说分享内容在 Cache Storage 有残留。
   接受理由：威胁模型是用户自己设备、自己 origin 的 Cache Storage，风险
   极低；彻底修复需重建响应流，为 P2 加复杂度不值得。代码行为不动。
+- **桌面通知构造成功但系统级投递失败不可感知（Codex R10-2，接受不修）**：
+  桌面路径 `new Notification()` 构造成功即视为投递成功，后续异步 error
+  事件无法感知。接受理由：等 show/error 事件的浏览器支持参差，需引入
+  超时等待复杂度；该失败模式罕见且仅限桌面路径；Android 主路径已走
+  可 await 的 SW showNotification。代码行为不动。
