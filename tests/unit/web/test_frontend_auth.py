@@ -141,6 +141,21 @@ def test_history_auth_controls_have_touch_focus_disabled_and_contrast_contracts(
     assert "font-weight: 600;" in source
 
 
+def test_auth_controls_have_narrow_screen_wrapping_contracts():
+    transcript = TRANSCRIPT_HTML.read_text(encoding="utf-8")
+    history = HISTORY_HTML.read_text(encoding="utf-8")
+    assert "@media (max-width: 480px)" in transcript
+    assert ".protected-action-auth-tools {" in transcript
+    assert "flex-direction: column;" in transcript
+    assert ".dialog-actions {" in transcript
+    assert "flex-wrap: wrap;" in transcript
+    assert ".auth-status {" in history
+    assert "white-space: normal;" in history
+    assert "overflow-wrap: anywhere;" in history
+    assert ".auth-bar {" in history
+    assert "min-width: 0;" in history
+
+
 def test_transcript_removes_private_credential_and_handwritten_polling_paths():
     source = TRANSCRIPT_HTML.read_text(encoding="utf-8")
     for legacy in (

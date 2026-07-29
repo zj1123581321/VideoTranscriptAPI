@@ -88,7 +88,13 @@
     background: var(--bg-secondary);
     color: var(--text-primary);
 }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
 .dialog-btn {
     padding: 7px 18px;
     border-radius: 6px;
@@ -103,6 +109,19 @@
 .dialog-status { margin-top: 12px; font-size: 0.82rem; color: var(--text-secondary, #666); }
 .dialog-status-error { color: #d9534f; }
 .dialog-status-ok { color: #5cb85c; }
+
+@media (max-width: 480px) {
+    .protected-action-auth-tools {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .protected-action-auth-tools .recalibrate-btn,
+    .protected-action-auth-tools .dialog-status {
+        width: 100%;
+    }
+    .dialog-actions { justify-content: stretch; }
+    .dialog-actions .dialog-btn { flex: 1 1 120px; }
+}
 
 /* Inline recalibrate status (replaces button during processing) */
 .recalibrate-status { font-size: 0.85rem; color: var(--text-secondary, #888); white-space: nowrap; }

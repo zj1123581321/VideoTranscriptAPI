@@ -62,6 +62,7 @@
             border-radius: 12px;
             padding: 16px 20px;
             margin-bottom: 16px;
+            min-width: 0;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -112,7 +113,10 @@
             font-size: 0.8rem;
             padding: 4px 12px;
             border-radius: 6px;
-            white-space: nowrap;
+            max-width: 100%;
+            min-width: 0;
+            white-space: normal;
+            overflow-wrap: anywhere;
         }
         .auth-status.ok {
             background: var(--success-bg);
