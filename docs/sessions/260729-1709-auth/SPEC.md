@@ -20,10 +20,11 @@ cookie、OIDC、CSP/CORS、rate limit、TTL/rotation 或全量本地历史删除
 2. 读取优先级固定为 canonical > localStorage `api_key` > localStorage
    `vta_api_key_persist` > sessionStorage `vta_api_key`；成功写 canonical 后删除别名。
 3. `migrateAuthToken` 是显式/opt-in API；普通 legacy-only 初始化只按上述固定优先级
-   读取，不承诺自动迁移。用户主动保存/更换或显式迁移成功时写 canonical，逐操作删除
-   别名并写 `vta_auth_migration_v1` seal；仅读取旧键时它们可长期保留，重新保存 token
-   会再次尝试 canonical 写入、清理别名和封存。clear 后不再读旧键。
-   `storage` 事件清理其他标签页的 session alias，旧凭据不可复活。
+   读取，不承诺自动迁移；legacy-only 不自动迁移属于 P2 接受不修。用户主动保存/更换
+   或显式迁移成功时写 canonical，逐操作删除别名并写 `vta_auth_migration_v1` seal；
+   仅读取旧键时它们可长期保留，重新保存 token 会再次尝试 canonical 写入、清理别名和
+   封存。clear 后不再读旧键。`storage` 事件清理其他标签页的 session alias；在正常
+   完成封存或 clear 的成功路径上，旧凭据不可复活。
 4. localStorage 遇 SecurityError/QuotaExceededError 时降级内存且单次提示；拒绝
    控制字符；导出可检索的 `buildAuthHeaders`；compare-and-clear 仅在 token 快照
    相同时清除。
