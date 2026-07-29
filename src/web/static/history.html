@@ -610,6 +610,7 @@ const authStorage = typeof window !== 'undefined' ? window.VideoTranscriptAuthSt
 const HISTORY_AUTH_ERROR = '安全错误：统一鉴权模块加载失败，已禁用历史私有操作';
 let historyAuthUnavailable = !authStorage;
 let privateRequestControllers = new Set();
+let privateRequestGeneration = 0;
 
 let currentPage = 0;
 let totalItems  = 0;
@@ -661,7 +662,14 @@ function abortPrivateHistoryRequests() {
     searchDebounce = null;
 }
 
+function createSupersededPrivateHistoryError() {
+    const error = new Error('Private history request superseded');
+    error.name = 'AbortError';
+    return error;
+}
+
 function resetPrivateHistoryState() {
+    privateRequestGeneration += 1;
     abortPrivateHistoryRequests();
     currentPage = 0;
     totalItems = 0;
@@ -915,6 +923,7 @@ function loadSavedKey() {
 async function loadHistory(page = 0) {
     const storage = requireHistoryAuth();
     if (!storage) return;
+    let requestGeneration = privateRequestGeneration;
     const keyInput = document.getElementById('apiKeyInput').value.trim();
     const canonical = storage.readAuthToken() || '';
     if (!keyInput) {
@@ -927,6 +936,7 @@ async function loadHistory(page = 0) {
             showStatus('err', '鉴权保存失败');
             return;
         }
+        requestGeneration = privateRequestGeneration;
     }
 
     currentIdentity = keyInput;
@@ -936,15 +946,17 @@ async function loadHistory(page = 0) {
 
     // 先拿过滤选项（首次加载）
     if (page === 0) {
-        await loadFilterOptions();
+        await loadFilterOptions(requestGeneration);
     }
 
-    await fetchHistory();
+    if (requestGeneration !== privateRequestGeneration) return;
+    await fetchHistory(requestGeneration);
 }
 
-async function loadFilterOptions() {
+async function loadFilterOptions(requestGeneration = privateRequestGeneration) {
     try {
-        const res = await apiFetch('/api/audit/filter-options');
+        const res = await apiFetch('/api/audit/filter-options', {}, requestGeneration);
+        if (requestGeneration !== privateRequestGeneration) return;
         if (res.code === 200) {
             filterOptions = res.data;
             currentMasked = res.data.api_key_masked || '';
@@ -958,6 +970,7 @@ async function loadFilterOptions() {
             }
         }
     } catch(e) {
+        if (requestGeneration !== privateRequestGeneration || e.name === 'AbortError') return;
         console.error('filter-options error', e);
     }
 }
@@ -1093,9 +1106,10 @@ function changePage(delta) {
 }
 
 // ===================== API 请求 =====================
-async function apiFetch(url, params = {}) {
+async function apiFetch(url, params = {}, requestGeneration = privateRequestGeneration) {
     const authStorage = requireHistoryAuth();
     if (!authStorage) throw new Error(HISTORY_AUTH_ERROR);
+    if (requestGeneration !== privateRequestGeneration) throw createSupersededPrivateHistoryError();
     const qs = new URLSearchParams(params).toString();
     const fullUrl = qs ? `${url}?${qs}` : url;
     const requestSnapshot = authStorage.snapshotAuthToken();
@@ -1106,6 +1120,7 @@ async function apiFetch(url, params = {}) {
             headers: authStorage.buildAuthHeaders(),
             signal: controller.signal
         });
+        if (requestGeneration !== privateRequestGeneration) throw createSupersededPrivateHistoryError();
         if (res.status === 401) {
             const cleared = authStorage.clearAuthTokenIfMatch(requestSnapshot);
             if (cleared) {
@@ -1115,7 +1130,9 @@ async function apiFetch(url, params = {}) {
             showStatus('err', '访问令牌无效');
             throw new Error('401');
         }
-        return await res.json();
+        const body = await res.json();
+        if (requestGeneration !== privateRequestGeneration) throw createSupersededPrivateHistoryError();
+        return body;
     } finally {
         privateRequestControllers.delete(controller);
     }
@@ -1124,7 +1141,7 @@ async function apiFetch(url, params = {}) {
 // 缓存客户端过滤后的全量数据（仅已读/未读过滤激活时使用）
 let _filteredItems = null;
 
-async function fetchHistory() {
+async function fetchHistory(requestGeneration = privateRequestGeneration) {
     const readFilter = document.getElementById('filterRead')?.value || 'all';
     const isReadFiltered = readFilter !== 'all';
 
@@ -1155,7 +1172,8 @@ async function fetchHistory() {
     if (q)         params.q = q;
 
     try {
-        const res = await apiFetch('/api/audit/history', params);
+        const res = await apiFetch('/api/audit/history', params, requestGeneration);
+        if (requestGeneration !== privateRequestGeneration) return;
         if (res.code !== 200) { showError(res.message || '查询失败'); return; }
 
         currentMasked = res.data.api_key_masked || currentMasked;
@@ -1185,6 +1203,7 @@ async function fetchHistory() {
         renderPagination();
         updateUnreadBadge(res.data.items);
     } catch(e) {
+        if (requestGeneration !== privateRequestGeneration || e.name === 'AbortError') return;
         if (e.message !== '401') showError('网络错误，请稍后重试');
     }
 }
