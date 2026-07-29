@@ -179,3 +179,16 @@ tests/unit/test_detailed_notes_view.py` 为 60 passed，`git diff --check` 通�
 - **poll 401 后 prompt 取消或 token save 失败（P2，接受不修）**：最多多进行一次
   3 秒轮询，随后以可见错误终止；不会造成数据丢失、静默错误或崩溃。按分诊结论不为
   该边界增加新机制、状态或持久键。
+- **polling budget 从 prompt/POST 前开始计时（P2，接受不修）**：真实触发需要凭据
+  对话或 POST 消耗接近/超过 600 秒；任务创建后可能立即显示明确的 timeout，但不是
+  静默成功、数据丢失或崩溃。后端任务独立继续，稍后刷新页面可看到最终缓存结果；也可
+  重新发起，但提示注意避免重复。不新增计时状态或阶段机制。
+- **initial prompt 后 POST/poll 401 再次 prompt（P2，接受不修）**：触发需要首次无
+  token 且用户输入的 token 随后被服务端返回 401；第二个弹窗可见且可取消，用户可以
+  输入正确 token 或取消，不会产生静默错误、数据丢失或崩溃。不新增 `hasPrompted`
+  状态。
+- **3 秒 timer deadline 最多 overshoot 3 秒（P3，接受不修）**：调度抖动可能让 deadline
+  最多晚 3 秒触发，但任务最终状态或显式 timeout 不会丢失；不为此新增剩余预算调度。
+
+以上三项均属于同一 Stack2 local gate 循环的后续 finding，不计为 R9，也不声称有代码
+修复。
