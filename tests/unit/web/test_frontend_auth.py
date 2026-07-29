@@ -11,6 +11,7 @@ HISTORY_HTML = PROJECT_ROOT / "src" / "web" / "static" / "history.html"
 BASE_HTML = PROJECT_ROOT / "src" / "web" / "templates" / "base.html"
 TRANSCRIPT_HTML = PROJECT_ROOT / "src" / "web" / "templates" / "transcript.html"
 PROTECTED_ACTION_JS = PROJECT_ROOT / "src" / "web" / "static" / "js" / "transcript-protected-action.js"
+SW_JS = PROJECT_ROOT / "src" / "web" / "static" / "sw.js"
 
 
 def test_homepage_loads_auth_storage_before_app():
@@ -127,3 +128,14 @@ def test_transcript_missing_shared_scripts_fails_closed_and_uses_safe_status_upd
     assert "textContent" in source
     assert "createElement('span')" in source
     assert "location.reload" in source
+
+
+def test_service_worker_versions_and_precaches_shared_auth_scripts():
+    source = SW_JS.read_text(encoding="utf-8")
+    assert "const CACHE_NAME = 'vta-static-v3';" in source
+    assert "'/static/js/auth-storage.js'" in source
+    assert "'/static/js/transcript-protected-action.js'" in source
+    assert "self.addEventListener('install'" in source
+    assert "PRECACHE_ASSETS.map" in source
+    assert "cache.add(asset)" in source
+    assert "self.addEventListener('activate'" in source

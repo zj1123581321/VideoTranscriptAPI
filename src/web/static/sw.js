@@ -21,8 +21,16 @@
  */
 
 // Bump this version whenever sw.js, icons or the manifest change.
-const CACHE_NAME = 'vta-static-v2';
+const CACHE_NAME = 'vta-static-v3';
 const CACHE_PREFIX = 'vta-static-';
+
+// Shared authentication scripts are explicitly installed and refreshed with
+// network-first semantics so an upgraded shell cannot keep stale credentials.
+const PRECACHE_ASSETS = Object.freeze([
+  '/static/js/auth-storage.js',
+  '/static/js/transcript-protected-action.js',
+]);
+const NETWORK_FIRST_SCRIPTS = new Set(PRECACHE_ASSETS);
 
 // Navigation entry pages eligible for the network-first cache.
 const ENTRY_PAGES = new Set([
@@ -50,6 +58,9 @@ function decideFetchStrategy(req) {
   }
   if (req.pathname.startsWith('/api/')) {
     return 'network-only';
+  }
+  if (NETWORK_FIRST_SCRIPTS.has(req.pathname)) {
+    return 'network-first';
   }
   if (req.pathname === '/static/manifest.webmanifest') {
     return 'network-first';
@@ -98,9 +109,22 @@ const IS_SERVICE_WORKER =
   typeof window === 'undefined';
 
 if (IS_SERVICE_WORKER) {
-  self.addEventListener('install', () => {
-    // No precache, no skipWaiting: the new worker activates naturally once
-    // no old-version page is open.
+  self.addEventListener('install', (event) => {
+    event.waitUntil(
+      caches.open(CACHE_NAME)
+        .then((cache) => Promise.all(
+          PRECACHE_ASSETS.map((asset) => cache.add(asset).catch((error) => {
+            // A failed precache must not block activation; runtime network-first
+            // handling can populate the same entry on the next request.
+            console.warn('precache asset failed:', asset, error);
+          }))
+        ))
+        .catch((error) => {
+          // Cache Storage may be disabled/full; preserve the existing SW
+          // tolerance and let the browser fetch assets normally.
+          console.warn('precache open failed, network-only fallback:', error);
+        })
+    );
   });
 
   self.addEventListener('activate', (event) => {
@@ -215,5 +239,13 @@ async function staleWhileRevalidate(request, event) {
 
 // Export for vitest (plain node, CJS interop via createRequire).
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { CACHE_NAME, ENTRY_PAGES, decideFetchStrategy, shouldPruneCache, cacheKeyFor };
+  module.exports = {
+    CACHE_NAME,
+    ENTRY_PAGES,
+    PRECACHE_ASSETS,
+    decideFetchStrategy,
+    shouldPruneCache,
+    cacheKeyFor,
+    networkFirst,
+  };
 }
