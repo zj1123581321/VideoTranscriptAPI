@@ -1,14 +1,24 @@
 name: CI
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    # 纯文档改动跳过门禁——不为 docs/markdown 烧 codex 订阅用量 + 影子 token。
+    # 混合(文档 + 代码)PR 仍会触发门禁(paths-ignore 只在「全部改动都命中」时跳过)。
+    #
+    # PRECONDITION: 任何分支保护规则都不能把本 workflow 的 `gate` job 设为
+    # REQUIRED status check。若未来给本仓加上该必需检查,必须先移除这条
+    # paths-ignore——否则纯文档 PR 永远不会产生该 check run,会永久卡在一个
+    # 不可能变绿的必需 context 上。
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
 permissions:
   actions: read
   contents: read
   pull-requests: write
 jobs:
   gate:
-    uses: zlxlabs/gate/.github/workflows/gate.yml@main
+    uses: zlxlabs/gate/.github/workflows/gate-v2.yml@f4c0111a750161a2ed888e7708618580d4bc4e0e
     with:
       tier: personal
       runner: self

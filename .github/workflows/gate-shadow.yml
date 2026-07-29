@@ -1,0 +1,23 @@
+# Shadow Calibration v2 —— 与 gate.yml 由同一个 pull_request 事件触发的独立 workflow。
+# 影子 reviewer 全部在这里并行跑，绝不阻塞 Required Gate 的 `gate / gate` 结果
+# （legacy 是一个 job 里主审跑完再顺序跑完所有影子才退出，影子墙钟时间直接拖长门禁响应）。
+# 任何影子失败都不改变门禁退出码（不变式 I3）。
+name: gate-shadow
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  gate-shadow:
+    uses: zlxlabs/gate/.github/workflows/gate-shadow-v2.yml@f4c0111a750161a2ed888e7708618580d4bc4e0e
+    with:
+      tier: personal   # 与本仓 gate.yml caller 保持一致
+      runner: self
