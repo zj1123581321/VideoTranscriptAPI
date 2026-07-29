@@ -169,7 +169,7 @@
             }, POLL_INTERVAL_MS);
         }
 
-        function armPollingDeadline(context) {
+        function armActionDeadline(context) {
             if (context.finished || context.aborted) return false;
             const remainingMs = POLL_TIMEOUT_MS - (now() - context.startedAt);
             clearTimer(context);
@@ -196,7 +196,7 @@
                 }
                 context.inFlight = true;
                 try {
-                    if (!armPollingDeadline(context)) return;
+                    if (!armActionDeadline(context)) return;
                     const snapshot = authStorage.snapshotAuthToken();
                     const response = await runFetch(
                         fetchImpl,
@@ -207,7 +207,9 @@
                         },
                         'Polling'
                     );
+                    if (context.finished || context.aborted) throw makeAbortError();
                     if (response.status === 401) {
+                        clearTimer(context);
                         if (context.replayed) throw new Error('HTTP 401 after one replay');
                         context.replayed = true;
                         await refreshTokenAfter401(snapshot);
@@ -215,10 +217,16 @@
                         return pollOnce();
                     }
                     if ([403, 404, 409].includes(response.status)) {
+                        clearTimer(context);
                         throw new Error(`HTTP ${response.status}`);
                     }
-                    if (!response.ok) throw new Error(`Polling HTTP ${response.status}`);
+                    if (!response.ok) {
+                        clearTimer(context);
+                        throw new Error(`Polling HTTP ${response.status}`);
+                    }
                     const body = await responseJson(response, 'polling');
+                    clearTimer(context);
+                    if (context.finished || context.aborted) throw makeAbortError();
                     const status = body && body.data && body.data.status;
                     if (typeof status !== 'string' || !status) {
                         throw new Error('missing task status');
@@ -278,6 +286,7 @@
             const snapshot = authStorage.snapshotAuthToken();
             let response;
             try {
+                if (!armActionDeadline(context)) throw new Error('Polling timeout');
                 response = await runFetch(
                     fetchImpl,
                     ACTION_ENDPOINTS[actionName],
@@ -292,20 +301,30 @@
                     },
                     'POST'
                 );
+                if (context.finished || context.aborted) throw makeAbortError();
             } catch (error) {
                 if (context.aborted || isAbortError(error)) throw makeAbortError();
                 throw error;
             }
             if (response.status === 401) {
+                clearTimer(context);
                 if (attempt >= 1 || context.replayed) throw new Error('HTTP 401 after one replay');
                 context.replayed = true;
                 await refreshTokenAfter401(snapshot);
                 if (context.aborted || context.finished) throw makeAbortError();
                 return postAction(context, actionName, viewToken, attempt + 1);
             }
-            if ([403, 404, 409].includes(response.status)) throw new Error(`HTTP ${response.status}`);
-            if (!response.ok) throw new Error(`POST HTTP ${response.status}`);
+            if ([403, 404, 409].includes(response.status)) {
+                clearTimer(context);
+                throw new Error(`HTTP ${response.status}`);
+            }
+            if (!response.ok) {
+                clearTimer(context);
+                throw new Error(`POST HTTP ${response.status}`);
+            }
             const body = await responseJson(response, 'POST');
+            clearTimer(context);
+            if (context.finished || context.aborted) throw makeAbortError();
             if (!body || body.code !== 202) {
                 throw new Error('POST response missing task_id (body code must be 202)');
             }

@@ -304,6 +304,57 @@ describe('transcript protected action controller', () => {
     await expect(controller.runProtectedAction('recalibrate', 'view-5')).rejects.toThrow('non-JSON POST response');
   });
 
+  it('times out an unresolved POST fetch at the absolute 600000ms deadline', async () => {
+    vi.useFakeTimers();
+    const api = loadController();
+    const success = vi.fn();
+    const deps = dependencies({ onSuccess: success });
+    deps.fetchImpl.mockImplementationOnce(() => new Promise(() => {}));
+    const controller = api.createProtectedActionController(deps);
+    const pending = controller.runProtectedAction('recalibrate', 'view-post-timeout');
+    const outcome = { status: 'pending' };
+    pending.then(
+      () => { outcome.status = 'resolved'; },
+      (error) => { outcome.status = 'rejected'; outcome.error = error; },
+    );
+
+    await vi.advanceTimersByTimeAsync(600000);
+    await flushPromises();
+
+    expect(outcome.status).toBe('rejected');
+    expect(outcome.error).toMatchObject({ message: 'Polling timeout' });
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(1);
+    expect(deps.fetchImpl.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(success).not.toHaveBeenCalled();
+  });
+
+  it('times out an unresolved POST response body at the absolute 600000ms deadline', async () => {
+    vi.useFakeTimers();
+    const api = loadController();
+    const success = vi.fn();
+    const deps = dependencies({ onSuccess: success });
+    const postResponse = { status: 202, ok: true, json: vi.fn(() => new Promise(() => {})) };
+    deps.fetchImpl.mockResolvedValueOnce(postResponse);
+    const controller = api.createProtectedActionController(deps);
+    const pending = controller.runProtectedAction('resummarize', 'view-body-timeout');
+    const outcome = { status: 'pending' };
+    pending.then(
+      () => { outcome.status = 'resolved'; },
+      (error) => { outcome.status = 'rejected'; outcome.error = error; },
+    );
+    await flushPromises();
+
+    expect(postResponse.json).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(600000);
+    await flushPromises();
+
+    expect(outcome.status).toBe('rejected');
+    expect(outcome.error).toMatchObject({ message: 'Polling timeout' });
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(1);
+    expect(deps.fetchImpl.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(success).not.toHaveBeenCalled();
+  });
+
   it('polls queued, processing, calibrating, then success at one timer per task', async () => {
     vi.useFakeTimers();
     const api = loadController();
