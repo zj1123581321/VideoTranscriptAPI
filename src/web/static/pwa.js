@@ -345,8 +345,12 @@
 
     renderButton();
     btn.addEventListener('click', function () {
-      // 权限请求必须由用户手势触发（本按钮点击即手势）
-      Notification.requestPermission().then(renderButton);
+      // 权限请求必须由用户手势触发（本按钮点击即手势）；
+      // 授权成功后恢复/启动已持久化任务的轮询（Codex R5-1）
+      Notification.requestPermission().then(function () {
+        renderButton();
+        resumePolling();
+      });
     });
 
     // ---- 任务跟踪轮询（持久化到 localStorage，跨页面跳转/刷新存活） ----
@@ -367,32 +371,48 @@
       } catch (e) { /* storage unavailable: tracking stays in memory */ }
     }
 
-    function addTracked(taskId, viewToken) {
+    function addTracked(taskId, viewToken, startPolling) {
       var raw = upsertTrackedTask(
         tracked.map(function (t) {
           return { task_id: t.task_id, view_token: t.view_token };
         }),
         { task_id: taskId, view_token: viewToken }
       );
-      // 保留已在跟踪项的 failures 计数
+      // latest wins：新值的字段（含 view_token）生效，仅继承旧 failures 计数（Codex R5-3）
       tracked = raw.map(function (u) {
+        var failures = 0;
         for (var i = 0; i < tracked.length; i++) {
           if (tracked[i].task_id === u.task_id) {
-            return tracked[i];
+            failures = tracked[i].failures;
+            break;
           }
         }
-        return { task_id: u.task_id, view_token: u.view_token, failures: 0 };
+        return { task_id: u.task_id, view_token: u.view_token, failures: failures };
       });
       persistTracked();
-      if (!timer) {
+      if (startPolling && !timer) {
         timer = setInterval(pollTracked, POLL_INTERVAL_MS);
       }
     }
 
-    document.addEventListener('vta:task-submitted', function (event) {
+    // 权限已授予时恢复持久化列表并启动轮询；default/denied 一律不起轮询
+    function resumePolling() {
       if (Notification.permission !== 'granted') {
         return;
       }
+      if (typeof APIManager === 'undefined') {
+        return; // E5 仅 index 页激活（复用 APIManager.getTaskStatus）
+      }
+      var persisted = [];
+      try {
+        persisted = parseTrackedTasks(window.localStorage.getItem(TRACKED_TASKS_KEY));
+      } catch (e) { /* storage unavailable */ }
+      persisted.forEach(function (u) {
+        addTracked(u.task_id, u.view_token, true);
+      });
+    }
+
+    document.addEventListener('vta:task-submitted', function (event) {
       if (typeof APIManager === 'undefined') {
         return; // E5 仅 index 页激活（复用 APIManager.getTaskStatus）
       }
@@ -400,19 +420,18 @@
       if (!detail.task_id) {
         return;
       }
-      addTracked(detail.task_id, detail.view_token);
+      // 无论权限状态都先 upsert 并持久化（Codex R5-1）：提交后才开通知是
+      // 首次使用的常见路径；granted 立即起轮询，default 待用户点「开启通知」
+      // 授权后经 resumePolling 启动，denied 只落盘不起轮询
+      addTracked(
+        detail.task_id,
+        detail.view_token,
+        Notification.permission === 'granted'
+      );
     });
 
     // 恢复上次页面（standalone 跳转 /view 前、刷新前）未终态的任务
-    if (Notification.permission === 'granted' && typeof APIManager !== 'undefined') {
-      var persisted = [];
-      try {
-        persisted = parseTrackedTasks(window.localStorage.getItem(TRACKED_TASKS_KEY));
-      } catch (e) { /* storage unavailable */ }
-      persisted.forEach(function (u) {
-        addTracked(u.task_id, u.view_token);
-      });
-    }
+    resumePolling();
 
     async function pollTracked() {
       if (pollInFlight) {

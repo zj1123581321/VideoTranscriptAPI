@@ -73,8 +73,11 @@ function shouldPruneCache(name) {
 /**
  * Normalize the Cache Storage key for a request (Codex R1-4).
  * Navigations (share-target launches carry ?url=&title=&text=) key by
- * pathname only, so every share reuses one entry and share content is
- * never persisted into Cache Storage.
+ * pathname only, so every share reuses one entry and share content does
+ * not accumulate in Cache Storage keys. Residual note: the cached
+ * Response object's `url` metadata still carries the full share URL --
+ * accepted (own device, own origin), recorded in the ops guide backlog
+ * (Codex R5-4).
  *
  * @param {{mode: string, url: string}} request Request-like descriptor.
  * @returns {string} Cache key.

@@ -18,3 +18,5 @@ config/users.json
 *.wav
 *.flac
 output/
+
+node_modules/
