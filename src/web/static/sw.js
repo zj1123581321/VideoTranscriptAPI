@@ -139,13 +139,17 @@ if (IS_SERVICE_WORKER) {
       self.clients
         .matchAll({ type: 'window', includeUncontrolled: true })
         .then((windowClients) => {
-          // 只聚焦已在目标 URL 的 client；否则另开窗口，不覆盖无关标签页（Codex R3-3）
+          // 只处理已在目标 URL 的 client；否则另开窗口，不覆盖无关标签页（Codex R3-3）
           const targetPath = new URL(targetUrl, self.location.origin).pathname;
           const match = windowClients.find(
             (client) => new URL(client.url).pathname === targetPath
           );
           if (match) {
-            return match.focus();
+            // 同 URL navigate 等价刷新：旧 processing HTML 也能拿到最新
+            // 服务端渲染，再聚焦（Codex R7-2）
+            return match
+              .navigate(targetUrl)
+              .then((client) => (client || match).focus());
           }
           return self.clients.openWindow(targetUrl);
         })

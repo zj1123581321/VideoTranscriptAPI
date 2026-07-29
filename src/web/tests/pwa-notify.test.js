@@ -104,4 +104,17 @@ describe('tracked-task persistence (Codex R1-1)', () => {
     // unknown id is a no-op
     expect(removeTrackedTask(list, 'zzz')).toEqual(list);
   });
+
+  it('restore-then-append never drops previously persisted tasks (Codex R7-1)', () => {
+    // scenario: default permission, submit A -> close -> reopen -> submit B;
+    // the upsert must be based on the restored full list, not just B
+    const restored = parseTrackedTasks(
+      JSON.stringify([{ task_id: 'A', view_token: 'va' }])
+    );
+    const afterSubmitB = upsertTrackedTask(restored, { task_id: 'B', view_token: 'vb' });
+    expect(afterSubmitB).toEqual([
+      { task_id: 'A', view_token: 'va' },
+      { task_id: 'B', view_token: 'vb' },
+    ]);
+  });
 });

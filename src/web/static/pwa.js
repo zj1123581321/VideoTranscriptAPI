@@ -79,6 +79,11 @@
     }
     textarea.value = sharedUrl;
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    // 消费完查询串即清掉地址栏：standalone 停留在带参 URL 时，
+    // 刷新会重新预填覆盖当前输入（Codex R7-4）
+    try {
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch (e) { /* history API unavailable: cosmetic only */ }
 
     // app.js globals live in the shared script scope (not on window);
     // typeof guards keep this a no-op on pages without app.js.
@@ -119,48 +124,74 @@
     }
   }
 
+  // beforeinstallprompt 顶层立即注册（Codex R7-3）：DOMContentLoaded 才注册
+  // 存在错过提前触发事件的竞态，导致安装按钮永久隐藏；事件缓存在
+  // deferredInstallPrompt，DOM 就绪后只做按钮绑定/显隐。
+  var deferredInstallPrompt = null;
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeinstallprompt', function (event) {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      updateInstallButtonVisibility();
+    });
+    window.addEventListener('appinstalled', function () {
+      deferredInstallPrompt = null;
+      updateInstallButtonVisibility();
+    });
+  }
+
+  function updateInstallButtonVisibility() {
+    if (typeof document === 'undefined') {
+      return; // DOM 未就绪（或 vitest）：事件已缓存，就绪后会再刷新
+    }
+    var btn = document.getElementById('pwa-install-btn');
+    if (!btn) {
+      return;
+    }
+    if (isStandalone() || dismissedRecently(DISMISS_KEY)) {
+      btn.style.display = 'none';
+      return;
+    }
+    if (deferredInstallPrompt) {
+      btn.style.display = '';
+      return;
+    }
+    // iOS: no beforeinstallprompt ever fires; offer the guided hint instead.
+    if (isIOS() && !dismissedRecently(IOS_HINT_DISMISS_KEY)) {
+      btn.textContent = '分享 → 添加到主屏幕';
+      btn.setAttribute('aria-label', '查看安装引导：分享 → 添加到主屏幕');
+      btn.style.display = '';
+      return;
+    }
+    btn.style.display = 'none';
+  }
+
   function initInstallButton() {
     var btn = document.getElementById('pwa-install-btn');
-    if (!btn || isStandalone()) {
+    if (!btn) {
       return;
     }
 
-    var deferredPrompt = null;
-
-    window.addEventListener('beforeinstallprompt', function (event) {
-      event.preventDefault();
-      deferredPrompt = event;
-      if (!dismissedRecently(DISMISS_KEY)) {
-        btn.style.display = '';
-      }
-    });
-
-    window.addEventListener('appinstalled', function () {
-      btn.style.display = 'none';
-      deferredPrompt = null;
-    });
-
     btn.addEventListener('click', function () {
-      if (deferredPrompt) {
+      if (deferredInstallPrompt) {
+        var promptEvent = deferredInstallPrompt;
         btn.style.display = 'none';
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then(function (choice) {
+        promptEvent.prompt();
+        promptEvent.userChoice.then(function (choice) {
           if (choice.outcome === 'dismissed') {
             rememberDismiss(DISMISS_KEY);
           }
-          deferredPrompt = null;
+          if (deferredInstallPrompt === promptEvent) {
+            deferredInstallPrompt = null;
+          }
         });
       } else if (isIOS()) {
         showIosHint();
       }
     });
 
-    // iOS: no beforeinstallprompt ever fires; offer the guided hint instead.
-    if (isIOS() && !dismissedRecently(IOS_HINT_DISMISS_KEY)) {
-      btn.textContent = '分享 → 添加到主屏幕';
-      btn.setAttribute('aria-label', '查看安装引导：分享 → 添加到主屏幕');
-      btn.style.display = '';
-    }
+    // 事件可能已在 DOM 就绪前缓存，按当前状态刷新显隐
+    updateInstallButtonVisibility();
   }
 
   function showIosHint() {
@@ -412,7 +443,20 @@
       }
     }
 
-    // 权限已授予时恢复持久化列表并启动轮询；default/denied 一律不起轮询
+    // 初始化时无论权限都把持久化列表恢复进内存 tracked（Codex R7-1）：
+    // 否则未授予权限时提交新任务，会用只含新任务的列表覆盖 localStorage，
+    // 旧任务静默丢失。仅「启动轮询」限制在 granted。
+    function restoreTracked() {
+      var persisted = [];
+      try {
+        persisted = parseTrackedTasks(window.localStorage.getItem(TRACKED_TASKS_KEY));
+      } catch (e) { /* storage unavailable */ }
+      persisted.forEach(function (u) {
+        addTracked(u.task_id, u.view_token, false);
+      });
+    }
+
+    // 权限已授予且有在跟踪任务时启动轮询；default/denied 一律不起轮询
     function resumePolling() {
       if (Notification.permission !== 'granted') {
         return;
@@ -420,13 +464,9 @@
       if (typeof APIManager === 'undefined') {
         return; // E5 仅 index 页激活（复用 APIManager.getTaskStatus）
       }
-      var persisted = [];
-      try {
-        persisted = parseTrackedTasks(window.localStorage.getItem(TRACKED_TASKS_KEY));
-      } catch (e) { /* storage unavailable */ }
-      persisted.forEach(function (u) {
-        addTracked(u.task_id, u.view_token, true);
-      });
+      if (tracked.length > 0 && !timer) {
+        timer = setInterval(pollTracked, POLL_INTERVAL_MS);
+      }
     }
 
     document.addEventListener('vta:task-submitted', function (event) {
@@ -447,7 +487,8 @@
       );
     });
 
-    // 恢复上次页面（standalone 跳转 /view 前、刷新前）未终态的任务
+    // 恢复持久化列表（无论权限），granted 时随即启动轮询
+    restoreTracked();
     resumePolling();
 
     async function pollTracked() {
