@@ -13,9 +13,12 @@ const APP_CONFIG = {
         THEME_PREFERENCE: 'vta_theme_preference'
     },
     API_BASE_URL: '',
-    MAX_HISTORY_ITEMS: 10,
-    ENCRYPTION_KEY: 'vta_encrypt_key_2024' // 简单的加密密钥
+    MAX_HISTORY_ITEMS: 10
 };
+
+/** Stable user-visible failure text used when the shared auth script is absent. */
+const AUTH_STORAGE_ERROR_MESSAGE = '安全错误：统一鉴权模块加载失败，已禁用受保护操作';
+let authStorageErrorShown = false;
 
 // 全局变量
 let currentTask = null;
@@ -35,32 +38,64 @@ const URL_PATTERNS = [
 ];
 
 /**
- * 简单加密函数（Base64 + 简单混淆）
+ * Resolve the shared auth module loaded before app.js; no legacy token path is
+ * allowed when the shared script is missing or malformed.
  */
-function simpleEncrypt(text) {
-    if (!text) return '';
-    try {
-        const encoded = btoa(unescape(encodeURIComponent(text + APP_CONFIG.ENCRYPTION_KEY)));
-        return encoded.split('').reverse().join('');
-    } catch (e) {
-        console.error('加密失败:', e);
-        return text;
+function getAuthStorage() {
+    const candidate = (typeof window !== 'undefined' && window.VideoTranscriptAuthStorage) ||
+        (typeof globalThis !== 'undefined' && globalThis.VideoTranscriptAuthStorage);
+    if (!candidate || typeof candidate.readAuthToken !== 'function' ||
+        typeof candidate.writeAuthToken !== 'function' ||
+        typeof candidate.clearAuthToken !== 'function' ||
+        typeof candidate.buildAuthHeaders !== 'function') {
+        return null;
+    }
+    return candidate;
+}
+
+/**
+ * Disable protected submission and surface a stable safety error when the
+ * shared auth script failed to load; token text is never included.
+ */
+function disableProtectedActions() {
+    const submitButton = typeof document !== 'undefined' && document.getElementById('submit-btn');
+    const tokenInput = typeof document !== 'undefined' && document.getElementById('bearer-token');
+    if (submitButton) submitButton.disabled = true;
+    if (tokenInput) tokenInput.disabled = true;
+    if (!authStorageErrorShown && typeof UIManager !== 'undefined' &&
+        typeof document !== 'undefined' && document.getElementById('status-container')) {
+        authStorageErrorShown = true;
+        UIManager.showStatus('error', AUTH_STORAGE_ERROR_MESSAGE, '请刷新页面后重试');
     }
 }
 
 /**
- * 简单解密函数
+ * Report a missing auth module at the protected-operation boundary and return
+ * null so callers cannot silently fall back to the old localStorage token.
  */
-function simpleDecrypt(encoded) {
-    if (!encoded) return '';
-    try {
-        const reversed = encoded.split('').reverse().join('');
-        const decoded = decodeURIComponent(escape(atob(reversed)));
-        return decoded.replace(APP_CONFIG.ENCRYPTION_KEY, '');
-    } catch (e) {
-        console.error('解密失败:', e);
-        return encoded;
+function requireAuthStorage() {
+    const authStorage = getAuthStorage();
+    if (!authStorage) {
+        disableProtectedActions();
+        return null;
     }
+    return authStorage;
+}
+
+/** Sync the homepage token field after canonical or legacy shared-storage events. */
+function handleHomepageAuthStorageEvent(event) {
+    const authStorage = getAuthStorage();
+    const storageKeys = authStorage && authStorage.AUTH_STORAGE_KEYS;
+    if (!storageKeys || ![
+        storageKeys.canonical,
+        storageKeys.migration,
+        storageKeys.legacyApi,
+        storageKeys.legacyPersistent,
+        storageKeys.legacySession,
+    ].includes(event && event.key)) return;
+    const tokenInput = document.getElementById('bearer-token');
+    if (tokenInput) tokenInput.value = authStorage.readAuthToken() || '';
+    UIManager.updateSubmitButton();
 }
 
 /**
@@ -116,11 +151,14 @@ function buildHistoryItemHTML(task) {
  */
 class StorageManager {
     static set(key, value) {
+        if (key === APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN) {
+            const authStorage = requireAuthStorage();
+            if (!authStorage) return false;
+            if (!value) return authStorage.clearAuthToken();
+            return authStorage.writeAuthToken(value, { remember: true });
+        }
         try {
-            if (key === APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN) {
-                // 敏感信息加密存储
-                localStorage.setItem(key, simpleEncrypt(value));
-            } else if (key === APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK) {
+            if (key === APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK) {
                 // Webhook 地址直接存储（不是秘密）
                 localStorage.setItem(key, value);
             } else {
@@ -132,14 +170,15 @@ class StorageManager {
     }
 
     static get(key) {
+        if (key === APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN) {
+            const authStorage = requireAuthStorage();
+            return authStorage ? authStorage.readAuthToken() : null;
+        }
         try {
             const value = localStorage.getItem(key);
             if (!value) return null;
 
-            if (key === APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN) {
-                // 敏感信息解密
-                return simpleDecrypt(value);
-            } else if (key === APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK) {
+            if (key === APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK) {
                 // Webhook 地址直接读取
                 return value;
             } else {
@@ -152,6 +191,10 @@ class StorageManager {
     }
 
     static remove(key) {
+        if (key === APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN) {
+            const authStorage = requireAuthStorage();
+            return authStorage ? authStorage.clearAuthToken() : false;
+        }
         try {
             localStorage.removeItem(key);
         } catch (e) {
@@ -160,9 +203,12 @@ class StorageManager {
     }
 
     static clear() {
+        this.remove(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
         try {
-            Object.values(APP_CONFIG.STORAGE_KEYS).forEach(key => {
-                localStorage.removeItem(key);
+            Object.values(APP_CONFIG.STORAGE_KEYS)
+                .filter(key => key !== APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN)
+                .forEach(key => {
+                    localStorage.removeItem(key);
             });
         } catch (e) {
             console.error('清空存储失败:', e);
@@ -284,10 +330,11 @@ class APIManager {
      * 提交转录任务
      */
     static async submitTranscription(url, useSpeakerRecognition, wechatWebhook = null) {
-        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+        const authStorage = requireAuthStorage();
+        const token = authStorage && authStorage.readAuthToken();
 
         if (!token) {
-            throw new Error('请先设置API访问令牌');
+            throw new Error(authStorage ? '请先设置访问令牌' : AUTH_STORAGE_ERROR_MESSAGE);
         }
 
         const requestBody = {
@@ -304,7 +351,7 @@ class APIManager {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                ...authStorage.buildAuthHeaders()
             },
             body: JSON.stringify(requestBody)
         });
@@ -321,16 +368,15 @@ class APIManager {
      * 查询任务状态
      */
     static async getTaskStatus(taskId) {
-        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
-        
+        const authStorage = requireAuthStorage();
+        const token = authStorage && authStorage.readAuthToken();
+
         if (!token) {
-            throw new Error('请先设置API访问令牌');
+            throw new Error(authStorage ? '请先设置访问令牌' : AUTH_STORAGE_ERROR_MESSAGE);
         }
 
         const response = await fetch(`/api/task/${taskId}`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            headers: authStorage.buildAuthHeaders()
         });
 
         if (!response.ok) {
@@ -660,7 +706,15 @@ class UIManager {
         const btn = document.getElementById('submit-btn');
         const btnIcon = btn.querySelector('.btn-icon');
         const btnText = btn.querySelector('.btn-text');
-        
+
+        if (!getAuthStorage()) {
+            disableProtectedActions();
+            btn.disabled = true;
+            btnIcon.textContent = '🔒';
+            btnText.textContent = '鉴权模块不可用，已禁用提交';
+            return;
+        }
+
         const selectedURL = getSelectedURL();
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
         
@@ -676,7 +730,7 @@ class UIManager {
             btnText.textContent = '请输入包含视频链接的内容';
         } else if (!token) {
             btnIcon.textContent = '🔐';
-            btnText.textContent = '请在高级设置中填写 API 令牌';
+            btnText.textContent = '请在高级设置中填写访问令牌';
         } else {
             btnIcon.textContent = '🚀';
             btnText.textContent = '开始转录';
@@ -846,7 +900,7 @@ async function submitTranscription(event) {
 
     const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
     if (!token) {
-        UIManager.showStatus('error', '请先设置 API 令牌', '请在高级设置中填写你的 API 访问令牌（Bearer Token）');
+        UIManager.showStatus('error', '请先设置访问令牌', '请在高级设置中填写你的访问令牌');
         // 自动展开高级设置
         if (!isAdvancedSettingsExpanded) {
             UIManager.toggleAdvancedSettings();
@@ -947,6 +1001,10 @@ async function submitTranscription(event) {
 function initializePage() {
     console.log('初始化视频转录Web应用...');
 
+    if (!getAuthStorage()) {
+        disableProtectedActions();
+    }
+
     // 加载保存的设置
     const savedToken = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
     const savedWebhook = StorageManager.get(APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK);
@@ -993,9 +1051,15 @@ function initializePage() {
 
     // 监听设置变化
     document.getElementById('bearer-token').addEventListener('input', (e) => {
-        StorageManager.set(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN, e.target.value);
+        const saved = StorageManager.set(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN, e.target.value);
+        if (saved === false) {
+            e.target.value = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN) || '';
+            UIManager.showStatus('error', '访问令牌保存失败', '仍使用当前访问令牌');
+        }
         UIManager.updateSubmitButton();
     });
+
+    window.addEventListener('storage', handleHomepageAuthStorageEvent);
 
     document.getElementById('wechat-webhook').addEventListener('input', (e) => {
         const webhookValue = e.target.value;
@@ -1044,5 +1108,13 @@ if (typeof window !== 'undefined') {
 
 // 导出纯函数供 vitest（CJS，经 createRequire 加载）
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { escapeHTML, buildHistoryItemHTML };
+    module.exports = {
+        escapeHTML,
+        buildHistoryItemHTML,
+        StorageManager,
+        APIManager,
+        getAuthStorage,
+        disableProtectedActions,
+        AUTH_STORAGE_ERROR_MESSAGE,
+    };
 }
