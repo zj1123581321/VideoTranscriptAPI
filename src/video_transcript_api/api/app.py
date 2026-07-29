@@ -4,8 +4,9 @@ import threading
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..utils.notifications import init_all_notifiers, shutdown_all_notifiers
@@ -314,6 +315,22 @@ def create_app(
     static_dir = get_static_dir()
     if static_dir.exists():
         app.mount("/static", NoCacheStaticFiles(directory=str(static_dir)), name="static")
+
+    # PWA（docs/designs/pwa.md T2）：Service Worker 必须从根路径吐出，
+    # scope 才能覆盖 "/"（/static/sw.js 天然只能控制 /static/）。根路径
+    # 脚本默认最大 scope 即 "/"，无需 Service-Worker-Allowed 头。
+    # 必须匿名可访问（SW 注册在无痕窗口也要成功），不得挂任何鉴权依赖；
+    # 显式 no-cache 与 NoCacheStaticFiles 策略一致，保证 SW 更新及时生效。
+    @app.get("/sw.js", include_in_schema=False)
+    async def service_worker_script() -> FileResponse:
+        sw_path = get_static_dir() / "sw.js"
+        if not sw_path.exists():
+            raise HTTPException(status_code=404, detail="sw.js not found")
+        return FileResponse(
+            sw_path,
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-cache"},
+        )
 
     # 调试中间件：记录 /view/ 请求的详细信息，用于排查外部 AI 工具的访问问题
     @app.middleware("http")

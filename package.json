@@ -1,0 +1,12 @@
+{
+  "name": "video-transcript-api-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "JS unit tests (vitest) for the PWA front-end assets of VideoTranscriptAPI",
+  "scripts": {
+    "test:web": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

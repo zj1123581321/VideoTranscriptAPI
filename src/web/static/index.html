@@ -14,6 +14,10 @@
     <meta name="description" content="提交视频转录任务，支持 YouTube、Bilibili、抖音、小红书、小宇宙等多平台">
     <meta name="theme-color" content="#667eea">
     <meta name="robots" content="noindex">
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
@@ -25,6 +29,9 @@
             <nav class="site-nav">
                 <a href="/" class="site-nav-link">🏠 主页</a>
                 <a href="/static/history.html" class="site-nav-link">📋 任务历史</a>
+                <button type="button" id="pwa-install-btn" class="site-nav-link"
+                        style="display:none; min-height:44px; background:none; cursor:pointer; font:inherit;"
+                        aria-label="安装应用到桌面">📥 安装应用</button>
             </nav>
             <h1>🎬 视频转录服务</h1>
             <p>支持多平台视频转录，智能说话人识别</p>
@@ -144,5 +151,6 @@
     </div>
 
     <script src="/static/js/app.js"></script>
+    <script src="/static/pwa.js" defer></script>
 </body>
 </html>
