@@ -865,13 +865,18 @@ async function submitTranscription(event) {
             // 根据是否重复显示不同的提示
             let statusMessage = '任务提交成功！';
             let statusDetails = `任务ID: ${response.data.task_id}<br>转录将在后台进行，完成后会通过配置的企业微信通知您<br>`;
+
+            // PWA standalone 检测（T6）：独立窗口里 _blank 会逃逸到浏览器，
+            // 结果页链接改同窗口打开；浏览器内行为不变
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                || window.navigator.standalone === true;
             
             if (historyResult.isDuplicate) {
                 statusMessage = '任务提交成功！(检测到重复URL)';
                 statusDetails += `<span style="color: #f59e0b;">⚠️ 相同链接的旧任务记录已被更新</span><br>`;
             }
             
-            statusDetails += `<a href="/view/${response.data.view_token}" target="_blank" style="color: #667eea; text-decoration: underline;">点击查看任务进度</a>`;
+            statusDetails += `<a href="/view/${response.data.view_token}" target="${isStandalone ? '_self' : '_blank'}" style="color: #667eea; text-decoration: underline;">点击查看任务进度</a>`;
             
             UIManager.showStatus('success', statusMessage, statusDetails);
             
@@ -880,18 +885,17 @@ async function submitTranscription(event) {
             document.getElementById('url-preview').innerHTML = '<div class="no-urls">请输入包含视频链接的内容</div>';
             
             // 3秒后跳转到查看页面
-            // PWA standalone 模式下同窗口跳转（独立窗口里 _blank 会逃逸到浏览器）；
-            // 浏览器内既有行为（新标签页打开）不变
-            setTimeout(() => {
-                const viewUrl = `/view/${response.data.view_token}`;
-                const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-                    || window.navigator.standalone === true;
-                if (isStandalone) {
-                    window.location.href = viewUrl;
-                } else {
-                    window.open(viewUrl, '_blank');
-                }
-            }, 3000);
+            // PWA standalone 模式下取消自动跳转（Codex R2-1）：/view 的
+            // processing.html 是无 JS 的静态"请手动刷新"页，跳过去后 E5 轮询
+            // 随页面离开死亡、完成通知静默失效。standalone 下用户停留在本页
+            // 等通知（E5 简化版要求页面存活），结果页由上方 success 提示里的
+            // 同窗口链接或通知 onclick 进入。浏览器内既有行为（3 秒后新标签页
+            // 打开）不变。
+            if (!isStandalone) {
+                setTimeout(() => {
+                    window.open(`/view/${response.data.view_token}`, '_blank');
+                }, 3000);
+            }
             
         } else {
             throw new Error(response.message || '提交失败');

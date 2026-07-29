@@ -106,6 +106,8 @@ SW 策略（fetch 白名单制，scope 为 `/` 后会拦截同源所有请求，
     `CustomEvent('vta:task-submitted', {detail:{task_id, view_token}})`，pwa.js 监听。
   - standalone 模式下提交成功改为同窗口跳转（不再 `window.open('_blank')`，
     检测 `display-mode: standalone`；浏览器内既有行为不变）。
+    实施注记（Codex R2-1）：实际落地为"standalone 取消自动跳转、原地提示 +
+    同窗口链接"——跳转后 /view 无轮询能力，E5 通知会死；E5 简化版要求页面存活。
 
 ## Scope Decisions
 
@@ -207,6 +209,10 @@ main 新分支 + 独立 worktree、分 3 阶段 commit。
   - Files: `src/web/static/pwa.js`, `index.html`, `history.html`
   - Verify: Chrome/Edge 出现安装按钮；iOS 模拟器显示图文引导
 - [x] **T6 (P2, human: ~1h / CC: ~15min)** — app.js 钩子 — CustomEvent + standalone 同窗口跳转
+  - 实施注记（Codex R2-1）：standalone 同窗口跳转在实际落地时改为"取消 3 秒自动跳转 +
+    success 提示里的结果页链接同窗口打开"。原因：/view 的 processing.html 是无 JS 静态页，
+    自动跳过去后 E5 轮询随页面离开死亡、通知静默失效；E5 简化版要求页面存活。
+    浏览器内既有行为（3 秒后新标签页打开）不变。
   - Surfaced by: Codex#5/#6
   - Files: `src/web/static/js/app.js`
   - Verify: standalone 模式提交后同窗口打开结果页；浏览器内行为无回归

@@ -20,7 +20,9 @@
 1. 桌面 Chrome/Edge：访问 `/add_task_by_web`，出现「📥 安装应用」按钮，点击安装成功。
 2. 安装后以独立窗口（standalone，无地址栏）打开；manifest `display: standalone` 生效。
 3. 长按/右键应用图标，出现 shortcuts「提交任务」「任务历史」直达。
-4. standalone 窗口内提交任务，3 秒后**同窗口**跳转结果页（不开新标签）。
+4. standalone 窗口内提交任务：**不自动跳转**，停留在提交页（/view 是无 JS 静态页，
+   跳过去 E5 轮询会死，Codex R2-1）；success 提示里的「点击查看任务进度」链接同窗口打开；
+   任务完成后由通知 onclick 带去结果页。
 5. 普通浏览器标签页内提交任务，行为回归：仍是新标签页打开结果页。
 6. Android Chrome：从 B站 App 分享到本 PWA，链接自动填入；从抖音 App 分享同样验证。
 7. 分享进入但本机无 token：聚焦 token 输入框并提示「请先配置访问令牌」。
@@ -47,7 +49,8 @@ curl -s https://<host>/static/manifest.webmanifest | head
 
 ## 回滚 runbook
 
-普通回滚：revert 本分支 3 个 commit 即可。SW 只缓存入口页导航与图标，驻留危害有限。
+普通回滚：按分支区间逐特性 revert（`git revert` 本分支相对 main 引入的提交，即
+`origin/main..HEAD` 范围内的 PWA 相关 commit），SW 只缓存入口页导航与图标，驻留危害有限。
 
 紧急下线（SW 已在用户浏览器驻留，需主动注销）：部署一个「自注销 SW」，
 把 `src/web/static/sw.js` 整体替换为：
@@ -68,3 +71,11 @@ self.addEventListener('activate', (event) => {
 
 同时从 index.html / history.html 移除 `pwa.js` 的 `<script>` 引用（停止再次注册）。
 用户下次访问时旧 SW 被替换、缓存清空、注册注销。
+
+## 已知限制与 Backlog
+
+- **多标签页重复通知（Codex R2-2，接受不修）**：多个 index 标签页会各自从
+  localStorage 恢复并轮询同一任务，任务完成时每个标签页各弹一条通知。
+  接受理由：自用工具实际单标签使用；修复需 BroadcastChannel / Web Locks
+  选主机制，违反"不为 P2 新增机制"的纪律；最坏后果仅是重复一条通知，
+  无数据损失。若日后确实多标签高频使用，再评估选主方案。
