@@ -23,9 +23,9 @@ function createFixture({ token = 'cached-token', withAuth = true, withController
     <div id="protectedActionAuthStatus"></div>
     <dialog id="protectedActionAuthDialog" aria-labelledby="protectedActionAuthTitle" aria-describedby="protectedActionAuthDescription">
       <form id="protectedActionAuthForm">
-        <h3 id="protectedActionAuthTitle">输入 API Key</h3>
+        <h3 id="protectedActionAuthTitle">输入访问令牌</h3>
         <p id="protectedActionAuthDescription">description</p>
-        <label for="protectedActionTokenInput">API Key</label>
+        <label for="protectedActionTokenInput">访问令牌</label>
         <input id="protectedActionTokenInput" />
         <button id="protectedActionAuthCancel" type="button">取消</button>
         <button id="protectedActionAuthSubmit" type="submit">确认</button>

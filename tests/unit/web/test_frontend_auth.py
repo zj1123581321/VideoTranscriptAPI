@@ -156,6 +156,23 @@ def test_auth_controls_have_narrow_screen_wrapping_contracts():
     assert "min-width: 0;" in history
 
 
+def test_auth_user_facing_terms_use_access_token_across_pages():
+    index = INDEX_HTML.read_text(encoding="utf-8")
+    history = HISTORY_HTML.read_text(encoding="utf-8")
+    transcript = TRANSCRIPT_HTML.read_text(encoding="utf-8")
+    app = APP_JS.read_text(encoding="utf-8")
+
+    assert "API访问令牌 (Bearer Token)" not in index
+    assert "Bearer Token" not in history.split("<script", 1)[0]
+    assert "API Key" not in transcript
+    assert "Bearer token" not in transcript
+    assert "请先设置API访问令牌" not in app
+    assert "请先设置 API 令牌" not in app
+    assert "API 访问令牌（Bearer Token）" not in app
+    for source in (index, history, transcript, app):
+        assert "访问令牌" in source
+
+
 def test_transcript_removes_private_credential_and_handwritten_polling_paths():
     source = TRANSCRIPT_HTML.read_text(encoding="utf-8")
     for legacy in (

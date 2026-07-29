@@ -318,7 +318,7 @@ class APIManager {
         const token = authStorage && authStorage.readAuthToken();
 
         if (!token) {
-            throw new Error(authStorage ? '请先设置API访问令牌' : AUTH_STORAGE_ERROR_MESSAGE);
+            throw new Error(authStorage ? '请先设置访问令牌' : AUTH_STORAGE_ERROR_MESSAGE);
         }
 
         const requestBody = {
@@ -356,7 +356,7 @@ class APIManager {
         const token = authStorage && authStorage.readAuthToken();
 
         if (!token) {
-            throw new Error(authStorage ? '请先设置API访问令牌' : AUTH_STORAGE_ERROR_MESSAGE);
+            throw new Error(authStorage ? '请先设置访问令牌' : AUTH_STORAGE_ERROR_MESSAGE);
         }
 
         const response = await fetch(`/api/task/${taskId}`, {
@@ -714,7 +714,7 @@ class UIManager {
             btnText.textContent = '请输入包含视频链接的内容';
         } else if (!token) {
             btnIcon.textContent = '🔐';
-            btnText.textContent = '请在高级设置中填写 API 令牌';
+            btnText.textContent = '请在高级设置中填写访问令牌';
         } else {
             btnIcon.textContent = '🚀';
             btnText.textContent = '开始转录';
@@ -884,7 +884,7 @@ async function submitTranscription(event) {
 
     const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
     if (!token) {
-        UIManager.showStatus('error', '请先设置 API 令牌', '请在高级设置中填写你的 API 访问令牌（Bearer Token）');
+        UIManager.showStatus('error', '请先设置访问令牌', '请在高级设置中填写你的访问令牌');
         // 自动展开高级设置
         if (!isAdvancedSettingsExpanded) {
             UIManager.toggleAdvancedSettings();

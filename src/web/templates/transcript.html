@@ -392,18 +392,18 @@
 
     {% if view_token %}
     <div class="protected-action-auth-tools" aria-live="polite">
-        <button class="recalibrate-btn" id="protectedActionAuthChange" type="button">设置/更换 API Key</button>
-        <button class="recalibrate-btn" id="protectedActionAuthClear" type="button">清除 API Key</button>
+        <button class="recalibrate-btn" id="protectedActionAuthChange" type="button">设置/更换访问令牌</button>
+        <button class="recalibrate-btn" id="protectedActionAuthClear" type="button">清除访问令牌</button>
         <span id="protectedActionAuthStatus" class="dialog-status"></span>
     </div>
     <dialog id="protectedActionAuthDialog" class="recalibrate-dialog"
             aria-labelledby="protectedActionAuthTitle"
             aria-describedby="protectedActionAuthDescription">
         <form id="protectedActionAuthForm">
-            <h3 id="protectedActionAuthTitle">输入 API Key</h3>
-            <p id="protectedActionAuthDescription" class="dialog-desc">受保护操作需要统一的 Bearer 凭据；凭据只保存到浏览器统一鉴权存储。</p>
-            <label for="protectedActionTokenInput">API Key</label>
-            <input type="password" id="protectedActionTokenInput" placeholder="Bearer token" autocomplete="off">
+            <h3 id="protectedActionAuthTitle">输入访问令牌</h3>
+            <p id="protectedActionAuthDescription" class="dialog-desc">受保护操作需要统一的访问令牌；访问令牌只保存到浏览器统一鉴权存储。</p>
+            <label for="protectedActionTokenInput">访问令牌</label>
+            <input type="password" id="protectedActionTokenInput" placeholder="输入访问令牌" autocomplete="off">
             <div class="dialog-actions">
                 <button type="button" class="dialog-btn dialog-btn-cancel" id="protectedActionAuthCancel">取消</button>
                 <button type="submit" class="dialog-btn dialog-btn-confirm" id="protectedActionAuthSubmit">确认</button>
@@ -526,7 +526,7 @@
                 if (!token) {
                     authInput.focus();
                     var dialogStatus = document.getElementById('protectedActionAuthDialogStatus');
-                    if (dialogStatus) dialogStatus.textContent = '请输入 API Key';
+                    if (dialogStatus) dialogStatus.textContent = '请输入访问令牌';
                     return;
                 }
                 finish(null, token);
@@ -550,11 +550,11 @@
     function formatActionError(error) {
         var message = error && error.message ? error.message : '';
         if (message === 'Protected action token prompt cancelled') return '';
-        if (message === 'HTTP 403') return '无权限，凭据不会更换。';
-        if (message === 'HTTP 404') return '未找到转录数据，凭据不会更换。';
-        if (message === 'HTTP 409') return '当前任务状态不允许操作，凭据不会更换。';
+        if (message === 'HTTP 403') return '无权限，访问令牌不会更换。';
+        if (message === 'HTTP 404') return '未找到转录数据，访问令牌不会更换。';
+        if (message === 'HTTP 409') return '当前任务状态不允许操作，访问令牌不会更换。';
         if (message === 'POST network failure') return '提交结果不确定，请勿自动重试';
-        if (message === 'HTTP 401 after one replay') return '凭据重试已停止，请使用“设置/更换 API Key”后再操作。';
+        if (message === 'HTTP 401 after one replay') return '访问令牌重试已停止，请使用“设置/更换访问令牌”后再操作。';
         return message || '受保护操作失败，请稍后重试。';
     }
 
@@ -625,14 +625,14 @@
             if (!activePrompt) promptTrigger = authChange;
             promptForToken().then(function(token) {
                 if (authStorage.writeAuthToken(token) === false) throw new Error('Protected action token save failed');
-                setAuthStatus('API Key 已更新。', false);
+                setAuthStatus('访问令牌已更新。', false);
             }).catch(function(error) {
                 if (error && error.message !== 'Protected action token prompt cancelled') setAuthStatus(formatActionError(error), true);
             });
         });
         authClear.addEventListener('click', function() {
             authStorage.clearAuthToken();
-            setAuthStatus('API Key 已清除。', false);
+            setAuthStatus('访问令牌已清除。', false);
         });
     }
 

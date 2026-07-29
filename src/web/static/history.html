@@ -55,7 +55,7 @@
             background: var(--bg-secondary);
         }
 
-        /* Bearer token 输入区 */
+        /* 访问令牌输入区 */
         .auth-bar {
             background: var(--bg-primary);
             border: 1px solid var(--border-primary);
@@ -476,10 +476,10 @@
         </nav>
     </div>
 
-    <!-- Unified Bearer token input -->
+    <!-- Unified access token input -->
     <div class="auth-bar">
-        <label for="apiKeyInput">Bearer Token</label>
-        <input type="password" id="apiKeyInput" placeholder="输入 Bearer Token..." autocomplete="off">
+        <label for="apiKeyInput">访问令牌</label>
+        <input type="password" id="apiKeyInput" placeholder="输入访问令牌..." autocomplete="off">
         <button class="btn btn-primary" id="historyQueryBtn" onclick="loadHistory()">查询</button>
         <button class="btn btn-ghost" id="historyClearBtn" onclick="clearHistoryAuth()">清除鉴权</button>
         <span class="auth-status" id="authStatus" style="display:none"></span>
@@ -582,7 +582,7 @@
     <div id="listArea">
         <div class="state-box">
             <div class="icon">🔑</div>
-            <div>输入 Bearer Token 后点击查询</div>
+            <div>输入访问令牌后点击查询</div>
         </div>
     </div>
 
@@ -673,7 +673,7 @@ function resetPrivateHistoryState() {
     summaryVisible = false;
     _authorDropOpen = false;
     const list = document.getElementById('listArea');
-    if (list) list.innerHTML = '<div class="state-box"><div class="icon">🔑</div><div>请输入 Bearer Token 后点击查询</div></div>';
+    if (list) list.innerHTML = '<div class="state-box"><div class="icon">🔑</div><div>请输入访问令牌后点击查询</div></div>';
     ['filterBar', 'statsBar', 'paginationBar', 'aliasToggle', 'aliasPanel'].forEach(id => {
         const element = document.getElementById(id);
         if (element) element.style.display = id === 'aliasPanel' ? 'none' : 'none';
@@ -1112,7 +1112,7 @@ async function apiFetch(url, params = {}) {
                 resetPrivateHistoryState();
                 document.getElementById('apiKeyInput').value = '';
             }
-            showStatus('err', 'Bearer Token 无效');
+            showStatus('err', '访问令牌无效');
             throw new Error('401');
         }
         return await res.json();
