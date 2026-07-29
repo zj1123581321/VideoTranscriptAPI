@@ -8,6 +8,9 @@ APP_JS = PROJECT_ROOT / "src" / "web" / "static" / "js" / "app.js"
 AUTH_JS = PROJECT_ROOT / "src" / "web" / "static" / "js" / "auth-storage.js"
 INDEX_HTML = PROJECT_ROOT / "src" / "web" / "static" / "index.html"
 HISTORY_HTML = PROJECT_ROOT / "src" / "web" / "static" / "history.html"
+BASE_HTML = PROJECT_ROOT / "src" / "web" / "templates" / "base.html"
+TRANSCRIPT_HTML = PROJECT_ROOT / "src" / "web" / "templates" / "transcript.html"
+PROTECTED_ACTION_JS = PROJECT_ROOT / "src" / "web" / "static" / "js" / "transcript-protected-action.js"
 
 
 def test_homepage_loads_auth_storage_before_app():
@@ -71,3 +74,56 @@ def test_history_reset_and_401_contracts_are_explicit():
     assert "安全错误：统一鉴权模块加载失败，已禁用历史私有操作" in source
     assert "esc(item.title)" in source
     assert "esc(item.view_token)" in source
+
+
+def test_base_loads_versioned_auth_before_page_extra_scripts():
+    source = BASE_HTML.read_text(encoding="utf-8")
+    auth_position = source.index('/static/js/auth-storage.js?v=')
+    extra_position = source.index('{% block extra_js %}')
+    assert auth_position < extra_position
+
+
+def test_transcript_loads_versioned_controller_after_shared_auth():
+    source = TRANSCRIPT_HTML.read_text(encoding="utf-8")
+    assert '/static/js/transcript-protected-action.js?v=' in source
+    assert source.index('/static/js/transcript-protected-action.js?v=') > source.index('{% block extra_js %}')
+    assert 'var transcriptViewToken = {{ view_token|tojson }};' in source
+
+
+def test_transcript_has_one_accessible_credential_dialog_and_three_actions():
+    source = TRANSCRIPT_HTML.read_text(encoding="utf-8")
+    assert source.count('<dialog ') == 1
+    assert 'id="protectedActionAuthDialog"' in source
+    assert 'aria-labelledby="protectedActionAuthTitle"' in source
+    assert 'aria-describedby="protectedActionAuthDescription"' in source
+    assert '<label for="protectedActionTokenInput">' in source
+    assert 'id="protectedActionAuthChange"' in source
+    assert 'id="protectedActionAuthClear"' in source
+    for action in ("recalibrate", "resummarize", "generate_notes"):
+        assert f"'{action}'" in source
+    assert 'createProtectedActionController' in source
+
+
+def test_transcript_removes_private_credential_and_handwritten_polling_paths():
+    source = TRANSCRIPT_HTML.read_text(encoding="utf-8")
+    for legacy in (
+        "recalibrateApiKey",
+        "resummarizeApiKey",
+        "generateNotesApiKey",
+        "localStorage.setItem('api_key'",
+        "function pollTask",
+        "fetch('/api/recalibrate'",
+        "fetch('/api/resummarize'",
+        "fetch('/api/generate_notes'",
+        ".innerHTML",
+    ):
+        assert legacy not in source
+
+
+def test_transcript_missing_shared_scripts_fails_closed_and_uses_safe_status_updates():
+    source = TRANSCRIPT_HTML.read_text(encoding="utf-8")
+    assert "安全错误：统一鉴权模块加载失败，已禁用受保护操作" in source
+    assert "button.disabled = true" in source
+    assert "textContent" in source
+    assert "createElement('span')" in source
+    assert "location.reload" in source
