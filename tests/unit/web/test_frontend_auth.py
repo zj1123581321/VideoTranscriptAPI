@@ -116,6 +116,31 @@ def test_transcript_auth_controls_have_explicit_theme_owned_layout():
     assert "var(--accent-color" not in source
 
 
+def test_transcript_auth_controls_have_touch_focus_and_disabled_contracts():
+    source = TRANSCRIPT_HTML.read_text(encoding="utf-8")
+    assert ".recalibrate-btn {" in source and "min-height: 44px;" in source
+    assert ".recalibrate-dialog input {" in source and "min-height: 44px;" in source
+    assert ".dialog-btn {" in source and "min-height: 44px;" in source
+    assert ".recalibrate-btn:focus-visible" in source
+    assert ".dialog-btn:focus-visible" in source
+    assert ".recalibrate-dialog input:focus-visible" in source
+    assert ".recalibrate-btn:disabled" in source
+    assert ".dialog-btn:disabled" in source
+
+
+def test_history_auth_controls_have_touch_focus_disabled_and_contrast_contracts():
+    source = HISTORY_HTML.read_text(encoding="utf-8")
+    assert ".auth-bar input {" in source and "min-height: 44px;" in source
+    assert ".auth-bar .btn {" in source and "min-height: 44px;" in source
+    assert ".auth-bar input:focus-visible" in source
+    assert ".auth-bar button:focus-visible" in source
+    assert ".auth-bar input:disabled" in source
+    assert ".auth-bar button:disabled" in source
+    assert "border: 1px solid var(--success-border);" in source
+    assert "border: 1px solid var(--error-border);" in source
+    assert "font-weight: 600;" in source
+
+
 def test_transcript_removes_private_credential_and_handwritten_polling_paths():
     source = TRANSCRIPT_HTML.read_text(encoding="utf-8")
     for legacy in (

@@ -75,11 +75,22 @@
             border: 1px solid var(--border-primary);
             border-radius: 8px;
             padding: 8px 12px;
+            min-height: 44px;
             color: var(--text-primary);
             font-size: 0.875rem;
             font-family: monospace;
         }
         .auth-bar input:focus { outline: none; border-color: var(--accent-primary); }
+        .auth-bar input:focus-visible,
+        .auth-bar button:focus-visible {
+            outline: 3px solid var(--border-focus);
+            outline-offset: 2px;
+        }
+        .auth-bar input:disabled,
+        .auth-bar button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
         .btn {
             padding: 8px 18px;
             border-radius: 8px;
@@ -89,6 +100,7 @@
             font-weight: 600;
             transition: opacity 0.15s;
         }
+        .auth-bar .btn { min-height: 44px; }
         .btn:hover { opacity: 0.85; }
         .btn-primary { background: var(--accent-primary); color: #fff; }
         .btn-ghost {
@@ -102,8 +114,18 @@
             border-radius: 6px;
             white-space: nowrap;
         }
-        .auth-status.ok { background: var(--success-bg); color: var(--success-text); }
-        .auth-status.err { background: var(--error-bg); color: var(--error-text); }
+        .auth-status.ok {
+            background: var(--success-bg);
+            border: 1px solid var(--success-border);
+            color: var(--success-text);
+            font-weight: 600;
+        }
+        .auth-status.err {
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
+            color: var(--error-text);
+            font-weight: 600;
+        }
 
         /* Webhook 别名设置 */
         .alias-panel {
