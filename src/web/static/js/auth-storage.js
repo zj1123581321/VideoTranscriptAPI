@@ -272,19 +272,30 @@
 
     /**
      * Clear canonical and legacy credentials and seal migration so stale aliases
-     * cannot resurrect after a user-initiated clear.
+     * cannot resurrect after a user-initiated clear.  Return false unless every
+     * delete and the migration marker write succeed; failed clears retain the
+     * previous identity in page memory instead of claiming success.
      */
     function clearAuthToken() {
+        const previousMemoryToken = memoryToken;
+        const previousMemorySealed = memorySealed;
+        const previousMemoryFallbackActive = memoryFallbackActive;
         memoryToken = null;
         memorySealed = true;
         const canonicalRemoved = removeStorageValue('localStorage', AUTH_STORAGE_KEYS.canonical);
-        removeStorageValue('localStorage', AUTH_STORAGE_KEYS.legacyApi);
-        removeStorageValue('localStorage', AUTH_STORAGE_KEYS.legacyPersistent);
-        removeStorageValue('sessionStorage', AUTH_STORAGE_KEYS.legacySession);
-        writeStorageValue('localStorage', AUTH_STORAGE_KEYS.migration, '1');
-        if (!canonicalRemoved && !getStorage('localStorage')) memoryFallbackActive = true;
-        else memoryFallbackActive = false;
-        return true;
+        const legacyApiRemoved = removeStorageValue('localStorage', AUTH_STORAGE_KEYS.legacyApi);
+        const legacyPersistentRemoved = removeStorageValue('localStorage', AUTH_STORAGE_KEYS.legacyPersistent);
+        const legacySessionRemoved = removeStorageValue('sessionStorage', AUTH_STORAGE_KEYS.legacySession);
+        const migrationSealed = writeStorageValue('localStorage', AUTH_STORAGE_KEYS.migration, '1');
+        if (canonicalRemoved && legacyApiRemoved && legacyPersistentRemoved &&
+            legacySessionRemoved && migrationSealed) {
+            memoryFallbackActive = false;
+            return true;
+        }
+        memoryToken = previousMemoryToken;
+        memorySealed = previousMemorySealed;
+        memoryFallbackActive = canonicalRemoved ? true : previousMemoryFallbackActive;
+        return false;
     }
 
     /**
@@ -321,8 +332,7 @@
         const persisted = readPersistedCanonicalTokenForCompare();
         if (persisted.available && persisted.token && persisted.token !== snapshot) return false;
         if (snapshotAuthToken() !== snapshot) return false;
-        clearAuthToken();
-        return true;
+        return clearAuthToken();
     }
 
     /** Backwards-compatible explicit name for compare-and-clear callers. */

@@ -82,6 +82,22 @@ function requireAuthStorage() {
     return authStorage;
 }
 
+/** Sync the homepage token field after canonical or legacy shared-storage events. */
+function handleHomepageAuthStorageEvent(event) {
+    const authStorage = getAuthStorage();
+    const storageKeys = authStorage && authStorage.AUTH_STORAGE_KEYS;
+    if (!storageKeys || ![
+        storageKeys.canonical,
+        storageKeys.migration,
+        storageKeys.legacyApi,
+        storageKeys.legacyPersistent,
+        storageKeys.legacySession,
+    ].includes(event && event.key)) return;
+    const tokenInput = document.getElementById('bearer-token');
+    if (tokenInput) tokenInput.value = authStorage.readAuthToken() || '';
+    UIManager.updateSubmitButton();
+}
+
 /**
  * HTML 转义（属性/元素上下文通用）：& < > " '
  * 提取出的 URL/标题插入 innerHTML 前必须过此函数（Codex R6-1：系统分享
@@ -1035,9 +1051,15 @@ function initializePage() {
 
     // 监听设置变化
     document.getElementById('bearer-token').addEventListener('input', (e) => {
-        StorageManager.set(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN, e.target.value);
+        const saved = StorageManager.set(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN, e.target.value);
+        if (saved === false) {
+            e.target.value = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN) || '';
+            UIManager.showStatus('error', '访问令牌保存失败', '仍使用当前访问令牌');
+        }
         UIManager.updateSubmitButton();
     });
+
+    window.addEventListener('storage', handleHomepageAuthStorageEvent);
 
     document.getElementById('wechat-webhook').addEventListener('input', (e) => {
         const webhookValue = e.target.value;

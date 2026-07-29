@@ -137,6 +137,18 @@ describe('transcript protected action page adapter', () => {
     expect(dialog.hasAttribute('open')).toBe(false);
   });
 
+  it('does not claim transcript auth clear success when storage clear fails', () => {
+    const fixture = createFixture({ token: 'transcript-clear-token' });
+    fixture.authStorage.clearAuthToken.mockReturnValue(false);
+
+    fixture.dom.window.document.querySelector('#protectedActionAuthClear').click();
+
+    expect(fixture.dom.window.document.querySelector('#protectedActionAuthStatus').textContent)
+      .toContain('访问令牌清除失败');
+    expect(fixture.dom.window.document.querySelector('#protectedActionAuthStatus').textContent)
+      .not.toContain('访问令牌已清除');
+  });
+
   it('Escape silently restores the action trigger and its focus', async () => {
     const fixture = createFixture({ token: null });
     fixture.controller.runProtectedAction.mockImplementation(() => (

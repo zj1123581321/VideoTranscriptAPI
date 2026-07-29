@@ -98,6 +98,20 @@ async function flushPromises() {
 }
 
 describe('history private request generation guards', () => {
+  it('does not claim history auth clear success when storage clear fails', () => {
+    const fixture = createHistoryFixture();
+    const input = fixture.dom.window.document.getElementById('apiKeyInput');
+    fixture.state.token = 'history-clear-token';
+    input.value = 'history-clear-token';
+    fixture.authStorage.clearAuthToken.mockReturnValue(false);
+
+    fixture.dom.window.clearHistoryAuth();
+
+    expect(input.value).toBe('history-clear-token');
+    expect(fixture.dom.window.document.getElementById('authStatus').textContent)
+      .toContain('鉴权清除失败');
+  });
+
   it('does not clear the canonical token when an empty input is queried', async () => {
     const fixture = createHistoryFixture({ token: 'canonical-token' });
     const input = fixture.dom.window.document.getElementById('apiKeyInput');

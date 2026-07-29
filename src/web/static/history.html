@@ -726,8 +726,12 @@ function resetPrivateHistoryState() {
 function clearHistoryAuth() {
     const storage = requireHistoryAuth();
     if (!storage) return;
+    if (!storage.clearAuthToken()) {
+        document.getElementById('apiKeyInput').value = storage.readAuthToken() || '';
+        showStatus('err', '鉴权清除失败');
+        return;
+    }
     resetPrivateHistoryState();
-    storage.clearAuthToken();
     document.getElementById('apiKeyInput').value = '';
     showStatus('ok', '鉴权已清除');
 }

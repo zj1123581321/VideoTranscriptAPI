@@ -631,7 +631,10 @@
             });
         });
         authClear.addEventListener('click', function() {
-            authStorage.clearAuthToken();
+            if (!authStorage.clearAuthToken()) {
+                setAuthStatus('访问令牌清除失败，当前令牌仍保留。', true);
+                return;
+            }
             setAuthStatus('访问令牌已清除。', false);
         });
     }

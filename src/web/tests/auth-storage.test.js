@@ -174,6 +174,73 @@ describe('auth token snapshots and headers', () => {
     expect(authStorage.readAuthToken()).toBeNull();
   });
 
+  it('reports canonical removal failure and preserves the current identity', () => {
+    authStorage.writeAuthToken('persisted-clear-token', { remember: true });
+    const storagePrototype = Object.getPrototypeOf(localStorage);
+    const originalRemoveItem = storagePrototype.removeItem;
+    vi.spyOn(storagePrototype, 'removeItem').mockImplementation(function removeItem(key) {
+      if (key === 'vta_bearer_token') {
+        const error = new Error('blocked');
+        error.name = 'SecurityError';
+        throw error;
+      }
+      return originalRemoveItem.call(this, key);
+    });
+
+    expect(authStorage.clearAuthToken()).toBe(false);
+    expect(authStorage.readAuthToken()).toBe('persisted-clear-token');
+  });
+
+  it('propagates clear failure through compare-and-clear', () => {
+    authStorage.writeAuthToken('compare-clear-token', { remember: true });
+    const storagePrototype = Object.getPrototypeOf(localStorage);
+    const originalRemoveItem = storagePrototype.removeItem;
+    vi.spyOn(storagePrototype, 'removeItem').mockImplementation(function removeItem(key) {
+      if (key === 'vta_bearer_token') {
+        const error = new Error('blocked');
+        error.name = 'SecurityError';
+        throw error;
+      }
+      return originalRemoveItem.call(this, key);
+    });
+
+    expect(authStorage.clearAuthTokenIfMatch('compare-clear-token')).toBe(false);
+    expect(authStorage.readAuthToken()).toBe('compare-clear-token');
+  });
+
+  it('reports legacy alias removal failure instead of claiming clear success', () => {
+    authStorage.writeAuthToken('legacy-clear-token', { remember: true });
+    localStorage.setItem('api_key', 'stale-legacy-token');
+    const storagePrototype = Object.getPrototypeOf(localStorage);
+    const originalRemoveItem = storagePrototype.removeItem;
+    vi.spyOn(storagePrototype, 'removeItem').mockImplementation(function removeItem(key) {
+      if (key === 'api_key') {
+        const error = new Error('blocked');
+        error.name = 'SecurityError';
+        throw error;
+      }
+      return originalRemoveItem.call(this, key);
+    });
+
+    expect(authStorage.clearAuthToken()).toBe(false);
+  });
+
+  it('reports migration marker write failure instead of claiming clear success', () => {
+    authStorage.writeAuthToken('marker-clear-token', { remember: true });
+    const storagePrototype = Object.getPrototypeOf(localStorage);
+    const originalSetItem = storagePrototype.setItem;
+    vi.spyOn(storagePrototype, 'setItem').mockImplementation(function setItem(key, value) {
+      if (key === 'vta_auth_migration_v1') {
+        const error = new Error('blocked');
+        error.name = 'SecurityError';
+        throw error;
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    expect(authStorage.clearAuthToken()).toBe(false);
+  });
+
   it('does not clear a newer persisted canonical token before its storage event arrives', () => {
     localStorage.removeItem('vta_auth_migration_v1');
     const storagePrototype = Object.getPrototypeOf(localStorage);
@@ -213,8 +280,8 @@ describe('auth token snapshots and headers', () => {
     expect(authStorage.writeAuthToken('memory-only-token')).toBe(true);
     const snapshot = authStorage.snapshotAuthToken();
     expect(snapshot).toBe('memory-only-token');
-    expect(authStorage.clearAuthTokenIfMatch(snapshot)).toBe(true);
-    expect(authStorage.readAuthToken()).toBeNull();
+    expect(authStorage.clearAuthTokenIfMatch(snapshot)).toBe(false);
+    expect(authStorage.readAuthToken()).toBe('memory-only-token');
   });
 });
 
@@ -357,6 +424,63 @@ describe('auth storage events and browser compatibility', () => {
 });
 
 describe('homepage auth integration contract', () => {
+  it('listens for every shared auth storage key and syncs the homepage token input', () => {
+    expect(appSource).toContain("addEventListener('storage'");
+    expect(appSource).toContain('AUTH_STORAGE_KEYS');
+    expect(appSource).toContain("document.getElementById('bearer-token').value");
+    expect(appSource).toContain('UIManager.updateSubmitButton()');
+  });
+
+  it('restores the real token and reports a failed homepage token save', () => {
+    dom?.window.close();
+    dom = new JSDOM(indexSource, { url: 'https://vta.test/' });
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.localStorage = dom.window.localStorage;
+    globalThis.sessionStorage = dom.window.sessionStorage;
+    globalThis.StorageEvent = dom.window.StorageEvent;
+    dom.window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    authStorage = loadAuthStorage();
+    authStorage.writeAuthToken('persisted-homepage-token', { remember: true });
+    const app = loadApp();
+    document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+    vi.spyOn(app.StorageManager, 'set').mockImplementation(() => false);
+    const input = document.getElementById('bearer-token');
+    input.value = 'new-homepage-token';
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+
+    expect(input.value).toBe('persisted-homepage-token');
+    expect(document.getElementById('status-content').textContent).toContain('访问令牌保存失败');
+
+    input.value = '';
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    expect(input.value).toBe('persisted-homepage-token');
+    expect(document.getElementById('status-content').textContent).toContain('访问令牌保存失败');
+  });
+
+  it('syncs the homepage token input after a shared storage event', () => {
+    dom?.window.close();
+    dom = new JSDOM(indexSource, { url: 'https://vta.test/' });
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.localStorage = dom.window.localStorage;
+    globalThis.sessionStorage = dom.window.sessionStorage;
+    globalThis.StorageEvent = dom.window.StorageEvent;
+    dom.window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    authStorage = loadAuthStorage();
+    authStorage.writeAuthToken('event-token-a', { remember: true });
+    loadApp();
+    document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+
+    authStorage.writeAuthToken('event-token-b', { remember: true });
+    dom.window.dispatchEvent(new dom.window.StorageEvent('storage', {
+      key: authStorage.AUTH_STORAGE_KEYS.canonical,
+      newValue: authStorage.encodeAuthToken('event-token-b'),
+    }));
+
+    expect(document.getElementById('bearer-token').value).toBe('event-token-b');
+  });
+
   it('delegates token reads, writes, and clears to the shared auth module', () => {
     const app = loadApp();
     const key = 'vta_bearer_token';

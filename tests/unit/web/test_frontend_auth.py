@@ -30,6 +30,14 @@ def test_storage_manager_delegates_every_token_operation():
     assert "simpleDecrypt" not in source
 
 
+def test_homepage_syncs_shared_auth_storage_events_and_save_failures():
+    source = APP_JS.read_text(encoding="utf-8")
+    assert "window.addEventListener('storage', handleHomepageAuthStorageEvent)" in source
+    assert "AUTH_STORAGE_KEYS" in source
+    assert "仍使用当前访问令牌" in source
+    assert "e.target.value = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN) || ''" in source
+
+
 def test_api_requests_use_shared_header_builder():
     source = APP_JS.read_text(encoding="utf-8")
     assert source.count("authStorage.buildAuthHeaders()") >= 2
@@ -75,6 +83,15 @@ def test_history_reset_and_401_contracts_are_explicit():
     assert "安全错误：统一鉴权模块加载失败，已禁用历史私有操作" in source
     assert "esc(item.title)" in source
     assert "esc(item.view_token)" in source
+
+
+def test_history_and_transcript_clear_failures_are_visible():
+    history = HISTORY_HTML.read_text(encoding="utf-8")
+    transcript = TRANSCRIPT_HTML.read_text(encoding="utf-8")
+    assert "if (!storage.clearAuthToken())" in history
+    assert "鉴权清除失败" in history
+    assert "if (!authStorage.clearAuthToken())" in transcript
+    assert "访问令牌清除失败，当前令牌仍保留。" in transcript
 
 
 def test_base_loads_versioned_auth_before_page_extra_scripts():
