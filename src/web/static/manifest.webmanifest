@@ -1,0 +1,52 @@
+{
+  "name": "VideoTranscriptAPI 视频转录",
+  "short_name": "视频转录",
+  "description": "提交视频转录任务，支持 YouTube、Bilibili、抖音、小红书、小宇宙等多平台",
+  "id": "/add_task_by_web",
+  "start_url": "/add_task_by_web",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#4f46e5",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "提交任务",
+      "short_name": "提交",
+      "url": "/add_task_by_web",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "任务历史",
+      "short_name": "历史",
+      "url": "/static/history.html",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "share_target": {
+    "action": "/add_task_by_web",
+    "method": "GET",
+    "params": {
+      "url": "url",
+      "title": "title",
+      "text": "text"
+    }
+  }
+}

@@ -3,7 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4f46e5">
     <title>任务历史 - VideoTranscriptAPI</title>
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/styles.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -450,6 +455,9 @@
         <nav class="site-nav">
             <a href="/add_task_by_web" class="site-nav-link">📝 提交任务</a>
             <a href="/" class="site-nav-link">← 返回主页</a>
+            <button type="button" id="pwa-install-btn" class="site-nav-link"
+                    style="display:none; min-height:44px; background:none; cursor:pointer; font:inherit;"
+                    aria-label="安装应用到桌面">📥 安装应用</button>
         </nav>
     </div>
 
@@ -1321,5 +1329,6 @@ if (document.getElementById('apiKeyInput').value) {
     loadHistory();
 }
 </script>
+<script src="/static/pwa.js" defer></script>
 </body>
 </html>

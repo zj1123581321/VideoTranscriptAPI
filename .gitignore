@@ -123,3 +123,10 @@ graphify-out/
 # Skill 测试工作区
 skill-workspace/
 docs/sessions/*/fixtures/raw/
+
+
+# Node.js toolchain (vitest)
+node_modules/
+
+# gstack 临时文件
+.gstack/

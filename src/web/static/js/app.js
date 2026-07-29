@@ -64,6 +64,54 @@ function simpleDecrypt(encoded) {
 }
 
 /**
+ * HTML 转义（属性/元素上下文通用）：& < > " '
+ * 提取出的 URL/标题插入 innerHTML 前必须过此函数（Codex R6-1：系统分享
+ * 可把带 <>/引号 的 URL 投进预览，不转义即同源 XSS）
+ */
+function escapeHTML(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
+ * 构建单条历史记录的 HTML（纯函数，可 vitest）。
+ * title / original_text / url / id / view_token 均为第三方可控字段
+ * （E4 分享预填的原文、平台标题等），一律过 escapeHTML（Codex R8-1）；
+ * 按钮经 data-* 传值、由 renderHistory 用 addEventListener 绑定，
+ * 不用内联 onclick 的单引号属性上下文。
+ */
+function buildHistoryItemHTML(task) {
+    const timeStr = escapeHTML(new Date(task.timestamp).toLocaleString('zh-CN'));
+    const originalTextPreview = task.original_text ?
+        (task.original_text.length > 100 ? task.original_text.substring(0, 100) + '...' : task.original_text) : '';
+    return `
+        <div class="history-info">
+            <div class="history-title">${escapeHTML(task.title)}</div>
+            ${originalTextPreview ? `
+                <div class="history-original-text">
+                    <span class="original-text-label">原始内容：</span>
+                    <span class="original-text-content">${escapeHTML(originalTextPreview)}</span>
+                </div>
+            ` : ''}
+            <div class="history-url">${escapeHTML(task.url)}</div>
+            <div class="history-meta">
+                <span>${timeStr}</span>
+                ${task.useSpeakerRecognition ? '<span class="feature-tag">• 说话人识别</span>' : ''}
+            </div>
+        </div>
+        <div class="history-actions">
+            <button class="history-btn history-copy-btn" data-url="${escapeHTML(task.url)}">📋 复制</button>
+            <a class="history-btn" href="/view/${escapeHTML(task.view_token || task.id)}" target="_blank">👁️ 查看</a>
+            <button class="history-btn delete-btn history-delete-btn" data-task-id="${escapeHTML(task.id)}">🗑️ 删除</button>
+        </div>
+    `;
+}
+
+/**
  * 本地存储管理类
  */
 class StorageManager {
@@ -428,33 +476,16 @@ class TaskHistoryManager {
         history.forEach((task, index) => {
             const item = document.createElement('div');
             item.className = 'history-item fade-in';
-            
-            const timeStr = new Date(task.timestamp).toLocaleString('zh-CN');
-            const originalTextPreview = task.original_text ? 
-                (task.original_text.length > 100 ? task.original_text.substring(0, 100) + '...' : task.original_text) : '';
-            
-            item.innerHTML = `
-                <div class="history-info">
-                    <div class="history-title">${task.title}</div>
-                    ${originalTextPreview ? `
-                        <div class="history-original-text">
-                            <span class="original-text-label">原始内容：</span>
-                            <span class="original-text-content">${originalTextPreview}</span>
-                        </div>
-                    ` : ''}
-                    <div class="history-url">${task.url}</div>
-                    <div class="history-meta">
-                        <span>${timeStr}</span>
-                        ${task.useSpeakerRecognition ? '<span class="feature-tag">• 说话人识别</span>' : ''}
-                    </div>
-                </div>
-                <div class="history-actions">
-                    <button class="history-btn" onclick="copyToClipboard('${task.url}')">📋 复制</button>
-                    <a class="history-btn" href="/view/${task.view_token || task.id}" target="_blank">👁️ 查看</a>
-                    <button class="history-btn delete-btn" onclick="TaskHistoryManager.deleteTask('${task.id}')">🗑️ 删除</button>
-                </div>
-            `;
-            
+
+            // HTML 由纯函数构建（全字段转义，Codex R8-1）；
+            // 按钮经 data-* 传值 + addEventListener 绑定，无内联 onclick
+            item.innerHTML = buildHistoryItemHTML(task);
+
+            const copyBtn = item.querySelector('.history-copy-btn');
+            copyBtn.addEventListener('click', () => copyToClipboard(copyBtn.dataset.url));
+            const deleteBtn = item.querySelector('.history-delete-btn');
+            deleteBtn.addEventListener('click', () => TaskHistoryManager.deleteTask(deleteBtn.dataset.taskId));
+
             list.appendChild(item);
         });
     }
@@ -728,10 +759,10 @@ function handleTextInput(textarea) {
     urlResults.forEach((result, index) => {
         const isDefault = index === 0;
         html += `
-            <div class="url-option ${isDefault ? 'selected' : ''}" data-url="${result.url}">
-                <input type="radio" name="selected-url" value="${result.url}" ${isDefault ? 'checked' : ''}>
+            <div class="url-option ${isDefault ? 'selected' : ''}" data-url="${escapeHTML(result.url)}">
+                <input type="radio" name="selected-url" value="${escapeHTML(result.url)}" ${isDefault ? 'checked' : ''}>
                 <label>
-                    <span class="url-display">${result.display}</span>
+                    <span class="url-display">${escapeHTML(result.display)}</span>
                     <span class="url-score">评分: ${result.score}</span>
                 </label>
             </div>
@@ -783,7 +814,7 @@ function getSelectedURL() {
 async function copyToClipboard(text) {
     try {
         await navigator.clipboard.writeText(text);
-        UIManager.showStatus('success', '已复制到剪贴板', text);
+        UIManager.showStatus('success', '已复制到剪贴板', escapeHTML(text));
         setTimeout(UIManager.hideStatus, 2000);
     } catch (e) {
         console.error('复制失败:', e);
@@ -852,17 +883,31 @@ async function submitTranscription(event) {
             
             // 添加到历史记录
             const historyResult = TaskHistoryManager.addTask(taskData);
+
+            // PWA E5 钩子（additive）：pwa.js 监听此事件做任务完成通知；
+            // 无监听者时为零成本空操作
+            document.dispatchEvent(new CustomEvent('vta:task-submitted', {
+                detail: {
+                    task_id: response.data.task_id,
+                    view_token: response.data.view_token
+                }
+            }));
             
             // 根据是否重复显示不同的提示
             let statusMessage = '任务提交成功！';
             let statusDetails = `任务ID: ${response.data.task_id}<br>转录将在后台进行，完成后会通过配置的企业微信通知您<br>`;
+
+            // PWA standalone 检测（T6）：独立窗口里 _blank 会逃逸到浏览器，
+            // 结果页链接改同窗口打开；浏览器内行为不变
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                || window.navigator.standalone === true;
             
             if (historyResult.isDuplicate) {
                 statusMessage = '任务提交成功！(检测到重复URL)';
                 statusDetails += `<span style="color: #f59e0b;">⚠️ 相同链接的旧任务记录已被更新</span><br>`;
             }
             
-            statusDetails += `<a href="/view/${response.data.view_token}" target="_blank" style="color: #667eea; text-decoration: underline;">点击查看任务进度</a>`;
+            statusDetails += `<a href="/view/${response.data.view_token}" target="${isStandalone ? '_self' : '_blank'}" style="color: #667eea; text-decoration: underline;">点击查看任务进度</a>`;
             
             UIManager.showStatus('success', statusMessage, statusDetails);
             
@@ -871,9 +916,17 @@ async function submitTranscription(event) {
             document.getElementById('url-preview').innerHTML = '<div class="no-urls">请输入包含视频链接的内容</div>';
             
             // 3秒后跳转到查看页面
-            setTimeout(() => {
-                window.open(`/view/${response.data.view_token}`, '_blank');
-            }, 3000);
+            // PWA standalone 模式下取消自动跳转（Codex R2-1）：/view 的
+            // processing.html 是无 JS 的静态"请手动刷新"页，跳过去后 E5 轮询
+            // 随页面离开死亡、完成通知静默失效。standalone 下用户停留在本页
+            // 等通知（E5 简化版要求页面存活），结果页由上方 success 提示里的
+            // 同窗口链接或通知 onclick 进入。浏览器内既有行为（3 秒后新标签页
+            // 打开）不变。
+            if (!isStandalone) {
+                setTimeout(() => {
+                    window.open(`/view/${response.data.view_token}`, '_blank');
+                }, 3000);
+            }
             
         } else {
             throw new Error(response.message || '提交失败');
@@ -979,8 +1032,17 @@ function initializePage() {
     console.log('视频转录Web应用初始化完成');
 }
 
-// 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', initializePage);
+// 页面加载完成后初始化（vitest 无 DOM 环境跳过接线）
+if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', initializePage);
+}
 
 // 导出全局函数供HTML使用
-window.copyToClipboard = copyToClipboard;
+if (typeof window !== 'undefined') {
+    window.copyToClipboard = copyToClipboard;
+}
+
+// 导出纯函数供 vitest（CJS，经 createRequire 加载）
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { escapeHTML, buildHistoryItemHTML };
+}
