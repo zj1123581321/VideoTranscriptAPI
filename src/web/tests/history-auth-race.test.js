@@ -170,4 +170,61 @@ describe('history private request generation guards', () => {
     expect(fixture.dom.window.document.getElementById('listArea').textContent)
       .toContain('new title');
   });
+
+  it('keeps the newest same-token page response when pagination resolves out of order', async () => {
+    const fixture = createHistoryFixture();
+    fixture.state.token = 'stable-token';
+    fixture.dom.window.document.getElementById('apiKeyInput').value = 'stable-token';
+    const page20 = deferred();
+    const page40 = deferred();
+    fixture.fetchMock.mockImplementation((url) => (
+      url.includes('offset=20') ? page20.promise : page40.promise
+    ));
+
+    const olderPage = fixture.dom.window.loadHistory(1);
+    await flushPromises();
+    const newerPage = fixture.dom.window.loadHistory(2);
+    await flushPromises();
+    expect(fixture.fetchMock).toHaveBeenCalledTimes(2);
+
+    page40.resolve(historyResponse('page-40-title', 'page-40-view'));
+    await flushPromises();
+    page20.resolve(historyResponse('page-20-title', 'page-20-view'));
+    await Promise.all([olderPage, newerPage]);
+
+    expect(fixture.dom.window.document.getElementById('listArea').textContent)
+      .toContain('page-40-title');
+    expect(fixture.dom.window.document.getElementById('listArea').textContent)
+      .not.toContain('page-20-title');
+  });
+
+  it('keeps the newest same-token filter response when filters resolve out of order', async () => {
+    const fixture = createHistoryFixture();
+    fixture.state.token = 'stable-token';
+    fixture.dom.window.document.getElementById('apiKeyInput').value = 'stable-token';
+    const oldFilter = deferred();
+    const newFilter = deferred();
+    const queryInput = fixture.dom.window.document.getElementById('filterQ');
+    fixture.fetchMock.mockImplementation((url) => (
+      url.includes('q=old') ? oldFilter.promise : newFilter.promise
+    ));
+
+    queryInput.value = 'old';
+    const olderQuery = fixture.dom.window.loadHistory(1);
+    await flushPromises();
+    queryInput.value = 'new';
+    const newerQuery = fixture.dom.window.loadHistory(1);
+    await flushPromises();
+    expect(fixture.fetchMock).toHaveBeenCalledTimes(2);
+
+    newFilter.resolve(historyResponse('new-filter-title', 'new-filter-view'));
+    await flushPromises();
+    oldFilter.resolve(historyResponse('old-filter-title', 'old-filter-view'));
+    await Promise.all([olderQuery, newerQuery]);
+
+    expect(fixture.dom.window.document.getElementById('listArea').textContent)
+      .toContain('new-filter-title');
+    expect(fixture.dom.window.document.getElementById('listArea').textContent)
+      .not.toContain('old-filter-title');
+  });
 });

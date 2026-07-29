@@ -662,6 +662,12 @@ function abortPrivateHistoryRequests() {
     searchDebounce = null;
 }
 
+function beginPrivateHistoryRequestGeneration() {
+    privateRequestGeneration += 1;
+    abortPrivateHistoryRequests();
+    return privateRequestGeneration;
+}
+
 function createSupersededPrivateHistoryError() {
     const error = new Error('Private history request superseded');
     error.name = 'AbortError';
@@ -923,7 +929,6 @@ function loadSavedKey() {
 async function loadHistory(page = 0) {
     const storage = requireHistoryAuth();
     if (!storage) return;
-    let requestGeneration = privateRequestGeneration;
     const keyInput = document.getElementById('apiKeyInput').value.trim();
     const canonical = storage.readAuthToken() || '';
     if (!keyInput) {
@@ -937,8 +942,10 @@ async function loadHistory(page = 0) {
             showStatus('err', '鉴权保存失败');
             return;
         }
-        requestGeneration = privateRequestGeneration;
     }
+    const requestGeneration = keyInput !== canonical
+        ? privateRequestGeneration
+        : beginPrivateHistoryRequestGeneration();
 
     currentIdentity = keyInput;
     currentPage = page;
@@ -1102,7 +1109,8 @@ function changePage(delta) {
         renderList(pageItems);
         renderPagination();
     } else {
-        fetchHistory();
+        const requestGeneration = beginPrivateHistoryRequestGeneration();
+        fetchHistory(requestGeneration);
     }
 }
 
