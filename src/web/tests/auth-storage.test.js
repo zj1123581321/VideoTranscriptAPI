@@ -154,6 +154,49 @@ describe('auth token snapshots and headers', () => {
     expect(authStorage.compareAndClearAuthToken(current)).toBe(true);
     expect(authStorage.readAuthToken()).toBeNull();
   });
+
+  it('does not clear a newer persisted canonical token before its storage event arrives', () => {
+    localStorage.removeItem('vta_auth_migration_v1');
+    const storagePrototype = Object.getPrototypeOf(localStorage);
+    const originalSetItem = storagePrototype.setItem;
+    vi.spyOn(storagePrototype, 'setItem').mockImplementation(function setItem(key, value) {
+      if (key === 'vta_auth_migration_v1') {
+        const error = new Error('full');
+        error.name = 'QuotaExceededError';
+        throw error;
+      }
+      return originalSetItem.call(this, key, value);
+    });
+    expect(authStorage.writeAuthToken('old-memory-token')).toBe(true);
+    vi.restoreAllMocks();
+
+    const encodedNewToken = authStorage.encodeAuthToken('new-persisted-token');
+    localStorage.setItem('vta_bearer_token', encodedNewToken);
+    const oldSnapshot = authStorage.snapshotAuthToken();
+
+    expect(oldSnapshot).toBe('old-memory-token');
+    expect(authStorage.clearAuthTokenIfMatch(oldSnapshot)).toBe(false);
+    expect(localStorage.getItem('vta_bearer_token')).toBe(encodedNewToken);
+    expect(authStorage.decodeAuthToken(localStorage.getItem('vta_bearer_token')))
+      .toBe('new-persisted-token');
+  });
+
+  it('keeps memory fallback compare-clear semantics when localStorage is unreadable', () => {
+    const storagePrototype = Object.getPrototypeOf(localStorage);
+    for (const method of ['getItem', 'setItem', 'removeItem']) {
+      vi.spyOn(storagePrototype, method).mockImplementation(() => {
+        const error = new Error('blocked');
+        error.name = 'SecurityError';
+        throw error;
+      });
+    }
+
+    expect(authStorage.writeAuthToken('memory-only-token')).toBe(true);
+    const snapshot = authStorage.snapshotAuthToken();
+    expect(snapshot).toBe('memory-only-token');
+    expect(authStorage.clearAuthTokenIfMatch(snapshot)).toBe(true);
+    expect(authStorage.readAuthToken()).toBeNull();
+  });
 });
 
 describe('auth storage failure degradation', () => {

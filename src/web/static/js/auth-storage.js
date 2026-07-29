@@ -275,11 +275,31 @@
         return readAuthToken();
     }
 
+    /** Read persisted canonical state before compare-clear; unavailable storage keeps memory semantics. */
+    function readPersistedCanonicalTokenForCompare() {
+        const storage = getStorage('localStorage');
+        if (!storage) return { available: false, token: null };
+        try {
+            return {
+                available: true,
+                token: decodeAuthToken(storage.getItem(AUTH_STORAGE_KEYS.canonical)),
+            };
+        } catch (error) {
+            if (isStorageFailure(error)) {
+                memoryFallbackActive = true;
+                warnStorageFallback();
+            }
+            return { available: false, token: null };
+        }
+    }
+
     /**
      * Clear only when the current token still equals the request snapshot.
      * A newer token saved by another tab is therefore preserved.
      */
     function compareAndClearAuthToken(snapshot) {
+        const persisted = readPersistedCanonicalTokenForCompare();
+        if (persisted.available && persisted.token && persisted.token !== snapshot) return false;
         if (snapshotAuthToken() !== snapshot) return false;
         clearAuthToken();
         return true;
