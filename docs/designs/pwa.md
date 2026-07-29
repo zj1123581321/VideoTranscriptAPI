@@ -210,7 +210,7 @@ main 新分支 + 独立 worktree、分 3 阶段 commit。
   - Surfaced by: Codex#5/#6
   - Files: `src/web/static/js/app.js`
   - Verify: standalone 模式提交后同窗口打开结果页；浏览器内行为无回归
-- [ ] **T7 (P2, human: ~2h / CC: ~30min)** — E4 分享预填（commit 2）
+- [x] **T7 (P2, human: ~2h / CC: ~30min)** — E4 分享预填（commit 2）
   - Surfaced by: E4 + S3-1 三道校验 + 边界文档化
   - Files: `src/web/static/js/pwa-share.js`（纯函数）, `src/web/static/pwa.js`
   - Verify: vitest URL 提取/校验 + B站、抖音真实分享各一次

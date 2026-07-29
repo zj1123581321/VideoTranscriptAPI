@@ -60,6 +60,65 @@
     });
   }
 
+  /**
+   * E4 share-target prefill (T7): /add_task_by_web?url=&title=&text=.
+   * Fills the share textarea via .value (never innerHTML, S3-1) and triggers
+   * the app's own input handling. Silent when no usable URL was shared.
+   */
+  function initSharePrefill() {
+    if (!window.PWAShare) {
+      return;
+    }
+    var textarea = document.getElementById('share-content');
+    if (!textarea) {
+      return; // only the index page carries the submit form
+    }
+    var sharedUrl = window.PWAShare.getSharedUrl(window.location.search);
+    if (!sharedUrl) {
+      return;
+    }
+    textarea.value = sharedUrl;
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+    // app.js globals live in the shared script scope (not on window);
+    // typeof guards keep this a no-op on pages without app.js.
+    var ui = typeof UIManager !== 'undefined' ? UIManager : null;
+    var hasToken = false;
+    try {
+      hasToken = !!(
+        typeof StorageManager !== 'undefined' &&
+        typeof APP_CONFIG !== 'undefined' &&
+        StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN)
+      );
+    } catch (e) {
+      hasToken = false;
+    }
+
+    if (hasToken) {
+      if (ui) {
+        ui.showStatus('success', '已从分享填入链接');
+      }
+      return;
+    }
+    // 新设备无 token：预填会 401，聚焦高亮 token 输入框（复用 app.js 模式）
+    var tokenInput = document.getElementById('bearer-token');
+    if (tokenInput) {
+      if (
+        ui &&
+        typeof isAdvancedSettingsExpanded !== 'undefined' &&
+        !isAdvancedSettingsExpanded
+      ) {
+        ui.toggleAdvancedSettings();
+      }
+      setTimeout(function () {
+        tokenInput.focus();
+      }, 100);
+      if (ui) {
+        ui.showStatus('error', '请先配置访问令牌', '已从分享填入链接，配置令牌后即可提交');
+      }
+    }
+  }
+
   function initInstallButton() {
     var btn = document.getElementById('pwa-install-btn');
     if (!btn || isStandalone()) {
@@ -146,5 +205,6 @@
   document.addEventListener('DOMContentLoaded', function () {
     registerServiceWorker();
     initInstallButton();
+    initSharePrefill();
   });
 })();
