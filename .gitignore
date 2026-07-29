@@ -127,3 +127,6 @@ docs/sessions/*/fixtures/raw/
 
 # Node.js toolchain (vitest)
 node_modules/
+
+# gstack 临时文件
+.gstack/

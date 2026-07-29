@@ -814,7 +814,7 @@ function getSelectedURL() {
 async function copyToClipboard(text) {
     try {
         await navigator.clipboard.writeText(text);
-        UIManager.showStatus('success', '已复制到剪贴板', text);
+        UIManager.showStatus('success', '已复制到剪贴板', escapeHTML(text));
         setTimeout(UIManager.hideStatus, 2000);
     } catch (e) {
         console.error('复制失败:', e);

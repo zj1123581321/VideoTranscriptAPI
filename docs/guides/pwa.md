@@ -38,8 +38,9 @@
 ## 部署后验证
 
 ```bash
-curl -sI https://<host>/sw.js
+curl -sS -D - -o /dev/null https://<host>/sw.js
 # 期望：200，Content-Type 含 javascript，Cache-Control: no-cache
+# 注意：/sw.js 是 FastAPI GET 路由，不支持 HEAD（405），必须用 GET 验证
 
 curl -s https://<host>/static/manifest.webmanifest | head
 # 期望：JSON，含 "display": "standalone"、"share_target"、"start_url": "/add_task_by_web"
