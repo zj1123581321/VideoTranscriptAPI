@@ -15,15 +15,42 @@
 /* Recalibrate button */
 .recalibrate-btn {
     background: var(--bg-secondary, #f5f5f5);
-    border: 1px solid var(--border-color, #ddd);
+    border: 1px solid var(--border-primary);
     border-radius: 6px;
     padding: 6px 14px;
     cursor: pointer;
     font-size: 0.9rem;
+    min-height: 44px;
     color: var(--text-primary, #333);
     transition: background 0.2s;
 }
 .recalibrate-btn:hover { background: var(--bg-tertiary, #e8e8e8); }
+.recalibrate-btn:focus-visible,
+.dialog-btn:focus-visible,
+.recalibrate-dialog input:focus-visible {
+    outline: 3px solid var(--text-primary);
+    outline-offset: 2px;
+}
+.recalibrate-btn:disabled,
+.dialog-btn:disabled,
+.recalibrate-dialog input:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* Protected-action controls own their spacing so auth state stays attached to the transcript. */
+.protected-action-auth-tools {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin: 24px 0;
+    padding: 12px 16px;
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+}
+.protected-action-auth-tools .dialog-status { flex: 1 1 100%; margin-top: 0; }
 
 /* Copy content button (shares base look with recalibrate button) */
 .copy-content-btn.copied {
@@ -43,8 +70,8 @@
     max-width: 420px;
     width: 90%;
     box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-    background: var(--bg-primary, #fff);
-    color: var(--text-primary, #333);
+    background: var(--bg-primary);
+    color: var(--text-primary);
 }
 .recalibrate-dialog::backdrop { background: rgba(0,0,0,0.4); }
 .recalibrate-dialog h3 { margin: 0 0 8px; font-size: 1.1rem; }
@@ -53,27 +80,48 @@
 .recalibrate-dialog input {
     width: 100%;
     padding: 8px 10px;
-    border: 1px solid var(--border-color, #ddd);
+    border: 1px solid var(--border-primary);
     border-radius: 6px;
     font-size: 0.9rem;
+    min-height: 44px;
     box-sizing: border-box;
-    background: var(--bg-secondary, #f9f9f9);
-    color: var(--text-primary, #333);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
 }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
 .dialog-btn {
     padding: 7px 18px;
     border-radius: 6px;
-    border: 1px solid var(--border-color, #ddd);
+    border: 1px solid var(--border-primary);
     cursor: pointer;
     font-size: 0.9rem;
+    min-height: 44px;
 }
 .dialog-btn-cancel { background: var(--bg-secondary, #f5f5f5); color: var(--text-primary, #333); }
-.dialog-btn-confirm { background: var(--accent-color, #4a90d9); color: #fff; border-color: transparent; }
+.dialog-btn-confirm { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-primary); }
 .dialog-btn-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
 .dialog-status { margin-top: 12px; font-size: 0.82rem; color: var(--text-secondary, #666); }
 .dialog-status-error { color: #d9534f; }
 .dialog-status-ok { color: #5cb85c; }
+
+@media (max-width: 480px) {
+    .protected-action-auth-tools {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .protected-action-auth-tools .recalibrate-btn,
+    .protected-action-auth-tools .dialog-status {
+        width: 100%;
+    }
+    .dialog-actions { justify-content: stretch; }
+    .dialog-actions .dialog-btn { flex: 1 1 120px; }
+}
 
 /* Inline recalibrate status (replaces button during processing) */
 .recalibrate-status { font-size: 0.85rem; color: var(--text-secondary, #888); white-space: nowrap; }
@@ -257,7 +305,7 @@
                 <p style="color: #991b1b; font-style: italic;">⚠️ 总结生成失败。</p>
                 {% if view_token %}
                 <span id="resummarizeArea">
-                    <button class="recalibrate-btn" id="resummarizeBtn" onclick="document.getElementById('resummarizeDialog').showModal()">🔄 重新生成总结</button>
+                    <button class="recalibrate-btn" id="resummarizeBtn" type="button">🔄 重新生成总结</button>
                 </span>
                 {% endif %}
             {% elif summary_state == 'skipped_short' %}
@@ -270,21 +318,6 @@
             {% endif %}
         </div>
 
-        {% if view_token %}
-        <dialog id="resummarizeDialog" class="recalibrate-dialog">
-            <form method="dialog">
-                <h3>重新生成总结</h3>
-                <p class="dialog-desc">将只重新执行 LLM 总结（跳过下载、转录和校对），生成完成后刷新页面即可查看新结果。</p>
-                <label for="resummarizeApiKey">API Key</label>
-                <input type="password" id="resummarizeApiKey" placeholder="Bearer token" autocomplete="off">
-                <div class="dialog-actions">
-                    <button type="button" class="dialog-btn dialog-btn-cancel" onclick="document.getElementById('resummarizeDialog').close()">取消</button>
-                    <button type="button" class="dialog-btn dialog-btn-confirm" id="resummarizeConfirmBtn" onclick="submitResummarize()">确认</button>
-                </div>
-                <p id="resummarizeStatus" class="dialog-status" style="display:none;"></p>
-            </form>
-        </dialog>
-        {% endif %}
     </div>
 
     {% if notes_html is defined and notes_html %}
@@ -305,7 +338,7 @@
             <h2>📚 详细笔记</h2>
             {% if view_token %}
             <span id="generateNotesArea">
-                <button class="recalibrate-btn" id="generateNotesBtn" onclick="document.getElementById('generateNotesDialog').showModal()">
+                <button class="recalibrate-btn" id="generateNotesBtn" type="button">
                     {% if notes_state|default(None) == 'failed' %}🔄 详细笔记生成失败，可重试{% else %}🧭 生成详细笔记{% endif %}
                 </button>
             </span>
@@ -319,21 +352,6 @@
             {% endif %}
         </div>
 
-        {% if view_token %}
-        <dialog id="generateNotesDialog" class="recalibrate-dialog">
-            <form method="dialog">
-                <h3>生成详细笔记</h3>
-                <p class="dialog-desc">将按已有章节逐章调用 LLM，完成后刷新页面即可查看；不会改写校对文本、总结或章节。</p>
-                <label for="generateNotesApiKey">API Key</label>
-                <input type="password" id="generateNotesApiKey" placeholder="Bearer token" autocomplete="off">
-                <div class="dialog-actions">
-                    <button type="button" class="dialog-btn dialog-btn-cancel" onclick="document.getElementById('generateNotesDialog').close()">取消</button>
-                    <button type="button" class="dialog-btn dialog-btn-confirm" id="generateNotesConfirmBtn" onclick="submitGenerateNotes()">确认</button>
-                </div>
-                <p id="generateNotesStatus" class="dialog-status" style="display:none;"></p>
-            </form>
-        </dialog>
-        {% endif %}
     </div>
     {% endif %}
 
@@ -349,7 +367,7 @@
                 <button class="recalibrate-btn copy-content-btn" type="button" data-copy-target="calibrated-content-block" title="复制校对文本正文">📋 复制内容</button>
                 {% if view_token %}
                 <span id="recalibrateArea">
-                    <button class="recalibrate-btn" id="recalibrateBtn" onclick="document.getElementById('recalibrateDialog').showModal()">🔄 重新校对</button>
+                    <button class="recalibrate-btn" id="recalibrateBtn" type="button">🔄 重新校对</button>
                 </span>
                 {% endif %}
             </div>
@@ -369,22 +387,30 @@
             {{ calibrated_html|safe }}
         </div>
 
-        {% if view_token %}
-        <dialog id="recalibrateDialog" class="recalibrate-dialog">
-            <form method="dialog">
-                <h3>重新校对</h3>
-                <p class="dialog-desc">将重新执行 LLM 校对（跳过下载、转录和总结），校对完成后刷新页面即可查看新结果。</p>
-                <label for="recalibrateApiKey">API Key</label>
-                <input type="password" id="recalibrateApiKey" placeholder="Bearer token" autocomplete="off">
-                <div class="dialog-actions">
-                    <button type="button" class="dialog-btn dialog-btn-cancel" onclick="document.getElementById('recalibrateDialog').close()">取消</button>
-                    <button type="button" class="dialog-btn dialog-btn-confirm" id="recalibrateConfirmBtn" onclick="submitRecalibrate()">确认</button>
-                </div>
-                <p id="recalibrateStatus" class="dialog-status" style="display:none;"></p>
-            </form>
-        </dialog>
-        {% endif %}
     </div>
+    {% endif %}
+
+    {% if view_token %}
+    <div class="protected-action-auth-tools" aria-live="polite">
+        <button class="recalibrate-btn" id="protectedActionAuthChange" type="button">设置/更换访问令牌</button>
+        <button class="recalibrate-btn" id="protectedActionAuthClear" type="button">清除访问令牌</button>
+        <span id="protectedActionAuthStatus" class="dialog-status"></span>
+    </div>
+    <dialog id="protectedActionAuthDialog" class="recalibrate-dialog"
+            aria-labelledby="protectedActionAuthTitle"
+            aria-describedby="protectedActionAuthDescription">
+        <form id="protectedActionAuthForm">
+            <h3 id="protectedActionAuthTitle">输入访问令牌</h3>
+            <p id="protectedActionAuthDescription" class="dialog-desc">受保护操作需要统一的访问令牌；访问令牌只保存到浏览器统一鉴权存储。</p>
+            <label for="protectedActionTokenInput">访问令牌</label>
+            <input type="password" id="protectedActionTokenInput" placeholder="输入访问令牌" autocomplete="off">
+            <div class="dialog-actions">
+                <button type="button" class="dialog-btn dialog-btn-cancel" id="protectedActionAuthCancel">取消</button>
+                <button type="submit" class="dialog-btn dialog-btn-confirm" id="protectedActionAuthSubmit">确认</button>
+            </div>
+            <p id="protectedActionAuthDialogStatus" class="dialog-status dialog-status-error" role="alert"></p>
+        </form>
+    </dialog>
     {% endif %}
 
 {% endblock %}
@@ -392,207 +418,229 @@
 {% block extra_js %}
 <script src="/static/js/floating-toc.js?v={{ asset_v }}"></script>
 {% if view_token %}
+<script src="/static/js/transcript-protected-action.js?v={{ asset_v }}"></script>
 <script>
-(function() {
-    // Auto-fill API key from localStorage (shared with /add_task_by_web)
-    var stored = localStorage.getItem('api_key') || '';
-    var recalInput = document.getElementById('recalibrateApiKey');
-    if (recalInput && stored) recalInput.value = stored;
-    var resumInput = document.getElementById('resummarizeApiKey');
-    if (resumInput && stored) resumInput.value = stored;
-    var notesInput = document.getElementById('generateNotesApiKey');
-    if (notesInput && stored) notesInput.value = stored;
-})();
+(function installTranscriptProtectedActions() {
+    'use strict';
 
-function submitRecalibrate() {
-    var btn = document.getElementById('recalibrateConfirmBtn');
-    var status = document.getElementById('recalibrateStatus');
-    var dialog = document.getElementById('recalibrateDialog');
-    var area = document.getElementById('recalibrateArea');
-    var apiKey = document.getElementById('recalibrateApiKey').value.trim();
+    var transcriptViewToken = {{ view_token|tojson }};
+    var authStorage = window.VideoTranscriptAuthStorage;
+    var protectedActionApi = window.VideoTranscriptProtectedAction;
+    var authDialog = document.getElementById('protectedActionAuthDialog');
+    var authForm = document.getElementById('protectedActionAuthForm');
+    var authInput = document.getElementById('protectedActionTokenInput');
+    var authCancel = document.getElementById('protectedActionAuthCancel');
+    var authChange = document.getElementById('protectedActionAuthChange');
+    var authClear = document.getElementById('protectedActionAuthClear');
+    var authStatus = document.getElementById('protectedActionAuthStatus');
+    var reloadScheduled = false;
+    var activePrompt = null;
+    var promptTrigger = null;
+    var actionDefinitions = {
+        'recalibrate': { buttonId: 'recalibrateBtn', areaId: 'recalibrateArea', running: '校对提交中...' },
+        'resummarize': { buttonId: 'resummarizeBtn', areaId: 'resummarizeArea', running: '总结提交中...' },
+        'generate_notes': { buttonId: 'generateNotesBtn', areaId: 'generateNotesArea', running: '详细笔记提交中...' }
+    };
 
-    if (!apiKey) {
-        status.textContent = 'Please enter API Key';
-        status.className = 'dialog-status dialog-status-error';
-        status.style.display = 'block';
-        return;
+    function setAuthStatus(message, isError) {
+        if (!authStatus) return;
+        authStatus.textContent = message || '';
+        authStatus.className = isError ? 'dialog-status dialog-status-error' : 'dialog-status dialog-status-ok';
     }
 
-    // Save to localStorage for future use
-    localStorage.setItem('api_key', apiKey);
-
-    btn.disabled = true;
-    btn.textContent = 'Submitting...';
-    status.style.display = 'none';
-
-    fetch('/api/recalibrate', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + apiKey
-        },
-        body: JSON.stringify({ view_token: '{{ view_token }}' })
-    })
-    .then(function(resp) {
-        if (resp.status === 401) throw new Error('API Key invalid');
-        if (resp.status === 403) throw new Error('No recalibrate permission');
-        if (resp.status === 404) throw new Error('Transcript data not found');
-        if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.detail || 'Request failed'); });
-        return resp.json();
-    })
-    .then(function(data) {
-        var taskId = data.data && data.data.task_id;
-        if (!taskId) throw new Error('No task_id returned');
-        // Close dialog, show inline status on the button area
-        dialog.close();
-        area.innerHTML = '<span class="recalibrate-status">校对中... (0s)</span>';
-        pollTask(taskId, apiKey, area);
-    })
-    .catch(function(err) {
-        status.textContent = err.message;
-        status.className = 'dialog-status dialog-status-error';
-        status.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Confirm';
-    });
-}
-
-function submitResummarize() {
-    var btn = document.getElementById('resummarizeConfirmBtn');
-    var status = document.getElementById('resummarizeStatus');
-    var dialog = document.getElementById('resummarizeDialog');
-    var area = document.getElementById('resummarizeArea');
-    var apiKey = document.getElementById('resummarizeApiKey').value.trim();
-
-    if (!apiKey) {
-        status.textContent = 'Please enter API Key';
-        status.className = 'dialog-status dialog-status-error';
-        status.style.display = 'block';
-        return;
+    function actionElements(definition) {
+        return {
+            button: document.getElementById(definition.buttonId),
+            area: document.getElementById(definition.areaId)
+        };
     }
 
-    // Save to localStorage for future use
-    localStorage.setItem('api_key', apiKey);
-
-    btn.disabled = true;
-    btn.textContent = 'Submitting...';
-    status.style.display = 'none';
-
-    fetch('/api/resummarize', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + apiKey
-        },
-        body: JSON.stringify({ view_token: '{{ view_token }}' })
-    })
-    .then(function(resp) {
-        if (resp.status === 401) throw new Error('API Key invalid');
-        if (resp.status === 403) throw new Error('No resummarize permission');
-        if (resp.status === 404) throw new Error('Transcript data not found');
-        if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.detail || 'Request failed'); });
-        return resp.json();
-    })
-    .then(function(data) {
-        var taskId = data.data && data.data.task_id;
-        if (!taskId) throw new Error('No task_id returned');
-        // Close dialog, show inline status on the button area
-        dialog.close();
-        area.innerHTML = '<span class="recalibrate-status">总结中... (0s)</span>';
-        pollTask(taskId, apiKey, area, '总结');
-    })
-    .catch(function(err) {
-        status.textContent = err.message;
-        status.className = 'dialog-status dialog-status-error';
-        status.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Confirm';
-    });
-}
-
-function submitGenerateNotes() {
-    var btn = document.getElementById('generateNotesConfirmBtn');
-    var status = document.getElementById('generateNotesStatus');
-    var dialog = document.getElementById('generateNotesDialog');
-    var area = document.getElementById('generateNotesArea');
-    var apiKey = document.getElementById('generateNotesApiKey').value.trim();
-
-    if (!apiKey) {
-        status.textContent = 'Please enter API Key';
-        status.className = 'dialog-status dialog-status-error';
-        status.style.display = 'block';
-        return;
+    function setActionStatus(elements, message, className) {
+        if (!elements.area) return;
+        elements.area.textContent = '';
+        var status = document.createElement('span');
+        status.className = className || 'recalibrate-status';
+        status.textContent = message;
+        elements.area.appendChild(status);
     }
 
-    localStorage.setItem('api_key', apiKey);
-    btn.disabled = true;
-    btn.textContent = 'Submitting...';
-    status.style.display = 'none';
+    function restoreActionButton(elements, originalLabel, message) {
+        if (!elements.area || !elements.button) return;
+        var restoreFocus = elements.button === document.activeElement;
+        elements.area.textContent = '';
+        if (message) {
+            var status = document.createElement('span');
+            status.className = 'recalibrate-status recalibrate-error';
+            status.textContent = message;
+            elements.area.appendChild(status);
+        }
+        elements.button.disabled = false;
+        elements.button.textContent = originalLabel;
+        elements.area.appendChild(elements.button);
+        elements.area.removeAttribute('aria-busy');
+        if (restoreFocus && typeof elements.button.focus === 'function') elements.button.focus();
+    }
 
-    fetch('/api/generate_notes', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + apiKey
-        },
-        body: JSON.stringify({ view_token: '{{ view_token }}' })
-    })
-    .then(function(resp) {
-        if (resp.status === 401) throw new Error('API Key invalid');
-        if (resp.status === 403) throw new Error('No detailed notes permission');
-        if (resp.status === 404) throw new Error('Transcript data not found');
-        if (resp.status === 409) throw new Error('Chapters are not generated');
-        if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.detail || 'Request failed'); });
-        return resp.json();
-    })
-    .then(function(data) {
-        var taskId = data.data && data.data.task_id;
-        if (!taskId) throw new Error('No task_id returned');
-        dialog.close();
-        area.innerHTML = '<span class="recalibrate-status">详细笔记生成中... (0s)</span>';
-        pollTask(taskId, apiKey, area, '详细笔记');
-    })
-    .catch(function(err) {
-        status.textContent = err.message;
-        status.className = 'dialog-status dialog-status-error';
-        status.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Confirm';
-    });
-}
+    function closeAuthDialog() {
+        if (!authDialog) return;
+        if (typeof authDialog.close === 'function' && authDialog.open) authDialog.close();
+        else authDialog.removeAttribute('open');
+    }
 
-function pollTask(taskId, apiKey, area, label) {
-    label = label || '校对';
-    var elapsed = 0;
-    var interval = setInterval(function() {
-        elapsed += 3;
-        area.innerHTML = '<span class="recalibrate-status">' + label + '中... (' + elapsed + 's)</span>';
+    function openAuthDialog() {
+        if (!authDialog) return;
+        if (typeof authDialog.showModal === 'function') {
+            try { authDialog.showModal(); } catch (error) { authDialog.setAttribute('open', ''); }
+        } else {
+            authDialog.setAttribute('open', '');
+        }
+    }
 
-        fetch('/api/task/' + taskId, {
-            headers: { 'Authorization': 'Bearer ' + apiKey }
-        })
-        .then(function(resp) { return resp.json(); })
-        .then(function(data) {
-            var taskStatus = data.data && data.data.status;
-            if (data.code === 200 || taskStatus === 'success') {
-                clearInterval(interval);
-                area.innerHTML = '<span class="recalibrate-status recalibrate-done">' + label + '完成，刷新中...</span>';
-                setTimeout(function() { location.reload(); }, 500);
-            } else if (taskStatus === 'failed') {
-                clearInterval(interval);
-                area.innerHTML = '<span class="recalibrate-status recalibrate-error">' + label + '失败</span>';
+    function promptForToken() {
+        if (activePrompt) return activePrompt.promise;
+        var previousFocus = promptTrigger || document.activeElement;
+        activePrompt = {};
+        activePrompt.promise = new Promise(function(resolve, reject) {
+            var settled = false;
+            function finish(error, token) {
+                if (settled) return;
+                settled = true;
+                authForm.removeEventListener('submit', onSubmit);
+                authCancel.removeEventListener('click', onCancel);
+                authDialog.removeEventListener('cancel', onCancel);
+                closeAuthDialog();
+                activePrompt = null;
+                var focusTarget = promptTrigger || previousFocus;
+                promptTrigger = null;
+                if (focusTarget && typeof focusTarget.focus === 'function') {
+                    var wasDisabled = focusTarget.disabled;
+                    focusTarget.disabled = false;
+                    focusTarget.focus();
+                    focusTarget.disabled = wasDisabled;
+                }
+                if (error) reject(error); else resolve(token);
             }
-        })
-        .catch(function() {
-            // Network error, keep polling
+            function onSubmit(event) {
+                event.preventDefault();
+                var token = authInput.value.trim();
+                if (!token) {
+                    authInput.focus();
+                    var dialogStatus = document.getElementById('protectedActionAuthDialogStatus');
+                    if (dialogStatus) dialogStatus.textContent = '请输入访问令牌';
+                    return;
+                }
+                finish(null, token);
+            }
+            function onCancel(event) {
+                if (event && typeof event.preventDefault === 'function') event.preventDefault();
+                finish(new Error('Protected action token prompt cancelled'));
+            }
+            authForm.addEventListener('submit', onSubmit);
+            authCancel.addEventListener('click', onCancel);
+            authDialog.addEventListener('cancel', onCancel);
+            authInput.value = '';
+            var dialogStatus = document.getElementById('protectedActionAuthDialogStatus');
+            if (dialogStatus) dialogStatus.textContent = '';
+            openAuthDialog();
+            window.setTimeout(function() { authInput.focus(); }, 0);
+        });
+        return activePrompt.promise;
+    }
+
+    function formatActionError(error) {
+        var message = error && error.message ? error.message : '';
+        if (message === 'Protected action token prompt cancelled') return '';
+        if (message === 'HTTP 403') return '无权限，访问令牌不会更换。';
+        if (message === 'HTTP 404') return '未找到转录数据，访问令牌不会更换。';
+        if (message === 'HTTP 409') return '当前任务状态不允许操作，访问令牌不会更换。';
+        if (message === 'POST network failure') return '提交结果不确定，请勿自动重试';
+        if (message === 'HTTP 401 after one replay') return '访问令牌重试已停止，请使用“设置/更换访问令牌”后再操作。';
+        return message || '受保护操作失败，请稍后重试。';
+    }
+
+    function scheduleSafeReload() {
+        if (reloadScheduled) return;
+        reloadScheduled = true;
+        Object.keys(actionDefinitions).forEach(function(actionName) {
+            var elements = actionElements(actionDefinitions[actionName]);
+            if (elements.area && elements.button && elements.button.disabled) {
+                setActionStatus(elements, '处理完成，正在刷新...', 'recalibrate-status recalibrate-done');
+            }
+        });
+        window.setTimeout(function() { window.location.reload(); }, 500);
+    }
+
+    function disableProtectedActions() {
+        Object.keys(actionDefinitions).forEach(function(actionName) {
+            var elements = actionElements(actionDefinitions[actionName]);
+            if (elements.button) elements.button.disabled = true;
+        });
+        if (authChange) authChange.disabled = true;
+        if (authClear) authClear.disabled = true;
+        setAuthStatus('安全错误：统一鉴权模块加载失败，已禁用受保护操作', true);
+    }
+
+    function initialiseProtectedActions() {
+        var authMethodsReady = authStorage &&
+            typeof authStorage.readAuthToken === 'function' &&
+            typeof authStorage.snapshotAuthToken === 'function' &&
+            typeof authStorage.buildAuthHeaders === 'function' &&
+            typeof authStorage.clearAuthTokenIfMatch === 'function' &&
+            typeof authStorage.writeAuthToken === 'function' &&
+            typeof authStorage.clearAuthToken === 'function';
+        if (!authMethodsReady || !protectedActionApi || typeof protectedActionApi.createProtectedActionController !== 'function') {
+            disableProtectedActions();
+            return;
+        }
+
+        var controller;
+        try {
+            controller = protectedActionApi.createProtectedActionController({
+                authStorage: authStorage,
+                promptToken: promptForToken,
+                onSuccess: scheduleSafeReload
+            });
+        } catch (error) {
+            disableProtectedActions();
+            return;
+        }
+
+        Object.keys(actionDefinitions).forEach(function(actionName) {
+            var definition = actionDefinitions[actionName];
+            var elements = actionElements(definition);
+            if (!elements.button || !elements.area) return;
+            var originalLabel = elements.button.textContent;
+            elements.button.addEventListener('click', function() {
+                if (!activePrompt) promptTrigger = elements.button;
+                elements.button.disabled = true;
+                elements.area.setAttribute('aria-busy', 'true');
+                elements.button.textContent = definition.running;
+                controller.runProtectedAction(actionName, transcriptViewToken).catch(function(error) {
+                    restoreActionButton(elements, originalLabel, formatActionError(error));
+                });
+            });
         });
 
-        if (elapsed > 600) {
-            clearInterval(interval);
-            area.innerHTML = '<span class="recalibrate-status recalibrate-error">超时，请手动刷新页面</span>';
-        }
-    }, 3000);
-}
+        authChange.addEventListener('click', function() {
+            if (!activePrompt) promptTrigger = authChange;
+            promptForToken().then(function(token) {
+                if (authStorage.writeAuthToken(token) === false) throw new Error('Protected action token save failed');
+                setAuthStatus('访问令牌已更新。', false);
+            }).catch(function(error) {
+                if (error && error.message !== 'Protected action token prompt cancelled') setAuthStatus(formatActionError(error), true);
+            });
+        });
+        authClear.addEventListener('click', function() {
+            if (!authStorage.clearAuthToken()) {
+                setAuthStatus('访问令牌清除失败，当前令牌仍保留。', true);
+                return;
+            }
+            setAuthStatus('访问令牌已清除。', false);
+        });
+    }
+
+    if (authDialog && authForm && authInput && authCancel) initialiseProtectedActions();
+})();
 </script>
 {% endif %}
 {% endblock %}
