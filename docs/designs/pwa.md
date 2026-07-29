@@ -102,6 +102,8 @@ SW 策略（fetch 白名单制，scope 为 `/` 后会拦截同源所有请求，
   - 权限必须由用户手势触发："提交成功后自动请求"在异步后不算手势，弃用；
     改为设置区显式"开启通知"按钮，点击时请求。
   - 内存态意味着页面刷新即丢失跟踪，属预期行为（简化版取舍）。
+    实施注记（Codex R1-1 / R3-2）：实际落地已改为 localStorage 持久化 + 页面加载恢复——
+    standalone 流程下提交后页面会离开 index，纯内存态永远无法送达通知（R1 P1 必修）。
   - 代码落在 pwa.js；app.js 提交成功分支 dispatch
     `CustomEvent('vta:task-submitted', {detail:{task_id, view_token}})`，pwa.js 监听。
   - standalone 模式下提交成功改为同窗口跳转（不再 `window.open('_blank')`，

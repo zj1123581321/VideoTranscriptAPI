@@ -31,6 +31,16 @@ describe('extractFirstUrl', () => {
   it('picks the first of several URLs', () => {
     expect(extractFirstUrl('a https://a.com/1 b https://b.com/2')).toBe('https://a.com/1');
   });
+
+  it('strips trailing ASCII punctuation swallowed by the match (Codex R3-4)', () => {
+    // same trailing-punctuation charset as app.js URLExtractor.cleanURL
+    expect(extractFirstUrl('看视频 (https://host/path)')).toBe('https://host/path');
+    expect(extractFirstUrl('链接: https://a.com/x,')).toBe('https://a.com/x');
+    expect(extractFirstUrl('https://a.com/v?b=1&c=2.')).toBe('https://a.com/v?b=1&c=2');
+    expect(extractFirstUrl('看这个 https://b23.tv/abc）。')).toBe('https://b23.tv/abc');
+    // legit path characters are preserved
+    expect(extractFirstUrl('https://a.com/path/to-page_2?x=1')).toBe('https://a.com/path/to-page_2?x=1');
+  });
 });
 
 describe('sanitizeSharedUrl', () => {

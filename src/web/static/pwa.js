@@ -157,6 +157,8 @@
 
     // iOS: no beforeinstallprompt ever fires; offer the guided hint instead.
     if (isIOS() && !dismissedRecently(IOS_HINT_DISMISS_KEY)) {
+      btn.textContent = '分享 → 添加到主屏幕';
+      btn.setAttribute('aria-label', '查看安装引导：分享 → 添加到主屏幕');
       btn.style.display = '';
     }
   }
@@ -424,8 +426,18 @@
             var body = await APIManager.getTaskStatus(item.task_id);
             var state = taskTerminalState(body);
             if (state === 'success') {
-              notifySuccess(item);
-              toRemove.push(item.task_id);
+              try {
+                // 投递成功才移出跟踪（Codex R3-1）；SW 回退投递失败时
+                // 保留任务并计入 failures，靠连续 5 次失败自然收敛
+                await notifySuccess(item);
+                toRemove.push(item.task_id);
+              } catch (notifyErr) {
+                item.failures += 1;
+                if (item.failures >= MAX_CONSECUTIVE_FAILURES) {
+                  console.warn('E5 polling stopped after 5 failures:', item.task_id, notifyErr);
+                  toRemove.push(item.task_id);
+                }
+              }
             } else if (state === 'failed') {
               toRemove.push(item.task_id); // 失败静默停止
             } else {
@@ -455,7 +467,15 @@
       }
     }
 
-    function notifySuccess(item) {
+    /**
+     * Deliver the completion notification.
+     *
+     * @returns {Promise<void>} Resolves once the notification is handed to
+     *   the platform (page-level constructor, or SW showNotification on
+     *   Android Chrome); rejects when delivery failed so the caller keeps
+     *   the task tracked (Codex R3-1).
+     */
+    async function notifySuccess(item) {
       var title = '转录任务完成';
       var options = {
         body: '点击查看转录结果',
@@ -471,20 +491,16 @@
         };
       } catch (err) {
         // Android Chrome：页面上下文构造器直接抛 TypeError（Codex R1-2），
-        // 回退经 Service Worker 发系统通知，点击由 sw.js notificationclick 处理
+        // 回退经 Service Worker 发系统通知，点击由 sw.js notificationclick 处理；
+        // await 投递结果，失败向上抛由轮询计数
         if ('serviceWorker' in window.navigator) {
-          window.navigator.serviceWorker.ready
-            .then(function (reg) {
-              return reg.showNotification(
-                title,
-                Object.assign({}, options, { data: { url: viewUrl } })
-              );
-            })
-            .catch(function (swErr) {
-              console.warn('SW notification failed:', swErr);
-            });
+          var reg = await window.navigator.serviceWorker.ready;
+          await reg.showNotification(
+            title,
+            Object.assign({}, options, { data: { url: viewUrl } })
+          );
         } else {
-          console.warn('notification failed:', err);
+          throw err;
         }
       }
     }

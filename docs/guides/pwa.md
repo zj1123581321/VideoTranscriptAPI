@@ -61,7 +61,7 @@ self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((names) => Promise.all(names.map((n) => caches.delete(n))))
+      .then((names) => Promise.all(names.filter((n) => n.startsWith('vta-static-')).map((n) => caches.delete(n))))
       .then(() => self.registration.unregister())
       .then(() => self.clients.matchAll())
       .then((clients) => clients.forEach((c) => c.navigate(c.url)))
@@ -79,3 +79,7 @@ self.addEventListener('activate', (event) => {
   接受理由：自用工具实际单标签使用；修复需 BroadcastChannel / Web Locks
   选主机制，违反"不为 P2 新增机制"的纪律；最坏后果仅是重复一条通知，
   无数据损失。若日后确实多标签高频使用，再评估选主方案。
+- **过期任务可能弹延迟通知（Codex R3-2，接受不修）**：E5 跟踪列表持久化在
+  localStorage，重开页面会恢复轮询；若任务在页面关闭期间已完成，下次打开
+  index 页会补弹一条完成通知。接受理由：自用工具可接受，任务完成告知即使
+  延迟仍有信息价值；如需收敛可在未来给跟踪项加 TTL，当前不加机制。

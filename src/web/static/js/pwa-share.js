@@ -24,18 +24,26 @@
   // common CJK/closing punctuation that apps append after the link.
   var URL_RE = /https?:\/\/[^\s"'<>，。；！？）】》]+/i;
 
+  // Trailing punctuation the URL_RE match swallows (same charset as
+  // app.js URLExtractor.cleanURL, Codex R3-4).
+  var TRAILING_PUNCT_RE = /[.,;:!?)\]}>'"。，；：！？）】》'"]+$/;
+
   /**
    * Extract the first http(s) URL from arbitrary text.
    *
    * @param {?string} text Raw share text.
-   * @returns {?string} The first URL, or null.
+   * @returns {?string} The first URL with trailing punctuation stripped, or null.
    */
   function extractFirstUrl(text) {
     if (!text || typeof text !== 'string') {
       return null;
     }
     var match = text.match(URL_RE);
-    return match ? match[0] : null;
+    if (!match) {
+      return null;
+    }
+    var url = match[0].replace(TRAILING_PUNCT_RE, '');
+    return url || null;
   }
 
   /**

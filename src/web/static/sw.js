@@ -136,13 +136,13 @@ if (IS_SERVICE_WORKER) {
       self.clients
         .matchAll({ type: 'window', includeUncontrolled: true })
         .then((windowClients) => {
-          if (windowClients.length > 0) {
-            return windowClients[0].focus().then((client) => {
-              if (client && 'navigate' in client) {
-                return client.navigate(targetUrl);
-              }
-              return client;
-            });
+          // 只聚焦已在目标 URL 的 client；否则另开窗口，不覆盖无关标签页（Codex R3-3）
+          const targetPath = new URL(targetUrl, self.location.origin).pathname;
+          const match = windowClients.find(
+            (client) => new URL(client.url).pathname === targetPath
+          );
+          if (match) {
+            return match.focus();
           }
           return self.clients.openWindow(targetUrl);
         })
