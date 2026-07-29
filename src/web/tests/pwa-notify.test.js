@@ -17,7 +17,7 @@ const {
   SW_READY_TIMEOUT_MS,
   TRACKED_TASKS_KEY,
   parseTrackedTasks,
-  upsertTrackedTask,
+  upsertTrackedInPlace,
   removeTrackedTask,
 } = require('../static/pwa.js');
 
@@ -80,15 +80,49 @@ describe('tracked-task persistence (Codex R1-1)', () => {
     expect(parseTrackedTasks('[{"task_id":"a"}]')).toEqual([{ task_id: 'a', view_token: '' }]);
   });
 
-  it('upsertTrackedTask appends new tasks', () => {
-    const out = upsertTrackedTask([], { task_id: 'a', view_token: 'va' });
-    expect(out).toEqual([{ task_id: 'a', view_token: 'va' }]);
+  it('upsertTrackedInPlace appends new tasks (in place, Codex R8-2)', () => {
+    const list = [];
+    upsertTrackedInPlace(list, { task_id: 'a', view_token: 'va' });
+    expect(list).toEqual([{ task_id: 'a', view_token: 'va', failures: 0 }]);
   });
 
-  it('upsertTrackedTask dedupes by task_id, keeping the latest', () => {
-    const base = [{ task_id: 'a', view_token: 'va' }, { task_id: 'b', view_token: 'vb' }];
-    const out = upsertTrackedTask(base, { task_id: 'a', view_token: 'va2' });
-    expect(out).toEqual([{ task_id: 'b', view_token: 'vb' }, { task_id: 'a', view_token: 'va2' }]);
+  it('upsertTrackedInPlace dedupes by task_id, latest wins, failures kept', () => {
+    const list = [
+      { task_id: 'a', view_token: 'va', failures: 3 },
+      { task_id: 'b', view_token: 'vb', failures: 0 },
+    ];
+    upsertTrackedInPlace(list, { task_id: 'a', view_token: 'va2' });
+    expect(list).toEqual([
+      { task_id: 'a', view_token: 'va2', failures: 3 },
+      { task_id: 'b', view_token: 'vb', failures: 0 },
+    ]);
+  });
+
+  it('upsertTrackedInPlace keeps array and record identity (Codex R8-2)', () => {
+    // an in-flight poll holds references into the list; submitting a new
+    // task mid-poll must not orphan them or reset their failure counters
+    const recordA = { task_id: 'a', view_token: 'va', failures: 2 };
+    const list = [recordA];
+    upsertTrackedInPlace(list, { task_id: 'b', view_token: 'vb' });
+    expect(list[0]).toBe(recordA); // same object: counter updates stay live
+    expect(list[0].failures).toBe(2);
+    upsertTrackedInPlace(list, { task_id: 'a', view_token: 'va2' });
+    expect(list[0]).toBe(recordA);
+    expect(list[0].view_token).toBe('va2');
+    expect(list[0].failures).toBe(2);
+  });
+
+  it('restore-then-append never drops previously persisted tasks (Codex R7-1)', () => {
+    // scenario: default permission, submit A -> close -> reopen -> submit B;
+    // the upsert must be based on the restored full list, not just B
+    const restored = parseTrackedTasks(
+      JSON.stringify([{ task_id: 'A', view_token: 'va' }])
+    );
+    upsertTrackedInPlace(restored, { task_id: 'B', view_token: 'vb' });
+    expect(restored).toEqual([
+      { task_id: 'A', view_token: 'va' },
+      { task_id: 'B', view_token: 'vb', failures: 0 },
+    ]);
   });
 
   it('removeTrackedTask removes by key, not by index (Codex R1-3)', () => {
@@ -103,18 +137,5 @@ describe('tracked-task persistence (Codex R1-1)', () => {
     ]);
     // unknown id is a no-op
     expect(removeTrackedTask(list, 'zzz')).toEqual(list);
-  });
-
-  it('restore-then-append never drops previously persisted tasks (Codex R7-1)', () => {
-    // scenario: default permission, submit A -> close -> reopen -> submit B;
-    // the upsert must be based on the restored full list, not just B
-    const restored = parseTrackedTasks(
-      JSON.stringify([{ task_id: 'A', view_token: 'va' }])
-    );
-    const afterSubmitB = upsertTrackedTask(restored, { task_id: 'B', view_token: 'vb' });
-    expect(afterSubmitB).toEqual([
-      { task_id: 'A', view_token: 'va' },
-      { task_id: 'B', view_token: 'vb' },
-    ]);
   });
 });

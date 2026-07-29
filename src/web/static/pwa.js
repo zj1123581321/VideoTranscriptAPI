@@ -299,18 +299,25 @@
   }
 
   /**
-   * Add a task to the list, deduping by task_id (latest wins).
+   * In-place upsert into the tracked list (Codex R8-2): mutates the array
+   * instead of replacing it, so records held by an in-flight poll stay
+   * current. Existing records keep their failures count; all other fields
+   * take the new values (latest wins, Codex R5-3).
    *
-   * @param {Array} list Current list.
+   * @param {Array} list Tracked list (mutated).
    * @param {{task_id: string, view_token: string}} task Task to track.
-   * @returns {Array} New list.
+   * @returns {object} The record in the list.
    */
-  function upsertTrackedTask(list, task) {
-    var filtered = list.filter(function (t) {
-      return t.task_id !== task.task_id;
-    });
-    filtered.push({ task_id: task.task_id, view_token: task.view_token || '' });
-    return filtered;
+  function upsertTrackedInPlace(list, task) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].task_id === task.task_id) {
+        list[i].view_token = task.view_token || '';
+        return list[i];
+      }
+    }
+    var record = { task_id: task.task_id, view_token: task.view_token || '', failures: 0 };
+    list.push(record);
+    return record;
   }
 
   /**
@@ -420,27 +427,21 @@
     }
 
     function addTracked(taskId, viewToken, startPolling) {
-      var raw = upsertTrackedTask(
-        tracked.map(function (t) {
-          return { task_id: t.task_id, view_token: t.view_token };
-        }),
-        { task_id: taskId, view_token: viewToken }
-      );
-      // latest wins：新值的字段（含 view_token）生效，仅继承旧 failures 计数（Codex R5-3）
-      tracked = raw.map(function (u) {
-        var failures = 0;
-        for (var i = 0; i < tracked.length; i++) {
-          if (tracked[i].task_id === u.task_id) {
-            failures = tracked[i].failures;
-            break;
-          }
-        }
-        return { task_id: u.task_id, view_token: u.view_token, failures: failures };
-      });
+      // 原地 upsert：不替换 tracked 数组引用，在途轮询持有的记录始终有效（Codex R8-2）
+      upsertTrackedInPlace(tracked, { task_id: taskId, view_token: viewToken });
       persistTracked();
       if (startPolling && !timer) {
         timer = setInterval(pollTracked, POLL_INTERVAL_MS);
       }
+    }
+
+    function findTracked(taskId) {
+      for (var i = 0; i < tracked.length; i++) {
+        if (tracked[i].task_id === taskId) {
+          return tracked[i];
+        }
+      }
+      return null;
     }
 
     // 初始化时无论权限都把持久化列表恢复进内存 tracked（Codex R7-1）：
@@ -499,33 +500,43 @@
       try {
         var toRemove = [];
         for (var i = 0; i < tracked.length; i++) {
-          var item = tracked[i];
+          var taskId = tracked[i].task_id;
           try {
-            var body = await APIManager.getTaskStatus(item.task_id);
+            var body = await APIManager.getTaskStatus(taskId);
+            // await 期间可能有新提交：按 task_id 重新定位当前记录再更新计数，
+            // 避免作用在过期对象上（Codex R8-2）
+            var current = findTracked(taskId);
+            if (!current) {
+              continue;
+            }
             var state = taskTerminalState(body);
             if (state === 'success') {
               try {
                 // 投递成功才移出跟踪（Codex R3-1）；SW 回退投递失败时
                 // 保留任务并计入 failures，靠连续 5 次失败自然收敛
-                await notifySuccess(item);
-                toRemove.push(item.task_id);
+                await notifySuccess(current);
+                toRemove.push(taskId);
               } catch (notifyErr) {
-                item.failures += 1;
-                if (item.failures >= MAX_CONSECUTIVE_FAILURES) {
-                  console.warn('E5 polling stopped after 5 failures:', item.task_id, notifyErr);
-                  toRemove.push(item.task_id);
+                current.failures += 1;
+                if (current.failures >= MAX_CONSECUTIVE_FAILURES) {
+                  console.warn('E5 polling stopped after 5 failures:', taskId, notifyErr);
+                  toRemove.push(taskId);
                 }
               }
             } else if (state === 'failed') {
-              toRemove.push(item.task_id); // 失败静默停止
+              toRemove.push(taskId); // 失败静默停止
             } else {
-              item.failures = 0;
+              current.failures = 0;
             }
           } catch (err) {
-            item.failures += 1;
-            if (item.failures >= MAX_CONSECUTIVE_FAILURES) {
-              console.warn('E5 polling stopped after 5 failures:', item.task_id, err);
-              toRemove.push(item.task_id);
+            var failedItem = findTracked(taskId);
+            if (!failedItem) {
+              continue;
+            }
+            failedItem.failures += 1;
+            if (failedItem.failures >= MAX_CONSECUTIVE_FAILURES) {
+              console.warn('E5 polling stopped after 5 failures:', taskId, err);
+              toRemove.push(taskId);
             }
           }
         }
@@ -602,7 +613,7 @@
       SW_READY_TIMEOUT_MS: SW_READY_TIMEOUT_MS,
       TRACKED_TASKS_KEY: TRACKED_TASKS_KEY,
       parseTrackedTasks: parseTrackedTasks,
-      upsertTrackedTask: upsertTrackedTask,
+      upsertTrackedInPlace: upsertTrackedInPlace,
       removeTrackedTask: removeTrackedTask,
     };
   }

@@ -78,6 +78,40 @@ function escapeHTML(text) {
 }
 
 /**
+ * 构建单条历史记录的 HTML（纯函数，可 vitest）。
+ * title / original_text / url / id / view_token 均为第三方可控字段
+ * （E4 分享预填的原文、平台标题等），一律过 escapeHTML（Codex R8-1）；
+ * 按钮经 data-* 传值、由 renderHistory 用 addEventListener 绑定，
+ * 不用内联 onclick 的单引号属性上下文。
+ */
+function buildHistoryItemHTML(task) {
+    const timeStr = escapeHTML(new Date(task.timestamp).toLocaleString('zh-CN'));
+    const originalTextPreview = task.original_text ?
+        (task.original_text.length > 100 ? task.original_text.substring(0, 100) + '...' : task.original_text) : '';
+    return `
+        <div class="history-info">
+            <div class="history-title">${escapeHTML(task.title)}</div>
+            ${originalTextPreview ? `
+                <div class="history-original-text">
+                    <span class="original-text-label">原始内容：</span>
+                    <span class="original-text-content">${escapeHTML(originalTextPreview)}</span>
+                </div>
+            ` : ''}
+            <div class="history-url">${escapeHTML(task.url)}</div>
+            <div class="history-meta">
+                <span>${timeStr}</span>
+                ${task.useSpeakerRecognition ? '<span class="feature-tag">• 说话人识别</span>' : ''}
+            </div>
+        </div>
+        <div class="history-actions">
+            <button class="history-btn history-copy-btn" data-url="${escapeHTML(task.url)}">📋 复制</button>
+            <a class="history-btn" href="/view/${escapeHTML(task.view_token || task.id)}" target="_blank">👁️ 查看</a>
+            <button class="history-btn delete-btn history-delete-btn" data-task-id="${escapeHTML(task.id)}">🗑️ 删除</button>
+        </div>
+    `;
+}
+
+/**
  * 本地存储管理类
  */
 class StorageManager {
@@ -442,33 +476,16 @@ class TaskHistoryManager {
         history.forEach((task, index) => {
             const item = document.createElement('div');
             item.className = 'history-item fade-in';
-            
-            const timeStr = new Date(task.timestamp).toLocaleString('zh-CN');
-            const originalTextPreview = task.original_text ? 
-                (task.original_text.length > 100 ? task.original_text.substring(0, 100) + '...' : task.original_text) : '';
-            
-            item.innerHTML = `
-                <div class="history-info">
-                    <div class="history-title">${task.title}</div>
-                    ${originalTextPreview ? `
-                        <div class="history-original-text">
-                            <span class="original-text-label">原始内容：</span>
-                            <span class="original-text-content">${originalTextPreview}</span>
-                        </div>
-                    ` : ''}
-                    <div class="history-url">${task.url}</div>
-                    <div class="history-meta">
-                        <span>${timeStr}</span>
-                        ${task.useSpeakerRecognition ? '<span class="feature-tag">• 说话人识别</span>' : ''}
-                    </div>
-                </div>
-                <div class="history-actions">
-                    <button class="history-btn" onclick="copyToClipboard('${task.url}')">📋 复制</button>
-                    <a class="history-btn" href="/view/${task.view_token || task.id}" target="_blank">👁️ 查看</a>
-                    <button class="history-btn delete-btn" onclick="TaskHistoryManager.deleteTask('${task.id}')">🗑️ 删除</button>
-                </div>
-            `;
-            
+
+            // HTML 由纯函数构建（全字段转义，Codex R8-1）；
+            // 按钮经 data-* 传值 + addEventListener 绑定，无内联 onclick
+            item.innerHTML = buildHistoryItemHTML(task);
+
+            const copyBtn = item.querySelector('.history-copy-btn');
+            copyBtn.addEventListener('click', () => copyToClipboard(copyBtn.dataset.url));
+            const deleteBtn = item.querySelector('.history-delete-btn');
+            deleteBtn.addEventListener('click', () => TaskHistoryManager.deleteTask(deleteBtn.dataset.taskId));
+
             list.appendChild(item);
         });
     }
@@ -1027,5 +1044,5 @@ if (typeof window !== 'undefined') {
 
 // 导出纯函数供 vitest（CJS，经 createRequire 加载）
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { escapeHTML };
+    module.exports = { escapeHTML, buildHistoryItemHTML };
 }
