@@ -3,7 +3,8 @@
  * Responsive design for desktop and mobile.
  *
  * Features:
- * - Auto-extract H1-H4 from the summary section (outline tab)
+ * - Builds a page-order outline tree for summary, detailed notes, and
+ *   calibrated transcript sections
  * - Chapters are read from the #chapters-data JSON island
  *   (items: {index,title,gist,start_time,start_seg,jump_ok}); a chapter row
  *   shows time + title + full gist and jumps to the inline
@@ -40,7 +41,9 @@
     // ========== State ==========
     let tocData = {
         headings: [],
+        notesHeadings: [],
         calibratedSection: null,
+        outlineSections: [],
         chapters: []
     };
 
@@ -144,27 +147,36 @@
 
     /**
      * Append a TOC link item using DOM API only (textContent for labels).
+     * List items default to li; outline section headers opt into div items.
      */
     function appendTocLink(listEl, options) {
-        const item = createEl('div', 'toc-item');
-        const link = createEl('a', options.className || 'toc-link');
-        link.setAttribute('href', options.href || '#');
+        const item = createEl(options.itemTag || 'li', 'toc-item');
+        const tagName = options.disabled ? 'span' : 'a';
+        const link = createEl(tagName, options.className || 'toc-link');
+        if (!options.disabled) {
+            link.setAttribute('href', options.href || '#');
+        }
         if (options.id != null) {
             link.dataset.id = String(options.id);
         }
+        if (options.targetId != null) {
+            link.dataset.targetId = String(options.targetId);
+        }
+        if (options.fallbackId != null) {
+            link.dataset.fallbackId = String(options.fallbackId);
+        }
         if (options.level != null) {
             link.setAttribute('data-level', String(options.level));
+        }
+        if (options.disabled) {
+            link.setAttribute('aria-disabled', 'true');
+            link.classList.add('toc-link-disabled');
         }
         // XSS-safe: never interpolate user text into HTML strings
         link.textContent = options.text || '';
         item.appendChild(link);
         listEl.appendChild(item);
         return link;
-    }
-
-    function appendSectionTitle(listEl, text) {
-        const title = createEl('div', 'toc-section-title', text);
-        listEl.appendChild(title);
     }
 
     /**
@@ -184,13 +196,17 @@
 
     // ========== Data extraction ==========
 
+    function findOutlineSection(label) {
+        return Array.from(document.querySelectorAll('.section')).find(section => {
+            const h2 = section.querySelector('h2');
+            return h2 && h2.textContent.includes(label);
+        }) || null;
+    }
+
     function extractHeadings() {
         const headings = [];
 
-        const summarySection = Array.from(document.querySelectorAll('.section')).find(section => {
-            const h2 = section.querySelector('h2');
-            return h2 && h2.textContent.includes('内容总结');
-        });
+        const summarySection = findOutlineSection('内容总结');
 
         if (!summarySection) {
             console.warn('Summary section not found');
@@ -217,7 +233,7 @@
 
             headings.push({
                 level: level,
-                text: text,
+                text,
                 id: element.id,
                 element: element
             });
@@ -227,12 +243,81 @@
         return headings;
     }
 
+    /**
+     * Read note chapters only from the server-owned notes content block.
+     * The notes chapter id is the stable scroll target, not generated text.
+     */
+    function extractNotesHeadings() {
+        return Array.from(document.querySelectorAll(
+            '#notes-content-block h2[id^="notes-chapter-"]'
+        )).map((element) => ({
+            level: 2,
+            text: element.textContent.trim(),
+            id: element.id,
+            element: element
+        })).filter(heading => heading.text);
+    }
+
     function findCalibratedSection() {
-        const sections = Array.from(document.querySelectorAll('.section'));
-        return sections.find(section => {
-            const h2 = section.querySelector('h2');
-            return h2 && h2.textContent.includes('校对文本');
-        }) || null;
+        return findOutlineSection('校对文本');
+    }
+
+    /**
+     * Assign stable section ids used by the outline parent links.
+     * The calibrated fallback keeps the existing #calibrated-section target.
+     */
+    function ensureOutlineSectionId(section, fallbackId) {
+        if (!section.id) {
+            section.id = fallbackId;
+        }
+        return section.id;
+    }
+
+    /**
+     * Build top-level outline nodes in page order; collapsed state is local
+     * DOM state and is deliberately not persisted.
+     */
+    function buildOutlineSections() {
+        const definitions = [
+            {
+                key: 'summary',
+                label: '内容总结',
+                section: findOutlineSection('内容总结'),
+                children: tocData.headings,
+                fallbackId: 'summary-section'
+            },
+            {
+                key: 'notes',
+                label: '详细笔记',
+                section: findOutlineSection('详细笔记'),
+                children: tocData.notesHeadings,
+                fallbackId: 'notes-section'
+            },
+            {
+                key: 'calibrated',
+                label: '校对文本',
+                section: tocData.calibratedSection,
+                children: tocData.chapters,
+                fallbackId: 'calibrated-section'
+            }
+        ];
+
+        return definitions
+            .filter(definition => definition.section)
+            .map(definition => ({
+                key: definition.key,
+                label: definition.label,
+                section: definition.section,
+                sectionId: ensureOutlineSectionId(
+                    definition.section,
+                    definition.fallbackId
+                ),
+                children: definition.children
+            }))
+            .sort((left, right) => {
+                const order = left.section.compareDocumentPosition(right.section);
+                return order & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+            });
     }
 
     /**
@@ -293,32 +378,70 @@
 
     // ========== UI (DOM API) ==========
 
-    function buildOutlineList(listEl, showSectionTitles) {
-        const headings = tocData.headings;
+    function formatOutlineChapter(chapter) {
+        return [chapter.timeLabel, chapter.title]
+            .filter(Boolean)
+            .join(' ');
+    }
 
-        if (headings.length > 0) {
-            if (showSectionTitles) {
-                appendSectionTitle(listEl, '内容总结');
-            }
-            headings.forEach(heading => {
-                appendTocLink(listEl, {
-                    href: '#' + heading.id,
-                    text: heading.text,
-                    level: heading.level,
-                    id: heading.id,
-                    className: 'toc-link'
+    function appendOutlineSection(listEl, sectionData) {
+        const item = createEl('li', 'toc-outline-section');
+        const header = createEl('div', 'toc-outline-header');
+        const parent = appendTocLink(header, {
+            href: '#' + sectionData.sectionId,
+            text: sectionData.label,
+            id: sectionData.sectionId,
+            itemTag: 'div',
+            className: 'toc-link toc-outline-parent'
+                + (sectionData.key === 'calibrated' ? ' toc-anchor' : '')
+        });
+        parent.dataset.outlineRole = 'section';
+
+        if (sectionData.children.length > 0) {
+            const toggle = createEl('button', 'toc-outline-toggle', '▾');
+            toggle.type = 'button';
+            toggle.setAttribute('aria-expanded', 'true');
+            toggle.setAttribute('aria-label', '折叠' + sectionData.label);
+            header.appendChild(toggle);
+        }
+        item.appendChild(header);
+
+        if (sectionData.children.length > 0) {
+            const childList = createEl('ul', 'toc-outline-children');
+            sectionData.children.forEach((child) => {
+                if (sectionData.key === 'calibrated') {
+                    const anchorId = child.anchorId || child.dlgId;
+                    appendTocLink(childList, {
+                        href: anchorId ? '#' + anchorId : '#',
+                        text: formatOutlineChapter(child),
+                        level: 2,
+                        id: child.anchorId || child.dlgId,
+                        targetId: child.anchorId,
+                        fallbackId: child.dlgId,
+                        disabled: !child.jumpOk,
+                        className: 'toc-link toc-outline-child'
+                    });
+                    return;
+                }
+
+                appendTocLink(childList, {
+                    href: '#' + child.id,
+                    text: child.text,
+                    level: child.level,
+                    id: child.id,
+                    className: 'toc-link toc-outline-child'
                 });
             });
+            item.appendChild(childList);
         }
 
-        if (tocData.calibratedSection) {
-            appendTocLink(listEl, {
-                href: '#calibrated-section',
-                text: '校对文本',
-                id: 'calibrated-section',
-                className: 'toc-link toc-anchor'
-            });
-        }
+        listEl.appendChild(item);
+    }
+
+    function buildOutlineList(listEl) {
+        tocData.outlineSections.forEach(sectionData => {
+            appendOutlineSection(listEl, sectionData);
+        });
     }
 
     /**
@@ -361,10 +484,10 @@
         return pane;
     }
 
-    function buildOutlinePane(isActive, showSectionTitles) {
+    function buildOutlinePane(isActive) {
         const pane = createEl('div', 'toc-pane toc-outline-pane' + (isActive ? ' active' : ''));
         const list = createEl('ul', 'toc-list');
-        buildOutlineList(list, showSectionTitles);
+        buildOutlineList(list);
         pane.appendChild(list);
         return pane;
     }
@@ -452,10 +575,10 @@
         const content = createEl('div', 'toc-content');
         if (hasChapters) {
             content.appendChild(buildChaptersPane(true));
-            content.appendChild(buildOutlinePane(false, true));
+            content.appendChild(buildOutlinePane(false));
         } else {
             const list = createEl('ul', 'toc-list');
-            buildOutlineList(list, true);
+            buildOutlineList(list);
             content.appendChild(list);
         }
         container.appendChild(content);
@@ -494,10 +617,10 @@
         const body = createEl('div', 'toc-mobile-body');
         if (hasChapters) {
             body.appendChild(buildChaptersPane(true));
-            body.appendChild(buildOutlinePane(false, true));
+            body.appendChild(buildOutlinePane(false));
         } else {
             const list = createEl('ul', 'toc-list');
-            buildOutlineList(list, true);
+            buildOutlineList(list);
             body.appendChild(list);
         }
         mobileContent.appendChild(body);
@@ -522,7 +645,8 @@
     }
 
     function hasTocContent() {
-        return tocData.headings.length > 0
+        return tocData.outlineSections.length > 0
+            || tocData.headings.length > 0
             || !!tocData.calibratedSection
             || tocData.chapters.length > 0;
     }
@@ -607,37 +731,64 @@
 
     // ========== Events ==========
 
+    function resolveTocTarget(targetId, fallbackId) {
+        let targetElement = targetId ? document.getElementById(targetId) : null;
+        if (!targetElement && fallbackId) {
+            targetElement = document.getElementById(fallbackId);
+        }
+        return targetElement;
+    }
+
+    /**
+     * Open closed details ancestors before a TOC target is scrolled into view.
+     */
+    function openTocDetailsAncestors(targetElement) {
+        let currentElement = targetElement;
+        while (currentElement) {
+            if (currentElement instanceof HTMLDetailsElement && !currentElement.open) {
+                currentElement.open = true;
+            }
+            currentElement = currentElement.parentElement;
+        }
+    }
+
+    /**
+     * Scroll outline or chapter-tab targets through one fallback-aware path.
+     * Chapter links prefer chapter-anchor-{index}, then dlg-{start_seg}.
+     */
+    function scrollToTocTarget(targetId, fallbackId) {
+        const targetElement = resolveTocTarget(targetId, fallbackId);
+        if (!targetElement) {
+            console.warn('TOC target not found:', targetId || fallbackId);
+            return false;
+        }
+
+        openTocDetailsAncestors(targetElement);
+        targetElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+        });
+        return true;
+    }
+
     function handleTocClick(e) {
         const link = e.target.closest('.toc-link');
         if (!link || link.tagName !== 'A') return;
 
         e.preventDefault();
 
-        const targetId = link.dataset.id;
-        let targetElement = null;
-
-        if (targetId === 'calibrated-section') {
-            targetElement = tocData.calibratedSection;
-        } else if (targetId) {
-            targetElement = document.getElementById(targetId);
-        }
-
-        if (!targetElement) {
-            console.warn('TOC target not found:', targetId);
+        const targetId = link.dataset.targetId || link.dataset.id;
+        const activeId = link.dataset.id || targetId;
+        if (!scrollToTocTarget(targetId, link.dataset.fallbackId)) {
             return;
         }
-
-        targetElement.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-        });
 
         if (mode === 'mobile') {
             closeMobilePanel();
         }
 
         setTimeout(() => {
-            updateActiveLink(targetId);
+            updateActiveLink(activeId);
         }, 100);
     }
 
@@ -648,19 +799,9 @@
             return;
         }
 
-        let targetElement = document.getElementById(targetId);
-        if (!targetElement && mainEl.dataset.fallbackId) {
-            targetElement = document.getElementById(mainEl.dataset.fallbackId);
-        }
-        if (!targetElement) {
-            console.warn('Chapter jump target not found:', targetId);
+        if (!scrollToTocTarget(targetId, mainEl.dataset.fallbackId)) {
             return;
         }
-
-        targetElement.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-        });
 
         if (mode === 'mobile') {
             closeMobilePanel();
@@ -711,6 +852,20 @@
         const collapsed = !container.classList.contains('toc-collapsed');
         applyCollapsed(container, collapsed);
         saveCollapseState(collapsed);
+    }
+
+    function toggleOutlineSection(toggleEl) {
+        const section = toggleEl.closest('.toc-outline-section');
+        if (!section) return;
+
+        const expanded = toggleEl.getAttribute('aria-expanded') === 'true';
+        const label = section.querySelector('.toc-outline-parent');
+        toggleEl.setAttribute('aria-expanded', String(!expanded));
+        toggleEl.setAttribute(
+            'aria-label',
+            (expanded ? '展开' : '折叠') + (label ? label.textContent : '区块')
+        );
+        section.classList.toggle('toc-outline-collapsed', expanded);
     }
 
     function openMobilePanel() {
@@ -865,17 +1020,39 @@
             observer.disconnect();
         }
 
-        const elements = tocData.headings.map(h => h.element);
-        if (tocData.calibratedSection) {
-            elements.push(tocData.calibratedSection);
-        }
+        const elements = [];
+        const idByElement = new Map();
+        const addTarget = (element, activeId) => {
+            if (!element || !activeId || idByElement.has(element)) return;
+            elements.push(element);
+            idByElement.set(element, activeId);
+        };
+
+        tocData.headings.forEach(heading => {
+            addTarget(heading.element, heading.id);
+        });
+        tocData.notesHeadings.forEach(heading => {
+            addTarget(heading.element, heading.id);
+        });
+
+        tocData.chapters.forEach(chapter => {
+            if (!chapter.jumpOk) return;
+            const anchorId = chapter.anchorId;
+            const targetElement = resolveTocTarget(anchorId, chapter.dlgId);
+            addTarget(targetElement, anchorId || chapter.dlgId);
+        });
+
+        tocData.outlineSections.forEach(sectionData => {
+            addTarget(sectionData.section, sectionData.sectionId);
+        });
 
         if (elements.length === 0) return;
 
         observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
-                    const id = entry.target.id || 'calibrated-section';
+                    const id = idByElement.get(entry.target)
+                        || entry.target.id;
                     updateActiveLink(id);
                 }
             });
@@ -905,6 +1082,11 @@
             // Collapsed chapter panel: clicking the indicator bar re-expands.
             if (e.target.closest('#floating-toc.toc-collapsed .toc-indicator')) {
                 handleCollapseToggle();
+                return;
+            }
+
+            if (e.target.closest('.toc-outline-toggle')) {
+                toggleOutlineSection(e.target.closest('.toc-outline-toggle'));
                 return;
             }
 
@@ -966,13 +1148,11 @@
         mode = computeMode();
 
         tocData.headings = extractHeadings();
+        tocData.notesHeadings = extractNotesHeadings();
         tocData.calibratedSection = findCalibratedSection();
         tocData.chapters = readChaptersData();
+        tocData.outlineSections = buildOutlineSections();
         hasChapters = tocData.chapters.length > 0;
-
-        if (tocData.calibratedSection && !tocData.calibratedSection.id) {
-            tocData.calibratedSection.id = 'calibrated-section';
-        }
 
         if (!hasTocContent()) {
             console.log('No headings/chapters/calibrated section; skip TOC');
