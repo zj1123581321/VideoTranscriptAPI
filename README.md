@@ -146,6 +146,41 @@ curl -X GET "http://localhost:8000/api/task/{task_id}" \
 - **任务历史**：`GET /static/history.html` — 支持按日期、平台、频道、关键词搜索，已读追踪，摘要预览
 - **导出文件**：`GET /export/{view_token}/{type}`（支持 `calibrated`、`summary`、`notes`、`transcript`）
 
+#### 浏览器访问令牌与公开阅读边界
+
+首页、任务历史页和转录结果页共用同一个浏览器访问令牌。令牌以
+`vta_bearer_token` 为 canonical 键保存，并由统一的 Bearer 鉴权模块读取。读取时
+canonical 永远优先；迁移尚未封存时，才按 `api_key`、`vta_api_key_persist`、
+`vta_api_key` 的固定顺序兜底。迁移 API 不会在普通读取时自动调用；在浏览器存储逐键
+写入/删除均成功的正常路径中，成功写入 canonical 或显式清除会写入迁移标记并清理旧
+别名，清除/更换会同步其他打开的标签页，旧凭据不会复活。逐键存储失败、memory
+fallback 或跨标签 clear 异常属于 personal 风险下接受不修的 P2/P3 边界，真实语义见
+[鉴权 SPEC](docs/sessions/260729-1709-auth/SPEC.md) 与
+[实现评审分诊](docs/sessions/260729-1709-auth/IMPLEMENTATION-REVIEW.md)。浏览器存储
+不可用时仅在当前标签页内存中封存令牌，刷新页面后需要重新输入。
+
+- 结果页 `/view/{view_token}` 及其 `GET` 导出链接是不可猜测的公开只读 capability，
+  拿到链接即可阅读对应结果；这条公开阅读路径不会替代写操作鉴权。
+- 提交转录、查询私有任务/历史，以及转录页的重新校对、重新总结、生成详细笔记等
+  写操作仍通过 `Authorization: Bearer <访问令牌>` 保护。已有令牌时这些操作直接使用
+  它并直接提交；令牌缺失时先显示输入框，POST 或轮询首次收到 `401` 时可再次提示并
+  最多重放一次，因此“缺令牌 + 401”组合可能出现第二个弹窗（按上述评审记录为 P2）。
+  `403/404/409` 和不确定的 POST 网络错误不会自动重试。
+- 首页在“高级设置”中填写令牌；历史页的“清除鉴权”会撤销私有请求并清空当前页的
+  私有数据；转录结果页提供“设置/更换访问令牌”和“清除访问令牌”。上述同步与旧别名
+  清理承诺仅适用于存储操作全部成功的正常路径；逐键失败、memory fallback 和跨标签
+  clear 异常按 personal P2/P3 分诊接受不修。访问令牌只应输入到可信浏览器，不要把它
+  放进 URL、分享链接或日志。
+
+#### PWA 缓存刷新注意事项
+
+Service Worker 对鉴权脚本采用 network-first，并在每次静态资产版本升级时预缓存
+`auth-storage.js` 与 `transcript-protected-action.js`；API 和 `/view/` 导航不会写入
+缓存。部署包含前端鉴权变更时必须随 `sw.js` 一起递增缓存版本，随后重新打开页面等待
+Service Worker 激活。若已安装的 PWA 仍显示旧页面，请在浏览器的 Service Worker
+面板执行“更新/重新加载”后再重试；不要用清除站点数据代替刷新（那会同时删除本地
+访问令牌和其他页面偏好）。
+
 ### API 端点一览
 
 | 端点 | 方法 | 说明 |

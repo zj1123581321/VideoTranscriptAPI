@@ -110,15 +110,20 @@ def test_generated_notes_render_foldable_section_and_exports():
     assert 'id="notes-chapter-1"' in html
     assert "?raw=notes" in html
     assert "?page=notes" in html
-    assert "generateNotesBtn" not in html
+    # The shared controller keeps the action mapping in the page script even
+    # when generated notes hide the actual button; assert against rendered DOM
+    # markup rather than implementation script identifiers.
+    assert 'id="generateNotesBtn" type="button"' not in html
 
 
 def test_generated_chapters_show_generate_notes_button():
     html = _render_notes_template()
 
-    assert 'id="generateNotesBtn"' in html
-    assert "/api/generate_notes" in html
+    assert 'id="generateNotesBtn" type="button"' in html
     assert "生成详细笔记" in html
+    assert "'generate_notes':" in html
+    assert "createProtectedActionController" in html
+    assert "fetch('/api/generate_notes'" not in html
 
 
 def test_failed_notes_show_retry_copy():
