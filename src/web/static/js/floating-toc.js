@@ -881,14 +881,29 @@
         }
     }
 
+    /**
+     * Resolve a TOC link to its visible parent while its outline section is collapsed.
+     */
+    function resolveVisibleTocLink(link) {
+        const children = link.closest('.toc-outline-children');
+        if (!children) return link;
+        const section = children.closest('.toc-outline-section');
+        if (!section || !section.classList.contains('toc-outline-collapsed')) {
+            return link;
+        }
+        return section.querySelector('.toc-outline-parent') || link;
+    }
+
     function updateActiveLink(activeId) {
         const links = document.querySelectorAll('.toc-link, .toc-chapter-main');
+        const activeLinks = new Set();
         links.forEach(link => {
             if (link.dataset && link.dataset.id === activeId) {
-                link.classList.add('active');
-            } else {
-                link.classList.remove('active');
+                activeLinks.add(resolveVisibleTocLink(link));
             }
+        });
+        links.forEach(link => {
+            link.classList.toggle('active', activeLinks.has(link));
         });
     }
 

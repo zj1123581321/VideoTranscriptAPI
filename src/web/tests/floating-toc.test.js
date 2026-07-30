@@ -200,7 +200,9 @@ describe('floating chapter-axis TOC', () => {
 
     scroll.trigger([passedEntry(dom.window.document.getElementById('summary-heading'))]);
     expect(toc.querySelector('.toc-outline-child[data-id="summary-heading"]')
-      .classList.contains('active')).toBe(true);
+      .classList.contains('active')).toBe(false);
+    expect(toc.querySelector('.toc-outline-parent').classList.contains('active'))
+      .toBe(true);
 
     scroll.trigger([passedEntry(dom.window.document.getElementById('notes-section'))]);
     expect(toc.querySelector('.toc-notes-leaf').classList.contains('active'))
@@ -208,6 +210,56 @@ describe('floating chapter-axis TOC', () => {
     scroll.trigger([passedEntry(dom.window.document.getElementById('calibrated-section'))]);
     expect(toc.querySelector('.toc-calibrated-leaf').classList.contains('active'))
       .toBe(true);
+  });
+
+  it('falls back to the visible summary parent in both TOC copies when collapsed', () => {
+    const { dom, observers } = createFixture();
+    const scroll = scrollObserver(observers);
+    const heading = dom.window.document.getElementById('summary-heading');
+    const tocCopies = [
+      dom.window.document.querySelector('#floating-toc'),
+      dom.window.document.querySelector('#toc-mobile-panel'),
+    ];
+
+    scroll.trigger([passedEntry(heading)]);
+
+    tocCopies.forEach(tocCopy => {
+      const summary = tocCopy.querySelector('.toc-summary-node');
+      expect(summary.classList.contains('toc-outline-collapsed')).toBe(true);
+      expect(summary.querySelector('.toc-outline-child[data-id="summary-heading"]')
+        .classList.contains('active')).toBe(false);
+      expect(summary.querySelector('.toc-outline-parent').classList.contains('active'))
+        .toBe(true);
+    });
+  });
+
+  it('activates the summary child in both TOC copies after expanding the section', () => {
+    const { dom, observers } = createFixture();
+    const scroll = scrollObserver(observers);
+    const heading = dom.window.document.getElementById('summary-heading');
+    const tocCopies = [
+      dom.window.document.querySelector('#floating-toc'),
+      dom.window.document.querySelector('#toc-mobile-panel'),
+    ];
+
+    tocCopies.forEach(tocCopy => {
+      tocCopy.querySelector('.toc-outline-toggle').click();
+    });
+
+    tocCopies.forEach(tocCopy => {
+      expect(tocCopy.querySelector('.toc-summary-node')
+        .classList.contains('toc-outline-collapsed')).toBe(false);
+    });
+
+    scroll.trigger([passedEntry(heading)]);
+
+    tocCopies.forEach(tocCopy => {
+      const summary = tocCopy.querySelector('.toc-summary-node');
+      expect(summary.querySelector('.toc-outline-child[data-id="summary-heading"]')
+        .classList.contains('active')).toBe(true);
+      expect(summary.querySelector('.toc-outline-parent').classList.contains('active'))
+        .toBe(false);
+    });
   });
 
   it('uses document-order anchor positions for scrollspy across notes and calibrated text', () => {
@@ -231,6 +283,12 @@ describe('floating chapter-axis TOC', () => {
     observer.trigger([passedEntry(note0), passedEntry(note1)]);
     expect(pcChapter(dom, 1).classList.contains('current')).toBe(true);
     expect(pcChapter(dom, 0).classList.contains('current')).toBe(false);
+
+    scrollObserver(observers).trigger([passedEntry(note1)]);
+    expect(pcChapter(dom, 1).querySelector('.toc-chapter-main')
+      .classList.contains('active')).toBe(true);
+    expect(pcChapter(dom, 0).querySelector('.toc-chapter-main')
+      .classList.contains('active')).toBe(false);
 
     observer.trigger([passedEntry(calibrated0)]);
     expect(pcChapter(dom, 0).classList.contains('current')).toBe(true);
