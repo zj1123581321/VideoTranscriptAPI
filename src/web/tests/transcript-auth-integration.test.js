@@ -199,6 +199,8 @@ describe('transcript protected action page adapter', () => {
     expect(content.querySelector('#original-notes')).toBeNull();
     expect(content.querySelector('#notes-generation-content')).toBeNull();
     expect(content.querySelectorAll('[aria-current="true"]')).toHaveLength(0);
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toBe('详细笔记提交中...');
 
     callbacks.onPoll({ data: { status: 'processing', progress: { done: 1, total: 2 } } });
     expect(fixture.dom.window.document.querySelector('#notesGenerationCount').textContent)
@@ -224,23 +226,46 @@ describe('transcript protected action page adapter', () => {
 
   it('fails safely when chapters JSON or notes DOM is unavailable', async () => {
     const malformed = createFixture({ chaptersData: '{not-json' });
+    const malformedError = vi.spyOn(malformed.dom.window.console, 'error').mockImplementation(() => {});
+    let malformedCallbacks;
     malformed.controller.runProtectedAction.mockImplementationOnce((_name, _token, callbacks) => {
+      malformedCallbacks = callbacks;
       callbacks.onAccepted({ code: 202, data: { task_id: 'malformed-notes-task' } });
       return Promise.resolve();
     });
-    malformed.dom.window.document.querySelector('#generateNotesBtn').click();
+    const malformedButton = malformed.dom.window.document.querySelector('#generateNotesBtn');
+    malformedButton.click();
     await Promise.resolve();
     const malformedContent = malformed.dom.window.document.querySelector('#notes-generation-content');
     expect(malformedContent.textContent).toContain('按现有章节');
+    expect(malformedButton.disabled).toBe(true);
+    expect(malformedButton.textContent).toBe('详细笔记提交中...');
+    expect(malformed.dom.window.document.querySelector('#generateNotesArea').textContent)
+      .toBe('详细笔记提交中...');
+    expect(malformed.dom.window.document.querySelector('.recalibrate-error')).toBeNull();
+    expect(malformedError).toHaveBeenCalledWith(
+      'Notes skeleton render failed, falling back to text progress'
+    );
+
+    malformedCallbacks.onPoll({ data: { status: 'processing', progress: { done: 1, total: 2 } } });
+    expect(malformed.dom.window.document.querySelector('#notesGenerationProgress').textContent)
+      .toMatch(/^详细笔记生成中 1\/2 章 · 已用 \d+:\d{2}$/);
 
     const missingDom = createFixture({ withNotesSection: false });
+    const missingDomError = vi.spyOn(missingDom.dom.window.console, 'error').mockImplementation(() => {});
     missingDom.controller.runProtectedAction.mockImplementationOnce((_name, _token, callbacks) => {
       callbacks.onAccepted({ code: 202, data: { task_id: 'missing-notes-dom-task' } });
       return Promise.resolve();
     });
-    missingDom.dom.window.document.querySelector('#generateNotesBtn').click();
+    const missingDomButton = missingDom.dom.window.document.querySelector('#generateNotesBtn');
+    missingDomButton.click();
     await Promise.resolve();
-    expect(missingDom.dom.window.document.querySelector('#generateNotesBtn').disabled).toBe(false);
+    expect(missingDomButton.disabled).toBe(true);
+    expect(missingDomButton.textContent).toBe('详细笔记提交中...');
+    expect(missingDom.dom.window.document.querySelector('.recalibrate-error')).toBeNull();
+    expect(missingDomError).toHaveBeenCalledWith(
+      'Notes skeleton render failed, falling back to text progress'
+    );
   });
 
   it('does not open the prompt for a cached-token action', async () => {

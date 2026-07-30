@@ -567,13 +567,17 @@
     }
 
     function updateNotesGenerationProgress(body) {
-        if (!notesGenerationState || notesGenerationStartedAt === null) return;
+        if (notesGenerationStartedAt === null) return;
+        var progressElement = notesGenerationState
+            ? notesGenerationState.progress
+            : document.getElementById('notesGenerationProgress');
+        if (!progressElement) return;
         var progress = readNotesProgress(body);
         var message = progress
             ? '详细笔记生成中 ' + progress.done + '/' + progress.total + ' 章 · 已用 ' + formatNotesElapsed(notesGenerationStartedAt)
             : '详细笔记生成中 · 已用 ' + formatNotesElapsed(notesGenerationStartedAt);
-        notesGenerationState.progress.textContent = message;
-        if (progress) {
+        progressElement.textContent = message;
+        if (progress && notesGenerationState) {
             notesGenerationState.counter.textContent = '已生成 ' + progress.done + '/' + progress.total + ' 章';
         }
     }
@@ -665,22 +669,16 @@
         }
     }
 
-    function handleNotesGenerationViewFailure(elements, originalLabel) {
-        removeNotesGenerationSkeleton();
-        restoreActionButton(elements, originalLabel, formatActionError(new Error('Notes generation view unavailable')));
-        enableProtectedActionButtons();
-    }
-
     function createNotesGenerationCallbacks(elements, originalLabel) {
         return {
             onAccepted: function() {
+                notesGenerationStartedAt = localNow();
                 try {
-                    notesGenerationStartedAt = localNow();
                     if (!renderNotesGenerationSkeleton()) {
-                        handleNotesGenerationViewFailure(elements, originalLabel);
+                        console.error('Notes skeleton render failed, falling back to text progress');
                     }
                 } catch (error) {
-                    handleNotesGenerationViewFailure(elements, originalLabel);
+                    console.error('Notes skeleton render failed, falling back to text progress');
                 }
             },
             onPoll: function(body) {

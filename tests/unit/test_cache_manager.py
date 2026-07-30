@@ -1490,6 +1490,48 @@ class TestUpdateTaskStatusLLMStatusColumns:
         assert cm.get_task_by_id(task["task_id"])["progress"] == progress
 
 
+class TestUpdateTaskProgress:
+    """Tests for the progress-only task metadata update."""
+
+    def test_roundtrip_serializes_progress_json(self, cm):
+        task = cm.create_task(url="https://example.com/progress-only")
+        progress = {"z": "最后", "stage": "notes", "a": 2}
+
+        assert cm.update_task_progress(task["task_id"], progress) is True
+
+        assert cm.get_task_by_id(task["task_id"])["progress"] == progress
+        with cm._get_cursor() as cursor:
+            cursor.execute(
+                "SELECT progress FROM task_status WHERE task_id = ?",
+                (task["task_id"],),
+            )
+            assert cursor.fetchone()["progress"] == json.dumps(
+                progress, ensure_ascii=False, sort_keys=True
+            )
+
+    def test_returns_false_for_missing_task_id(self, cm):
+        assert cm.update_task_progress(
+            "missing-progress-task", {"stage": "notes", "done": 1, "total": 1}
+        ) is False
+
+    def test_updates_only_progress_without_touching_status_fields(self, cm):
+        task = cm.create_task(url="https://example.com/progress-terminal")
+        assert cm.update_task_status(
+            task["task_id"], TaskStatus.SUCCESS, skip_archive=True
+        ) is True
+        before = cm.get_task_by_id(task["task_id"])
+
+        assert cm.update_task_progress(
+            task["task_id"], {"stage": "notes", "done": 1, "total": 1}
+        ) is True
+
+        after = cm.get_task_by_id(task["task_id"])
+        assert after["progress"] == {"stage": "notes", "done": 1, "total": 1}
+        assert after["status"] == before["status"] == TaskStatus.SUCCESS
+        assert after["completed_at"] == before["completed_at"]
+        assert after["terminal_snapshot"] == before["terminal_snapshot"]
+
+
 # ---------------------------------------------------------------------------
 # save_llm_status: llm_status.json read-modify-write (honest status model)
 # ---------------------------------------------------------------------------

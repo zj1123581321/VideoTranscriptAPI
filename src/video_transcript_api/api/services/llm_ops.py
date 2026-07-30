@@ -402,15 +402,11 @@ def _handle_notes_generation(
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning("Failed to read detailed notes chapter count for %s: %s", task_id, exc)
 
-    task_snapshot = cache_manager.get_task_by_id(task_id) or {}
-    progress_status = task_snapshot.get("status") or TaskStatus.PROCESSING
-
     def write_notes_progress(done: int, total: int) -> None:
         """Persist notes progress without interrupting the notes generation flow."""
         try:
-            written = cache_manager.update_task_status(
+            written = cache_manager.update_task_progress(
                 task_id,
-                progress_status,
                 progress={"stage": "notes", "done": done, "total": total},
             )
             if not written:

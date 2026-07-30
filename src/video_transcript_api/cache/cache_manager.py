@@ -2464,6 +2464,26 @@ class CacheManager:
             logger.error(f"更新任务状态失败: {e}")
             raise
 
+    def update_task_progress(self, task_id: str, progress: dict) -> bool:
+        """更新任务进度；进度是从属元数据，绝不参与状态机。
+
+        该方法只更新 task_status.progress，不修改 status、completed_at 或
+        terminal_snapshot。
+        """
+        try:
+            progress_json = json.dumps(
+                progress, ensure_ascii=False, sort_keys=True
+            )
+            with self._get_cursor() as cursor:
+                cursor.execute(
+                    "UPDATE task_status SET progress = ? WHERE task_id = ?",
+                    (progress_json, task_id),
+                )
+                return cursor.rowcount == 1
+        except Exception as e:
+            logger.error(f"更新任务进度失败: {e}")
+            raise
+
     def get_non_terminal_task_ids(self) -> frozenset:
         """返回 task_status 表当前处于非终态（queued/processing/calibrating）
         的 task_id 集合快照。
