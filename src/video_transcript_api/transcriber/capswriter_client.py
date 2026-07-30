@@ -27,7 +27,7 @@ from loguru import logger
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ..utils.logging import load_config
 # 时间解析唯一权威：禁止在本模块另起一套 isfinite/parse 逻辑
-from .segments import parse_time_to_seconds
+from .segments import interpolate_segment_times, parse_time_to_seconds
 
 
 class Config:
@@ -230,43 +230,14 @@ def _split_long_segment(segment: Dict[str, Any], max_len: int) -> List[Dict[str,
     current = ""
     orig_start = _finite_time_or_none(segment.get("start_time"))
     orig_end = _finite_time_or_none(segment.get("end_time"))
-    # 仅当两端时间都有限且区间非倒挂时才做线性插值；否则全程 None。
-    # end < start 的倒挂区间（上游 duration 为负、或时间轴书写顺序颠倒）
-    # 不是可用时间轴：对它插值会生成递减的时间序列，比"没有时间"更误导
-    # 下游——与 sanitize_time_pair 同一口径，文本照常保留、时间诚实降级。
-    times_usable = (
-        orig_start is not None
-        and orig_end is not None
-        and math.isfinite(orig_end - orig_start)
-        and orig_end >= orig_start
-    )
-    start_time = orig_start if times_usable else None
-    duration = (orig_end - orig_start) if times_usable else None
-    total_len = segment["length"]
 
     for part in parts:
         if len(current + part) <= max_len:
             current += part
         else:
             if current:
-                if times_usable and total_len > 0 and start_time is not None:
-                    progress = len(current) / total_len
-                    end_time = start_time + duration * progress
-                    if not math.isfinite(end_time):
-                        end_time = None
-                        start_for_seg = None
-                    else:
-                        start_for_seg = round(start_time, 2)
-                        end_time = round(end_time, 2)
-                        start_time = end_time
-                else:
-                    start_for_seg = None
-                    end_time = None
-
                 split_segments.append(
                     {
-                        "start_time": start_for_seg,
-                        "end_time": end_time,
                         "text": current,
                         "length": len(current),
                     }
@@ -277,22 +248,30 @@ def _split_long_segment(segment: Dict[str, Any], max_len: int) -> List[Dict[str,
                 current = part
 
     if current:
-        if times_usable and start_time is not None and orig_end is not None:
-            final_start = round(start_time, 2) if math.isfinite(start_time) else None
-            final_end = round(orig_end, 2) if math.isfinite(orig_end) else None
-        else:
-            final_start = None
-            final_end = None
         split_segments.append(
             {
-                "start_time": final_start,
-                "end_time": final_end,
                 "text": current,
                 "length": len(current),
             }
         )
 
-    return split_segments if split_segments else [segment]
+    if not split_segments:
+        return [segment]
+
+    time_pairs = interpolate_segment_times(
+        orig_start,
+        orig_end,
+        [split_segment["text"] for split_segment in split_segments],
+    )
+    for split_segment, (start_time, end_time) in zip(split_segments, time_pairs):
+        split_segment["start_time"] = (
+            round(start_time, 2) if start_time is not None else None
+        )
+        split_segment["end_time"] = (
+            round(end_time, 2) if end_time is not None else None
+        )
+
+    return split_segments
 
 
 def _create_segments_from_capswriter(

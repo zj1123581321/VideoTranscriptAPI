@@ -366,6 +366,24 @@ class TestSplitLongSegmentIsfinite:
             assert math.isfinite(part["end_time"])
             assert part["text"]
 
+    def test_interpolated_times_are_contiguous_and_last_end_is_exact(self):
+        text = "aa，" + "b" * 50 + "，" + "c" * 50
+        segment = {
+            "start_time": 1.234,
+            "end_time": 10.987,
+            "text": text,
+            "length": len(text),
+        }
+
+        parts = _split_long_segment(segment, max_len=30)
+
+        assert len(parts) >= 2
+        assert parts[0]["start_time"] == 1.23
+        assert parts[-1]["end_time"] == 10.99
+        for previous, current in zip(parts, parts[1:]):
+            assert current["start_time"] == previous["end_time"]
+            assert current["start_time"] <= current["end_time"]
+
     def test_nan_start_does_not_emit_nan_times(self):
         text = "part one，" + "x" * 40 + "，" + "part two trailing text"
         segment = {

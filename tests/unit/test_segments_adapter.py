@@ -17,11 +17,68 @@ import os
 import pytest
 
 from video_transcript_api.transcriber.segments import (
+    interpolate_segment_times,
     load_segments,
     normalize_segments,
     parse_time_to_seconds,
     sanitize_time_pair,
 )
+
+
+# ---------------------------------------------------------------------------
+# interpolate_segment_times
+# ---------------------------------------------------------------------------
+
+class TestInterpolateSegmentTimes:
+    def test_interpolates_by_text_length_with_contiguous_boundaries(self):
+        result = interpolate_segment_times(
+            10.0,
+            20.0,
+            ["aa", "bbbb", "c"],
+        )
+
+        assert result[0][0] == 10.0
+        assert result[-1][1] == 20.0
+        assert result[0][1] == pytest.approx(10.0 + 10.0 * 2 / 7)
+        assert result[1][0] == result[0][1]
+        assert result[1][1] == pytest.approx(10.0 + 10.0 * 6 / 7)
+        assert result[2][0] == result[1][1]
+        assert all(start < end for start, end in result)
+
+    @pytest.mark.parametrize(
+        ("start", "end"),
+        [
+            (None, 10.0),
+            (10.0, None),
+            (float("nan"), 10.0),
+            (10.0, float("inf")),
+            (10.0, 10.0),
+            (20.0, 10.0),
+        ],
+    )
+    def test_invalid_interval_returns_none_for_every_part(self, start, end):
+        assert interpolate_segment_times(start, end, ["one", "two"]) == [
+            (None, None),
+            (None, None),
+        ]
+
+    def test_single_part_preserves_valid_interval(self):
+        assert interpolate_segment_times(1.25, 9.5, ["whole"]) == [(1.25, 9.5)]
+
+    def test_single_part_with_invalid_interval_returns_none(self):
+        assert interpolate_segment_times(9.5, 1.25, ["whole"]) == [(None, None)]
+
+    def test_empty_parts_returns_empty_result(self):
+        assert interpolate_segment_times(1.0, 2.0, []) == []
+
+    def test_all_empty_parts_use_stable_equal_split(self):
+        result = interpolate_segment_times(0.0, 5.0, ["", "", ""])
+
+        assert result == [
+            (0.0, pytest.approx(5.0 / 3)),
+            (pytest.approx(5.0 / 3), pytest.approx(10.0 / 3)),
+            (pytest.approx(10.0 / 3), 5.0),
+        ]
 
 
 # ---------------------------------------------------------------------------
