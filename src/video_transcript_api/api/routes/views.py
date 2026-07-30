@@ -1,10 +1,11 @@
 import asyncio
+from html import unescape
 import os
 import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional, Sequence
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -997,27 +998,135 @@ def _compute_anchor_fingerprint(segments: list) -> Optional[str]:
         return None
 
 
-def _add_notes_chapter_anchors(notes_html: str) -> str:
-    """Add deterministic anchors to each rendered detailed-notes chapter."""
-    chapter_index = 0
+def load_notes_anchor_chapters(
+    cache_dir_path: Optional[Path],
+) -> Optional[list[Dict[str, Any]]]:
+    """Load detailed-notes chapter anchors independently from jump gates.
 
-    def _replace_heading(match: re.Match) -> str:
-        nonlocal chapter_index
-        chapter_index += 1
-        attributes = match.group("attributes") or ""
-        attributes = re.sub(
-            r"""\s+id=(["']).*?\1""",
-            "",
-            attributes,
-            flags=re.IGNORECASE,
-        )
-        return f'<h2 id="notes-chapter-{chapter_index}"{attributes}>'
+    The returned list comes only from ``llm_chapters.json``. Fingerprint and
+    ``jump_ok`` decisions belong to the transcript chapter data island and do
+    not affect detailed-notes heading anchors.
+    """
+    import json
 
-    return re.sub(
-        r"<h2(?P<attributes>[^>]*)>",
-        _replace_heading,
+    if cache_dir_path is None:
+        return None
+    try:
+        with open(cache_dir_path / "llm_chapters.json", "r", encoding="utf-8") as file:
+            payload = json.load(file)
+    except Exception:
+        return None
+
+    chapters = payload.get("chapters") if isinstance(payload, dict) else None
+    if not isinstance(chapters, list) or not chapters:
+        return None
+    if not all(isinstance(chapter, dict) for chapter in chapters):
+        return None
+    return chapters
+
+
+def _normalize_notes_heading_text(value: str) -> str:
+    """Normalize rendered h2 text to browser-like plain heading text."""
+    without_tags = re.sub(r"<[^>]*>", "", value)
+    return re.sub(r"\s+", " ", unescape(without_tags)).strip()
+
+
+# Match only the complete ``[HH:MM:SS - HH:MM:SS]`` prefix.
+_NOTES_HEADING_TIME_PREFIX_RE = re.compile(
+    r"^\[\d{2}:\d{2}:\d{2} - \d{2}:\d{2}:\d{2}\]\s*"
+)
+
+
+def _add_notes_chapter_anchors(
+    notes_html: str,
+    chapters: Optional[Sequence[Mapping[str, Any]]],
+) -> str:
+    """Add ids only when rendered h2 text matches the next chapter heading."""
+    if not chapters:
+        logger.warning("Notes chapter anchors skipped: chapter list unavailable")
+        return notes_html
+
+    try:
+        expected_titles = []
+        for chapter in chapters:
+            chapter_index = chapter.get("index")
+            title = chapter.get("title")
+            if (
+                isinstance(chapter_index, bool)
+                or not isinstance(chapter_index, int)
+                or not isinstance(title, str)
+                or not title.strip()
+            ):
+                raise ValueError("invalid notes anchor chapter")
+            expected_titles.append(
+                _normalize_notes_heading_text(render_markdown_to_html("## " + title))
+            )
+    except Exception:
+        logger.warning("Notes chapter anchors skipped: chapter list unavailable")
+        return notes_html
+
+    headings = []
+    for match in re.finditer(
+        r"<h2(?P<attributes>[^>]*)>(?P<content>.*?)</h2>",
         notes_html,
-    )
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        headings.append(
+            {
+                "match": match,
+                "span": match.span(),
+                "attributes": match.group("attributes") or "",
+                "content": match.group("content"),
+                "heading_text": _normalize_notes_heading_text(
+                    match.group("content")
+                ),
+            }
+        )
+
+    assigned = {}
+    pos = 0
+    for chapter, expected_title in zip(chapters, expected_titles):
+        timed_candidate = None
+        bare_candidate = None
+        for heading_index in range(pos, len(headings)):
+            heading_text = headings[heading_index]["heading_text"]
+            prefix_match = _NOTES_HEADING_TIME_PREFIX_RE.match(heading_text)
+            if prefix_match and heading_text[prefix_match.end() :] == expected_title:
+                timed_candidate = heading_index
+                break
+            if bare_candidate is None and heading_text == expected_title:
+                bare_candidate = heading_index
+
+        heading_index = (
+            timed_candidate if timed_candidate is not None else bare_candidate
+        )
+        if heading_index is not None:
+            assigned[heading_index] = chapter["index"]
+            pos = heading_index + 1
+
+    rebuilt = []
+    last_end = 0
+    for heading_index, heading in enumerate(headings):
+        start, end = heading["span"]
+        rebuilt.append(notes_html[last_end:start])
+        chapter_index = assigned.get(heading_index)
+        if chapter_index is None:
+            rebuilt.append(heading["match"].group(0))
+        else:
+            attributes = re.sub(
+                r"""\s+id\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""",
+                "",
+                heading["attributes"],
+                flags=re.IGNORECASE,
+            )
+            rebuilt.append(
+                f'<h2 id="notes-chapter-{chapter_index}"{attributes}>'
+                f'{heading["content"]}</h2>'
+            )
+        last_end = end
+
+    rebuilt.append(notes_html[last_end:])
+    return "".join(rebuilt)
 
 
 def _prepare_success_view(view_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1031,15 +1140,20 @@ def _prepare_success_view(view_data: Dict[str, Any]) -> Dict[str, Any]:
     import json
     import math
 
+    cache_dir = view_data.get("cache_dir")
+    cache_dir_path = Path(cache_dir) if cache_dir else None
+
     if view_data.get("summary"):
         view_data["summary_html"] = render_markdown_to_html(view_data["summary"])
     if view_data.get("notes") and view_data.get("notes_state") == NotesStatus.GENERATED:
         rendered_notes = render_markdown_to_html(view_data["notes"])
-        view_data["notes_html"] = _add_notes_chapter_anchors(rendered_notes)
+        notes_anchor_chapters = load_notes_anchor_chapters(cache_dir_path)
+        view_data["notes_html"] = _add_notes_chapter_anchors(
+            rendered_notes, notes_anchor_chapters
+        )
     else:
         view_data["notes_html"] = None
 
-    cache_dir = view_data.get("cache_dir")
     stats: Dict[str, Any] = {
         "original_length": 0,
         "calibrated_length": 0,
@@ -1072,7 +1186,6 @@ def _prepare_success_view(view_data: Dict[str, Any]) -> Dict[str, Any]:
         )
         plain_structured_enabled = False
 
-    cache_dir_path = Path(cache_dir) if cache_dir else None
     chapters_status: Optional[str] = None
     if cache_dir_path and cache_dir_path.exists():
         # 1. 计算原始转录字数
