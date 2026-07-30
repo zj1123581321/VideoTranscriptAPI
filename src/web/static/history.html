@@ -55,13 +55,14 @@
             background: var(--bg-secondary);
         }
 
-        /* API Key 输入区 */
+        /* 访问令牌输入区 */
         .auth-bar {
             background: var(--bg-primary);
             border: 1px solid var(--border-primary);
             border-radius: 12px;
             padding: 16px 20px;
             margin-bottom: 16px;
+            min-width: 0;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -75,11 +76,22 @@
             border: 1px solid var(--border-primary);
             border-radius: 8px;
             padding: 8px 12px;
+            min-height: 44px;
             color: var(--text-primary);
             font-size: 0.875rem;
             font-family: monospace;
         }
         .auth-bar input:focus { outline: none; border-color: var(--accent-primary); }
+        .auth-bar input:focus-visible,
+        .auth-bar button:focus-visible {
+            outline: 3px solid var(--border-focus);
+            outline-offset: 2px;
+        }
+        .auth-bar input:disabled,
+        .auth-bar button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
         .btn {
             padding: 8px 18px;
             border-radius: 8px;
@@ -89,6 +101,7 @@
             font-weight: 600;
             transition: opacity 0.15s;
         }
+        .auth-bar .btn { min-height: 44px; }
         .btn:hover { opacity: 0.85; }
         .btn-primary { background: var(--accent-primary); color: #fff; }
         .btn-ghost {
@@ -100,20 +113,23 @@
             font-size: 0.8rem;
             padding: 4px 12px;
             border-radius: 6px;
-            white-space: nowrap;
+            max-width: 100%;
+            min-width: 0;
+            white-space: normal;
+            overflow-wrap: anywhere;
         }
-        .auth-status.ok { background: var(--success-bg); color: var(--success-text); }
-        .auth-status.err { background: var(--error-bg); color: var(--error-text); }
-        .remember-label {
-            font-size: 0.75rem;
-            color: var(--text-tertiary);
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            cursor: pointer;
-            white-space: nowrap;
+        .auth-status.ok {
+            background: var(--success-bg);
+            border: 1px solid var(--success-border);
+            color: var(--success-text);
+            font-weight: 600;
         }
-        .remember-label input { cursor: pointer; }
+        .auth-status.err {
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
+            color: var(--error-text);
+            font-weight: 600;
+        }
 
         /* Webhook 别名设置 */
         .alias-panel {
@@ -426,7 +442,6 @@
 
             .auth-bar { flex-direction: column; align-items: stretch; }
             .auth-bar input { min-width: 0; width: 100%; }
-            .auth-bar .remember-label { align-self: flex-start; }
 
             .filter-bar { flex-direction: column; align-items: stretch; }
             .filter-group { min-width: 0; width: 100%; }
@@ -461,14 +476,12 @@
         </nav>
     </div>
 
-    <!-- API Key 输入 -->
+    <!-- Unified access token input -->
     <div class="auth-bar">
-        <label>API Key</label>
-        <input type="password" id="apiKeyInput" placeholder="输入 API Key..." autocomplete="off">
-        <button class="btn btn-primary" onclick="loadHistory()">查询</button>
-        <label class="remember-label">
-            <input type="checkbox" id="rememberKey"> 记住
-        </label>
+        <label for="apiKeyInput">访问令牌</label>
+        <input type="password" id="apiKeyInput" placeholder="输入访问令牌..." autocomplete="off">
+        <button class="btn btn-primary" id="historyQueryBtn" onclick="loadHistory()">查询</button>
+        <button class="btn btn-ghost" id="historyClearBtn" onclick="clearHistoryAuth()">清除鉴权</button>
         <span class="auth-status" id="authStatus" style="display:none"></span>
         <span style="flex:1"></span>
         <button class="btn btn-ghost" id="aliasToggle" onclick="toggleAliasPanel()" style="display:none; font-size:0.8rem; padding:6px 12px">
@@ -569,7 +582,7 @@
     <div id="listArea">
         <div class="state-box">
             <div class="icon">🔑</div>
-            <div>输入 API Key 后点击查询</div>
+            <div>输入访问令牌后点击查询</div>
         </div>
     </div>
 
@@ -587,20 +600,141 @@
     <div id="tooltipContent"></div>
 </div>
 
+<script src="/static/js/auth-storage.js"></script>
 <script>
 // ===================== 状态 =====================
 const STORAGE_KEY_READ  = () => `vta_read_${getMasked()}`;
 const STORAGE_KEY_ALIAS = () => `vta_webhook_alias_${getMasked()}`;
 const PAGE_SIZE = 20;
+const authStorage = typeof window !== 'undefined' ? window.VideoTranscriptAuthStorage : null;
+const HISTORY_AUTH_ERROR = '安全错误：统一鉴权模块加载失败，已禁用历史私有操作';
+let historyAuthUnavailable = !authStorage;
+let privateRequestControllers = new Set();
+let privateRequestGeneration = 0;
 
 let currentPage = 0;
 let totalItems  = 0;
-let currentApiKey = '';
 let currentMasked = '';
+let currentIdentity = '';
 let filterOptions = { webhooks: [], platforms: [], authors: [] };
 let summaryDebounce = null;
+let tooltipHideTimer = null;
 let summaryVisible  = false;
 let selectedSet = new Set();   // 当前选中的 view_token
+
+function disableHistoryPrivateActions() {
+    historyAuthUnavailable = true;
+    const input = document.getElementById('apiKeyInput');
+    const query = document.getElementById('historyQueryBtn');
+    const clear = document.getElementById('historyClearBtn');
+    if (input) input.disabled = true;
+    if (query) query.disabled = true;
+    if (clear) clear.disabled = true;
+    showStatus('err', HISTORY_AUTH_ERROR);
+    const list = document.getElementById('listArea');
+    if (list) {
+        list.innerHTML = `<div class="state-box"><div class="icon">🔒</div><div>${esc(HISTORY_AUTH_ERROR)}</div></div>`;
+    }
+}
+
+function requireHistoryAuth() {
+    if (!authStorage || typeof authStorage.readAuthToken !== 'function' ||
+        typeof authStorage.writeAuthToken !== 'function' ||
+        typeof authStorage.clearAuthToken !== 'function' ||
+        typeof authStorage.buildAuthHeaders !== 'function' ||
+        typeof authStorage.snapshotAuthToken !== 'function' ||
+        typeof authStorage.clearAuthTokenIfMatch !== 'function') {
+        disableHistoryPrivateActions();
+        return null;
+    }
+    historyAuthUnavailable = false;
+    return authStorage;
+}
+
+function abortPrivateHistoryRequests() {
+    privateRequestControllers.forEach(controller => controller.abort());
+    privateRequestControllers.clear();
+    clearTimeout(summaryDebounce);
+    clearTimeout(tooltipHideTimer);
+    clearTimeout(searchDebounce);
+    summaryDebounce = null;
+    tooltipHideTimer = null;
+    searchDebounce = null;
+}
+
+function beginPrivateHistoryRequestGeneration() {
+    privateRequestGeneration += 1;
+    abortPrivateHistoryRequests();
+    return privateRequestGeneration;
+}
+
+function createSupersededPrivateHistoryError() {
+    const error = new Error('Private history request superseded');
+    error.name = 'AbortError';
+    return error;
+}
+
+function resetPrivateHistoryState() {
+    privateRequestGeneration += 1;
+    abortPrivateHistoryRequests();
+    currentPage = 0;
+    totalItems = 0;
+    currentMasked = '';
+    currentIdentity = '';
+    filterOptions = { webhooks: [], platforms: [], authors: [] };
+    _filteredItems = null;
+    selectedSet.clear();
+    summaryVisible = false;
+    _authorDropOpen = false;
+    const list = document.getElementById('listArea');
+    if (list) list.innerHTML = '<div class="state-box"><div class="icon">🔑</div><div>请输入访问令牌后点击查询</div></div>';
+    ['filterBar', 'statsBar', 'paginationBar', 'aliasToggle', 'aliasPanel'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.style.display = id === 'aliasPanel' ? 'none' : 'none';
+    });
+    ['filterStartDate', 'filterEndDate', 'filterWebhook', 'filterPlatform', 'filterAuthor', 'filterQ'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.value = '';
+    });
+    const status = document.getElementById('filterStatus');
+    if (status) status.value = 'success';
+    const read = document.getElementById('filterRead');
+    if (read) read.value = 'all';
+    const tooltip = document.getElementById('summaryTooltip');
+    if (tooltip) tooltip.classList.remove('visible');
+    const tooltipTitle = document.getElementById('tooltipTitle');
+    const tooltipContent = document.getElementById('tooltipContent');
+    if (tooltipTitle) tooltipTitle.textContent = '';
+    if (tooltipContent) tooltipContent.textContent = '';
+    const selectedCount = document.getElementById('selectedCount');
+    const markSelected = document.getElementById('markSelectedBtn');
+    if (selectedCount) selectedCount.style.display = 'none';
+    if (markSelected) markSelected.style.display = 'none';
+    const totalCount = document.getElementById('totalCount');
+    const unreadBadge = document.getElementById('unreadBadge');
+    const pageInfo = document.getElementById('pageInfo');
+    if (totalCount) totalCount.textContent = '';
+    if (unreadBadge) { unreadBadge.textContent = ''; unreadBadge.style.display = 'none'; }
+    if (pageInfo) pageInfo.textContent = '';
+    const aliasRows = document.getElementById('aliasRows');
+    if (aliasRows) aliasRows.innerHTML = '';
+    const selectAll = document.getElementById('selectAllChk');
+    if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; }
+    history.replaceState(null, '', window.location.pathname);
+}
+
+function clearHistoryAuth() {
+    const storage = requireHistoryAuth();
+    if (!storage) return;
+    if (!storage.clearAuthToken()) {
+        document.getElementById('apiKeyInput').value = storage.readAuthToken() || '';
+        showStatus('err', '鉴权清除失败');
+        return;
+    }
+    resetPrivateHistoryState();
+    document.getElementById('apiKeyInput').value = '';
+    showStatus('ok', '鉴权已清除');
+}
 
 // ===================== 工具函数 =====================
 function getMasked() { return currentMasked || 'anon'; }
@@ -704,7 +838,7 @@ function applyReadFilter() {
 
 // ===================== 过滤偏好持久化 =====================
 // ===================== URL 参数过滤状态 =====================
-// 所有过滤条件存在 URL 里，刷新/分享均保留；API Key 不入 URL（安全）
+// 所有过滤条件存在 URL 里，刷新/分享均保留；Bearer Token 不入 URL（安全）
 
 function serializeFiltersToURL() {
     const params = new URLSearchParams();
@@ -788,41 +922,53 @@ const PLATFORM_LABELS = {
 
 // ===================== Auth =====================
 function loadSavedKey() {
-    const persisted = localStorage.getItem('vta_api_key_persist');
-    const session = sessionStorage.getItem('vta_api_key');
-    const saved = persisted || session;
+    const storage = requireHistoryAuth();
+    if (!storage) return;
+    const saved = storage.readAuthToken();
     if (saved) {
         document.getElementById('apiKeyInput').value = saved;
-        if (persisted) document.getElementById('rememberKey').checked = true;
     }
 }
 
 async function loadHistory(page = 0) {
+    const storage = requireHistoryAuth();
+    if (!storage) return;
     const keyInput = document.getElementById('apiKeyInput').value.trim();
-    if (!keyInput) { showStatus('err', '请输入 API Key'); return; }
-
-    currentApiKey = keyInput;
-    sessionStorage.setItem('vta_api_key', keyInput);
-    if (document.getElementById('rememberKey').checked) {
-        localStorage.setItem('vta_api_key_persist', keyInput);
-    } else {
-        localStorage.removeItem('vta_api_key_persist');
+    const canonical = storage.readAuthToken() || '';
+    if (!keyInput) {
+        resetPrivateHistoryState();
+        showStatus('err', '请输入访问令牌');
+        return;
     }
+    if (keyInput !== canonical) {
+        resetPrivateHistoryState();
+        if (!storage.writeAuthToken(keyInput)) {
+            showStatus('err', '鉴权保存失败');
+            return;
+        }
+    }
+    const requestGeneration = keyInput !== canonical
+        ? privateRequestGeneration
+        : beginPrivateHistoryRequestGeneration();
+
+    currentIdentity = keyInput;
     currentPage = page;
 
     showListLoading();
 
     // 先拿过滤选项（首次加载）
     if (page === 0) {
-        await loadFilterOptions();
+        await loadFilterOptions(requestGeneration);
     }
 
-    await fetchHistory();
+    if (requestGeneration !== privateRequestGeneration) return;
+    await fetchHistory(requestGeneration);
 }
 
-async function loadFilterOptions() {
+async function loadFilterOptions(requestGeneration = privateRequestGeneration) {
     try {
-        const res = await apiFetch('/api/audit/filter-options');
+        const res = await apiFetch('/api/audit/filter-options', {}, requestGeneration);
+        if (requestGeneration !== privateRequestGeneration) return;
         if (res.code === 200) {
             filterOptions = res.data;
             currentMasked = res.data.api_key_masked || '';
@@ -836,6 +982,7 @@ async function loadFilterOptions() {
             }
         }
     } catch(e) {
+        if (requestGeneration !== privateRequestGeneration || e.name === 'AbortError') return;
         console.error('filter-options error', e);
     }
 }
@@ -966,26 +1113,48 @@ function changePage(delta) {
         renderList(pageItems);
         renderPagination();
     } else {
-        fetchHistory();
+        const requestGeneration = beginPrivateHistoryRequestGeneration();
+        fetchHistory(requestGeneration);
     }
 }
 
 // ===================== API 请求 =====================
-async function apiFetch(url, params = {}) {
+async function apiFetch(url, params = {}, requestGeneration = privateRequestGeneration) {
+    const authStorage = requireHistoryAuth();
+    if (!authStorage) throw new Error(HISTORY_AUTH_ERROR);
+    if (requestGeneration !== privateRequestGeneration) throw createSupersededPrivateHistoryError();
     const qs = new URLSearchParams(params).toString();
     const fullUrl = qs ? `${url}?${qs}` : url;
-    const res = await fetch(fullUrl, {
-        headers: { 'Authorization': `Bearer ${currentApiKey}` }
-    });
-    const json = await res.json();
-    if (res.status === 401) { showStatus('err', 'API Key 无效'); throw new Error('401'); }
-    return json;
+    const requestSnapshot = authStorage.snapshotAuthToken();
+    const controller = new AbortController();
+    privateRequestControllers.add(controller);
+    try {
+        const res = await fetch(fullUrl, {
+            headers: authStorage.buildAuthHeaders(),
+            signal: controller.signal
+        });
+        if (requestGeneration !== privateRequestGeneration) throw createSupersededPrivateHistoryError();
+        if (res.status === 401) {
+            const cleared = authStorage.clearAuthTokenIfMatch(requestSnapshot);
+            if (cleared) {
+                resetPrivateHistoryState();
+                document.getElementById('apiKeyInput').value = '';
+            }
+            showStatus('err', '访问令牌无效');
+            throw new Error('401');
+        }
+        const body = await res.json();
+        if (requestGeneration !== privateRequestGeneration) throw createSupersededPrivateHistoryError();
+        return body;
+    } finally {
+        privateRequestControllers.delete(controller);
+    }
 }
 
 // 缓存客户端过滤后的全量数据（仅已读/未读过滤激活时使用）
 let _filteredItems = null;
 
-async function fetchHistory() {
+async function fetchHistory(requestGeneration = privateRequestGeneration) {
     const readFilter = document.getElementById('filterRead')?.value || 'all';
     const isReadFiltered = readFilter !== 'all';
 
@@ -1016,7 +1185,8 @@ async function fetchHistory() {
     if (q)         params.q = q;
 
     try {
-        const res = await apiFetch('/api/audit/history', params);
+        const res = await apiFetch('/api/audit/history', params, requestGeneration);
+        if (requestGeneration !== privateRequestGeneration) return;
         if (res.code !== 200) { showError(res.message || '查询失败'); return; }
 
         currentMasked = res.data.api_key_masked || currentMasked;
@@ -1046,6 +1216,7 @@ async function fetchHistory() {
         renderPagination();
         updateUnreadBadge(res.data.items);
     } catch(e) {
+        if (requestGeneration !== privateRequestGeneration || e.name === 'AbortError') return;
         if (e.message !== '401') showError('网络错误，请稍后重试');
     }
 }
@@ -1091,9 +1262,9 @@ function buildRow(item, readSet) {
     const titleHtml = item.title
         ? `<div class="task-title">${esc(item.title)}</div><div class="task-author">${esc(item.author || '')}</div>`
         : `<div class="task-title" style="color:var(--text-tertiary)">${esc(item.video_url || '(无标题)')}</div>
-           ${!isCompleted ? `<div class="task-author"><span class="task-status-badge status-${item.status}">${item.status}</span></div>` : ''}`;
+           ${!isCompleted ? `<div class="task-author"><span class="task-status-badge status-${esc(item.status)}">${esc(item.status)}</span></div>` : ''}`;
 
-    const platformLabel = item.platform ? (PLATFORM_LABELS[item.platform] || item.platform) : '—';
+    const platformLabel = esc(item.platform ? (PLATFORM_LABELS[item.platform] || item.platform) : '—');
     const webhookLabel = item.wechat_webhook ? shortWebhook(item.wechat_webhook) : '—';
 
     const classes = ['task-row'];
@@ -1113,7 +1284,7 @@ function buildRow(item, readSet) {
         <div class="${classes.join(' ')}" ${vtAttr} ${clickHandler}>
             ${!isRead && canClick ? '<div class="read-dot"></div>' : ''}
             ${checkboxHtml}
-            <div class="task-time">${time}</div>
+            <div class="task-time">${esc(time)}</div>
             <div class="task-title-cell">${titleHtml}</div>
             <div class="task-platform">${platformLabel}</div>
         </div>`;
@@ -1189,9 +1360,11 @@ function onRowMove(e) {
 }
 function onRowLeave() {
     clearTimeout(summaryDebounce);
-    setTimeout(() => {
+    clearTimeout(tooltipHideTimer);
+    tooltipHideTimer = setTimeout(() => {
         document.getElementById('summaryTooltip').classList.remove('visible');
         summaryVisible = false;
+        tooltipHideTimer = null;
     }, 150);
 }
 
@@ -1275,7 +1448,12 @@ function showStatus(type, msg) {
     el.textContent = msg;
 }
 function esc(s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s || '')
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
 }
 
 // ===================== 回车触发查询 =====================
@@ -1301,29 +1479,31 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 let searchDebounce = null;
 
-// ===================== 从主页 localStorage 读取 Token（与主页共用同一 Key）=====================
-function tryLoadMainPageToken() {
-    // 主页用简单加密存在 vta_bearer_token，加密 key 是固定字符串
-    const ENCRYPT_KEY = 'vta_encrypt_key_2024';
-    function simpleDecrypt(encoded) {
-        if (!encoded) return '';
-        try {
-            const reversed = encoded.split('').reverse().join('');
-            const decoded = decodeURIComponent(escape(atob(reversed)));
-            return decoded.replace(ENCRYPT_KEY, '');
-        } catch (e) { return ''; }
+window.addEventListener('storage', event => {
+    const storageKeys = authStorage && authStorage.AUTH_STORAGE_KEYS;
+    if (!storageKeys || ![
+        storageKeys.canonical,
+        storageKeys.migration,
+        storageKeys.legacyApi,
+        storageKeys.legacyPersistent,
+        storageKeys.legacySession,
+    ].includes(event.key)) {
+        return;
     }
-    const raw = localStorage.getItem('vta_bearer_token');
-    return raw ? simpleDecrypt(raw) : '';
-}
+    const nextToken = authStorage.readAuthToken() || '';
+    if (nextToken === currentIdentity) return;
+    resetPrivateHistoryState();
+    document.getElementById('apiKeyInput').value = nextToken;
+    if (nextToken) {
+        currentIdentity = nextToken;
+        loadHistory(0);
+    } else {
+        showStatus('ok', '鉴权已清除');
+    }
+});
 
 // ===================== 初始化 =====================
 loadSavedKey();
-// 如果没有缓存的 key，尝试从主页自动填入
-if (!document.getElementById('apiKeyInput').value) {
-    const mainKey = tryLoadMainPageToken();
-    if (mainKey) document.getElementById('apiKeyInput').value = mainKey;
-}
 // 有 key 就自动查询，无需手动点击
 if (document.getElementById('apiKeyInput').value) {
     loadHistory();
