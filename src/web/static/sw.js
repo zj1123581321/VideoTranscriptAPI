@@ -21,7 +21,7 @@
  */
 
 // Bump this version whenever sw.js, icons or the manifest change.
-const CACHE_NAME = 'vta-static-v3';
+const CACHE_NAME = 'vta-static-v4';
 const CACHE_PREFIX = 'vta-static-';
 
 // Shared authentication scripts are explicitly installed and refreshed with

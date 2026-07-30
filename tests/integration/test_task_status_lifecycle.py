@@ -51,6 +51,7 @@ class TestLifecycle:
         # queued (set by create_task)
         body = client.get(f"/api/task/{task_id}").json()
         assert body["code"] == 202 and body["data"]["status"] == "queued"
+        assert body["data"]["progress"] is None
 
         # processing
         cm.update_task_status(task_id, TaskStatus.PROCESSING)
@@ -64,12 +65,38 @@ class TestLifecycle:
         assert body["code"] == 202
         assert body["data"]["status"] == "calibrating"
 
+        cm.update_task_status(
+            task_id,
+            TaskStatus.CALIBRATING,
+            progress={"stage": "notes", "done": 1, "total": 3},
+        )
+        body = client.get(f"/api/task/{task_id}").json()
+        assert body["code"] == 202
+        assert body["data"]["progress"] == {
+            "stage": "notes", "done": 1, "total": 3
+        }
+
         # success (LLM artifacts persisted)
         cm.update_task_status(task_id, TaskStatus.SUCCESS)
         body = client.get(f"/api/task/{task_id}").json()
         assert body["code"] == 200
         assert body["data"]["status"] == "success"
         assert body["data"]["view_token"]
+
+    def test_invalid_progress_is_ignored_without_changing_status_mapping(self, client, cm):
+        task_id = _task(cm, "https://example.com/invalid-progress")
+        with cm._get_cursor() as cursor:
+            cursor.execute(
+                "UPDATE task_status SET progress = ? WHERE task_id = ?",
+                ("not-json", task_id),
+            )
+
+        response = client.get(f"/api/task/{task_id}")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 202
+        assert body["data"]["status"] == TaskStatus.QUEUED
+        assert body["data"]["progress"] is None
 
     def test_failed_surfaces_error(self, client, cm):
         task_id = _task(cm, "https://example.com/fail")

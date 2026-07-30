@@ -44,6 +44,27 @@
         return error;
     }
 
+    function reportCallbackFailure() {
+        try {
+            if (root && root.console && typeof root.console.error === 'function') {
+                root.console.error('Protected action callback failed');
+            }
+        } catch (error) {
+            // Callback diagnostics must never affect the protected action.
+        }
+    }
+
+    function invokeSafeCallback(callback, body) {
+        if (typeof callback !== 'function') return;
+        try {
+            Promise.resolve(callback(body)).catch(() => {
+                reportCallbackFailure();
+            });
+        } catch (error) {
+            reportCallbackFailure();
+        }
+    }
+
     function responseJson(response, kind) {
         if (!response || typeof response.json !== 'function') {
             return Promise.reject(new Error(`non-JSON ${kind} response`));
@@ -187,7 +208,7 @@
             return true;
         }
 
-        async function pollTask(context, taskId) {
+        async function pollTask(context, taskId, onPoll) {
             const pollOnce = async () => {
                 if (context.finished || context.aborted || context.inFlight) return;
                 if (now() - context.startedAt >= POLL_TIMEOUT_MS) {
@@ -232,6 +253,7 @@
                         throw new Error('missing task status');
                     }
                     if (!POLL_STATUSES.has(status)) throw new Error('unknown task status');
+                    invokeSafeCallback(onPoll, body);
                     if (status === 'failed') throw new Error('Task failed');
                     if (status === 'success') {
                         context.consecutiveErrors = 0;
@@ -350,11 +372,15 @@
         }
 
         /** Run one authenticated transcript action and poll its task to a terminal status. */
-        function runProtectedAction(actionName, viewToken) {
+        /** Run an action; optional callbacks are isolated from request and poll state. */
+        function runProtectedAction(actionName, viewToken, callbacks) {
             if (!Object.prototype.hasOwnProperty.call(ACTION_ENDPOINTS, actionName)) {
                 throw new Error('Unsupported protected action');
             }
             if (!isNonEmptyToken(viewToken)) throw new Error('Protected action view_token missing');
+            const actionCallbacks = typeof callbacks === 'function'
+                ? { onPoll: callbacks }
+                : (callbacks && typeof callbacks === 'object' ? callbacks : {});
             const context = createContext({
                 now,
                 AbortControllerImpl,
@@ -365,9 +391,10 @@
             context.promise.catch(() => {});
             (async () => {
                 try {
-                    const { taskId } = await postAction(context, actionName, viewToken, 0);
+                    const { taskId, body } = await postAction(context, actionName, viewToken, 0);
                     if (context.aborted || context.finished) return;
-                    await pollTask(context, taskId);
+                    invokeSafeCallback(actionCallbacks.onAccepted, body);
+                    await pollTask(context, taskId, actionCallbacks.onPoll);
                 } catch (error) {
                     if (context.finished) return;
                     finishContext(context, context.aborted || isAbortError(error) ? makeAbortError() : error);

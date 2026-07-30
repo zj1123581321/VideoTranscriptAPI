@@ -61,6 +61,87 @@ describe('transcript protected action controller', () => {
     expect(JSON.parse(deps.fetchImpl.mock.calls[0][1].body)).toEqual({ view_token: 'view-1' });
   });
 
+  it('invokes the optional poll callback for every valid status, including success', async () => {
+    vi.useFakeTimers();
+    const api = loadController();
+    const deps = dependencies();
+    const onPoll = vi.fn();
+    const onAccepted = vi.fn();
+    deps.fetchImpl
+      .mockResolvedValueOnce(response(202, { code: 202, data: { task_id: 'task-poll-callback' } }))
+      .mockResolvedValueOnce(response(200, { data: { status: 'queued' } }))
+      .mockResolvedValueOnce(response(200, { data: { status: 'processing' } }))
+      .mockResolvedValueOnce(response(200, { data: { status: 'success' } }));
+    const controller = api.createProtectedActionController(deps);
+
+    const pending = controller.runProtectedAction('recalibrate', 'view-poll-callback', { onAccepted, onPoll });
+    await vi.runOnlyPendingTimersAsync();
+    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(3000);
+    await pending;
+
+    expect(onPoll.mock.calls.map(([body]) => body.data.status)).toEqual([
+      'queued',
+      'processing',
+      'success',
+    ]);
+    expect(onAccepted).toHaveBeenCalledWith({
+      code: 202,
+      data: { task_id: 'task-poll-callback' },
+    });
+  });
+
+  it('continues polling when the accepted callback fails', async () => {
+    vi.useFakeTimers();
+    const api = loadController();
+    const deps = dependencies();
+    const callbackError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onAccepted = vi.fn(() => {
+      throw new Error('Notes skeleton render failed, falling back to text progress');
+    });
+    const onPoll = vi.fn();
+    deps.fetchImpl
+      .mockResolvedValueOnce(response(202, { code: 202, data: { task_id: 'task-accepted-failure' } }))
+      .mockResolvedValueOnce(response(200, { data: { status: 'queued' } }))
+      .mockResolvedValueOnce(response(200, { data: { status: 'success' } }));
+    const controller = api.createProtectedActionController(deps);
+
+    const pending = controller.runProtectedAction('generate_notes', 'view-accepted-failure', {
+      onAccepted,
+      onPoll,
+    });
+    await vi.runOnlyPendingTimersAsync();
+    await vi.advanceTimersByTimeAsync(3000);
+    await pending;
+
+    expect(onAccepted).toHaveBeenCalledTimes(1);
+    expect(onPoll.mock.calls.map(([body]) => body.data.status)).toEqual(['queued', 'success']);
+    expect(callbackError).toHaveBeenCalledWith('Protected action callback failed');
+  });
+
+  it('logs isolated poll callback failures without changing successful completion', async () => {
+    const api = loadController();
+    const deps = dependencies();
+    const onPoll = vi.fn((body) => {
+      if (body.data.status === 'queued') throw new Error('callback throw');
+      return Promise.reject(new Error('callback rejection'));
+    });
+    const callbackError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    deps.fetchImpl
+      .mockResolvedValueOnce(response(202, { code: 202, data: { task_id: 'task-callback-failure' } }))
+      .mockResolvedValueOnce(response(200, { data: { status: 'queued' } }))
+      .mockResolvedValueOnce(response(200, { data: { status: 'success' } }));
+    const controller = api.createProtectedActionController(deps);
+
+    await controller.runProtectedAction('resummarize', 'view-callback-failure', { onPoll });
+    await flushPromises();
+
+    expect(onPoll).toHaveBeenCalledTimes(2);
+    expect(callbackError).toHaveBeenCalledTimes(2);
+    expect(callbackError).toHaveBeenNthCalledWith(1, 'Protected action callback failed');
+    expect(callbackError).toHaveBeenNthCalledWith(2, 'Protected action callback failed');
+  });
+
   it('prompts once when the canonical token is absent before POST', async () => {
     const api = loadController();
     const deps = dependencies();

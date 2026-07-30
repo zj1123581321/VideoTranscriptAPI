@@ -7,11 +7,11 @@ only a successful ``NotesResult`` through ``CacheManager``.
 
 import contextvars
 from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import math
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from ...transcriber.segments import load_segments, parse_time_to_seconds
 from ...utils.llm_status import NotesStatus
@@ -357,8 +357,13 @@ class NotesProcessor:
         stored_fingerprint: Optional[str] = None,
         source_kind: Optional[str] = None,
         selected_models: Optional[Mapping[str, Any]] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> NotesResult:
-        """Generate all notes or return a deterministic failure with no output."""
+        """Generate all notes or return a deterministic failure with no output.
+
+        ``progress_callback`` is called serially after each chapter future is
+        successfully harvested, with ``(done, total)`` counts.
+        """
         try:
             chapter_payload = chapters
             payload_fingerprint = stored_fingerprint
@@ -445,26 +450,30 @@ class NotesProcessor:
 
             max_workers = min(len(mapping.slices), self.config.notes_concurrency)
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = [
+                future_positions = {
                     executor.submit(
                         contextvars.copy_context().run,
                         generate_chapter_notes,
                         position,
                         chapter,
-                    )
+                    ): position
                     for position, chapter in enumerate(mapping.slices)
-                ]
-                notes_sections: List[str] = []
-                for future in futures:
+                }
+                notes_sections: List[Optional[str]] = [
+                    None
+                ] * len(mapping.slices)
+                completed_count = 0
+                for future in as_completed(future_positions):
+                    position = future_positions[future]
                     try:
-                        notes_sections.append(future.result())
+                        notes_sections[position] = future.result()
                     except Exception as exc:  # noqa: BLE001 - preserve processor contract
                         # 整批一次性提交，失败时 shutdown(wait=True) 会把排队章节
                         # 全部跑完。这里尽力取消尚未开始的章节以少烧配额——仅是
                         # best-effort：空闲 worker 会立刻拉取下一个排队项，与本次
                         # cancel 天然竞态，且失败按提交顺序察觉（靠后章节先失败时
                         # 会晚一拍）。要严格保证得改成有界提交，对自用工具不值当。
-                        for pending in futures:
+                        for pending in future_positions:
                             pending.cancel()
                         return NotesResult(
                             text=None,
@@ -473,9 +482,12 @@ class NotesProcessor:
                             fingerprint=mapping.current_fingerprint,
                             chapter_count=len(mapping.slices),
                         )
+                    completed_count += 1
+                    if progress_callback is not None:
+                        progress_callback(completed_count, len(mapping.slices))
 
             return NotesResult(
-                text="\n\n".join(notes_sections),
+                text="\n\n".join(section for section in notes_sections if section is not None),
                 status=NotesStatus.GENERATED,
                 fingerprint=mapping.current_fingerprint,
                 chapter_count=len(mapping.slices),

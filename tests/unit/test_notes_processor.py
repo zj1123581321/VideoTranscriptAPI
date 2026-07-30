@@ -226,22 +226,26 @@ def test_fingerprint_mismatch_fails_without_llm_call():
 def test_one_chapter_failure_returns_no_partial_text():
     segments = _structured_segments()
     client = FakeNotesClient(["- first", RuntimeError("provider exploded")])
+    progress = []
 
     # 同上：队列式响应分发只在串行下确定，这里锁的是"任一章失败即整体失败"。
     result = NotesProcessor(client, _config(notes_concurrency=1)).process(
         chapters=_chapter_payload(segments),
         source_segments=segments,
+        progress_callback=lambda done, total: progress.append((done, total)),
     )
 
     assert result.status is NotesStatus.FAILED
     assert result.text is None
     assert result.error.startswith("chapter 1 notes generation failed: provider exploded")
     assert len(client.calls) == 2
+    assert progress == [(1, 2)]
 
 
 def test_notes_concurrency_keeps_chapter_order_when_completion_is_out_of_order():
     segments, chapters = _chapter_batch(4)
     completed = []
+    progress = []
     completion_events = [threading.Event() for _ in range(4)]
 
     class ReverseCompletionNotesClient:
@@ -258,10 +262,15 @@ def test_notes_concurrency_keeps_chapter_order_when_completion_is_out_of_order()
 
     result = NotesProcessor(
         ReverseCompletionNotesClient(), _config(notes_concurrency=4)
-    ).process(chapters=chapters, source_segments=segments)
+    ).process(
+        chapters=chapters,
+        source_segments=segments,
+        progress_callback=lambda done, total: progress.append((done, total)),
+    )
 
     assert result.status is NotesStatus.GENERATED
     assert completed == ["Chapter 3", "Chapter 2", "Chapter 1", "Chapter 0"]
+    assert progress == [(1, 4), (2, 4), (3, 4), (4, 4)]
     assert result.text.index("Chapter 0\n- Chapter 0 notes") < result.text.index(
         "Chapter 1\n- Chapter 1 notes"
     )

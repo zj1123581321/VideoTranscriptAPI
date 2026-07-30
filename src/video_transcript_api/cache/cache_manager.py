@@ -326,6 +326,7 @@ class CacheManager:
                     media_id TEXT,
                     use_speaker_recognition BOOLEAN DEFAULT 0,
                     status TEXT NOT NULL DEFAULT 'queued',
+                    progress TEXT,
                     title TEXT,
                     author TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -418,6 +419,14 @@ class CacheManager:
                     cursor.execute("ALTER TABLE task_status ADD COLUMN summary_status TEXT")
                     logger.info("summary_status 字段添加成功")
 
+                # 迁移5.5: 详细笔记生成进度（nullable JSON object）。
+                cursor.execute("PRAGMA table_info(task_status)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if 'progress' not in columns:
+                    logger.info("Adding progress field to task_status table...")
+                    cursor.execute("ALTER TABLE task_status ADD COLUMN progress TEXT")
+                    logger.info("progress field added successfully")
+
                 # 迁移6: 每次请求自己的规范化选项、提交者与不可变终态快照。
                 cursor.execute("PRAGMA table_info(task_status)")
                 columns = [col[1] for col in cursor.fetchall()]
@@ -469,6 +478,7 @@ class CacheManager:
                 media_id TEXT,
                 use_speaker_recognition BOOLEAN DEFAULT 0,
                 status TEXT NOT NULL DEFAULT 'queued',
+                progress TEXT,
                 title TEXT,
                 author TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -505,6 +515,7 @@ class CacheManager:
                 row_map.get("media_id"),
                 row_map.get("use_speaker_recognition"),
                 row_map.get("status"),
+                row_map.get("progress"),
                 row_map.get("title"),
                 row_map.get("author"),
                 row_map.get("created_at"),
@@ -523,10 +534,10 @@ class CacheManager:
             cursor.execute('''
                 INSERT INTO task_status
                 (task_id, view_token, url, download_url, platform, media_id, use_speaker_recognition,
-                 status, title, author, created_at, completed_at, cache_id, llm_config,
+                 status, progress, title, author, created_at, completed_at, cache_id, llm_config,
                  error_message, calibration_status, summary_status, chapters_status,
                  processing_options, submitted_by, terminal_snapshot)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', new_row_data)
 
         logger.info(f"数据库迁移完成，恢复了 {len(existing_data)} 条记录")
@@ -2296,7 +2307,8 @@ class CacheManager:
                           calibration_status: str = None, summary_status: str = None,
                           chapters_status: str = None,
                           terminal_snapshot: Optional[dict] = None,
-                          skip_archive: bool = False) -> bool:
+                          skip_archive: bool = False,
+                          progress: Optional[dict] = None) -> bool:
         """
         更新任务状态
 
@@ -2326,6 +2338,7 @@ class CacheManager:
             summary_status: SummaryStatus 取值(generated/skipped_short/failed/pending)，
                 None 表示不更新该列。
             chapters_status: ChaptersStatus 取值，None 表示不更新该列。
+            progress: 详细笔记生成进度对象，按 JSON 文本写入；None 表示不更新该列。
             skip_archive: 为 True 时跳过终态写入附带的同步审计快照归档
                 （archive_task_snapshot）。默认 False 与原有行为一致：正常终态写入
                 仍同步归档，保证 /api/audit/history 等查询可以立即看到
@@ -2377,6 +2390,11 @@ class CacheManager:
                 if chapters_status is not None:
                     update_fields.append("chapters_status = ?")
                     params.append(chapters_status)
+                if progress is not None:
+                    update_fields.append("progress = ?")
+                    params.append(
+                        json.dumps(progress, ensure_ascii=False, sort_keys=True)
+                    )
 
                 if status in ['success', 'failed']:
                     update_fields.append("completed_at = CURRENT_TIMESTAMP")
@@ -2444,6 +2462,26 @@ class CacheManager:
 
         except Exception as e:
             logger.error(f"更新任务状态失败: {e}")
+            raise
+
+    def update_task_progress(self, task_id: str, progress: dict) -> bool:
+        """更新任务进度；进度是从属元数据，绝不参与状态机。
+
+        该方法只更新 task_status.progress，不修改 status、completed_at 或
+        terminal_snapshot。
+        """
+        try:
+            progress_json = json.dumps(
+                progress, ensure_ascii=False, sort_keys=True
+            )
+            with self._get_cursor() as cursor:
+                cursor.execute(
+                    "UPDATE task_status SET progress = ? WHERE task_id = ?",
+                    (progress_json, task_id),
+                )
+                return cursor.rowcount == 1
+        except Exception as e:
+            logger.error(f"更新任务进度失败: {e}")
             raise
 
     def get_non_terminal_task_ids(self) -> frozenset:
@@ -2893,6 +2931,18 @@ class CacheManager:
                             except (TypeError, json.JSONDecodeError):
                                 logger.warning("Invalid %s JSON for task %s", field, task_id)
                                 task[field] = None
+                    if task.get("progress") is not None:
+                        try:
+                            progress = json.loads(task["progress"])
+                        except (TypeError, json.JSONDecodeError):
+                            logger.warning("Invalid progress JSON for task %s", task_id)
+                            progress = None
+                        if not isinstance(progress, dict):
+                            logger.warning(
+                                "Progress JSON is not an object for task %s", task_id
+                            )
+                            progress = None
+                        task["progress"] = progress
                     return task
                 return None
                 

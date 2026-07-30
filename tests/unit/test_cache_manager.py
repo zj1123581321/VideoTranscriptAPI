@@ -5,6 +5,7 @@ manual end-to-end flows. This file focuses on isolated, pytest-based unit tests
 with tmp_path fixtures and no side effects.
 """
 import json
+import sqlite3
 import threading
 import time
 
@@ -1286,6 +1287,160 @@ class TestLLMStatusColumnMigration:
             columns = [col[1] for col in cursor.fetchall()]
         assert "calibration_status" in columns
         assert "summary_status" in columns
+        assert "progress" in columns
+
+    def test_legacy_rebuild_preserves_rows_and_progress(self, tmp_path):
+        db_path = tmp_path / "legacy-progress.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            """
+            CREATE TABLE task_status (
+                task_id TEXT PRIMARY KEY,
+                view_token TEXT NOT NULL UNIQUE,
+                url TEXT NOT NULL,
+                platform TEXT,
+                media_id TEXT,
+                status TEXT NOT NULL DEFAULT 'queued',
+                progress TEXT,
+                title TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO task_status
+                (task_id, view_token, url, platform, media_id, status, progress, title)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "legacy-task",
+                "legacy-view",
+                "https://example.com/legacy",
+                "youtube",
+                "legacy-media",
+                "processing",
+                json.dumps({"stage": "notes", "done": 1, "total": 2}),
+                "Legacy title",
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        cm = CacheManager(cache_dir=str(tmp_path / "cache"), db_path=str(db_path))
+        try:
+            task = cm.get_task_by_id("legacy-task")
+            assert task["url"] == "https://example.com/legacy"
+            assert task["progress"] == {"stage": "notes", "done": 1, "total": 2}
+        finally:
+            cm.close()
+
+        cm = CacheManager(cache_dir=str(tmp_path / "cache"), db_path=str(db_path))
+        try:
+            assert cm.get_task_by_id("legacy-task")["title"] == "Legacy title"
+            with cm._get_cursor() as cursor:
+                cursor.execute("PRAGMA table_info(task_status)")
+                columns = [column[1] for column in cursor.fetchall()]
+            assert columns.count("progress") == 1
+        finally:
+            cm.close()
+
+    def test_legacy_alter_table_adds_progress_preserves_rows(self, tmp_path):
+        """Upgrade path: pre-progress schema gains the column via ALTER TABLE.
+
+        Uses a table without view_token UNIQUE so migration takes the
+        ADD COLUMN branch rather than full table rebuild. Existing rows
+        must stay intact with NULL progress.
+        """
+        db_path = tmp_path / "legacy-no-progress.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            """
+            CREATE TABLE task_status (
+                task_id TEXT PRIMARY KEY,
+                view_token TEXT NOT NULL,
+                url TEXT NOT NULL,
+                platform TEXT,
+                media_id TEXT,
+                status TEXT NOT NULL DEFAULT 'queued',
+                title TEXT
+            )
+            """
+        )
+        rows = [
+            (
+                "alter-task-1",
+                "alter-view-1",
+                "https://example.com/alter-1",
+                "youtube",
+                "alter-media-1",
+                "processing",
+                "Alter title 1",
+            ),
+            (
+                "alter-task-2",
+                "alter-view-2",
+                "https://example.com/alter-2",
+                "bilibili",
+                "alter-media-2",
+                "queued",
+                "Alter title 2",
+            ),
+            (
+                "alter-task-3",
+                "alter-view-3",
+                "https://example.com/alter-3",
+                "youtube",
+                "alter-media-3",
+                "success",
+                "Alter title 3",
+            ),
+        ]
+        conn.executemany(
+            """
+            INSERT INTO task_status
+                (task_id, view_token, url, platform, media_id, status, title)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        conn.commit()
+        # Precondition: no progress column before CacheManager init.
+        pre_columns = [
+            col[1] for col in conn.execute("PRAGMA table_info(task_status)").fetchall()
+        ]
+        assert "progress" not in pre_columns
+        conn.close()
+
+        cm = CacheManager(cache_dir=str(tmp_path / "cache-alter"), db_path=str(db_path))
+        try:
+            with cm._get_cursor() as cursor:
+                cursor.execute("PRAGMA table_info(task_status)")
+                columns = [column[1] for column in cursor.fetchall()]
+            assert columns.count("progress") == 1
+
+            for task_id, view_token, url, platform, media_id, status, title in rows:
+                task = cm.get_task_by_id(task_id)
+                assert task is not None
+                assert task["view_token"] == view_token
+                assert task["url"] == url
+                assert task["platform"] == platform
+                assert task["media_id"] == media_id
+                assert task["status"] == status
+                assert task["title"] == title
+                assert task["progress"] is None
+
+            with cm._get_cursor() as cursor:
+                cursor.execute(
+                    "SELECT task_id, progress FROM task_status ORDER BY task_id"
+                )
+                sql_rows = cursor.fetchall()
+            assert len(sql_rows) == 3
+            for sql_row in sql_rows:
+                # sqlite3.Row or tuple depending on row_factory
+                progress_value = sql_row["progress"] if hasattr(sql_row, "keys") else sql_row[1]
+                assert progress_value is None
+        finally:
+            cm.close()
 
     def test_migration_is_idempotent(self, cache_dir):
         """Re-initializing CacheManager against the same on-disk DB (simulating
@@ -1323,6 +1478,58 @@ class TestUpdateTaskStatusLLMStatusColumns:
         row = cm.get_task_by_id(task["task_id"])
         assert row["calibration_status"] is None
         assert row["summary_status"] is None
+
+    def test_progress_roundtrip_serializes_json_object(self, cm):
+        task = cm.create_task(url="https://example.com/progress")
+        progress = {"stage": "notes", "done": 2, "total": 5}
+
+        assert cm.update_task_status(
+            task["task_id"], TaskStatus.PROCESSING, progress=progress
+        ) is True
+
+        assert cm.get_task_by_id(task["task_id"])["progress"] == progress
+
+
+class TestUpdateTaskProgress:
+    """Tests for the progress-only task metadata update."""
+
+    def test_roundtrip_serializes_progress_json(self, cm):
+        task = cm.create_task(url="https://example.com/progress-only")
+        progress = {"z": "最后", "stage": "notes", "a": 2}
+
+        assert cm.update_task_progress(task["task_id"], progress) is True
+
+        assert cm.get_task_by_id(task["task_id"])["progress"] == progress
+        with cm._get_cursor() as cursor:
+            cursor.execute(
+                "SELECT progress FROM task_status WHERE task_id = ?",
+                (task["task_id"],),
+            )
+            assert cursor.fetchone()["progress"] == json.dumps(
+                progress, ensure_ascii=False, sort_keys=True
+            )
+
+    def test_returns_false_for_missing_task_id(self, cm):
+        assert cm.update_task_progress(
+            "missing-progress-task", {"stage": "notes", "done": 1, "total": 1}
+        ) is False
+
+    def test_updates_only_progress_without_touching_status_fields(self, cm):
+        task = cm.create_task(url="https://example.com/progress-terminal")
+        assert cm.update_task_status(
+            task["task_id"], TaskStatus.SUCCESS, skip_archive=True
+        ) is True
+        before = cm.get_task_by_id(task["task_id"])
+
+        assert cm.update_task_progress(
+            task["task_id"], {"stage": "notes", "done": 1, "total": 1}
+        ) is True
+
+        after = cm.get_task_by_id(task["task_id"])
+        assert after["progress"] == {"stage": "notes", "done": 1, "total": 1}
+        assert after["status"] == before["status"] == TaskStatus.SUCCESS
+        assert after["completed_at"] == before["completed_at"]
+        assert after["terminal_snapshot"] == before["terminal_snapshot"]
 
 
 # ---------------------------------------------------------------------------

@@ -385,6 +385,37 @@ def _handle_notes_generation(
     if not cache_dir:
         raise ValueError("Detailed notes task requires a valid cache directory")
 
+    chapter_count = 0
+    try:
+        chapters_payload = json.loads(
+            (Path(cache_dir) / "llm_chapters.json").read_text(encoding="utf-8")
+        )
+        chapters = (
+            chapters_payload.get("chapters")
+            if isinstance(chapters_payload, dict)
+            else None
+        )
+        if isinstance(chapters, list):
+            chapter_count = len(chapters)
+        else:
+            logger.warning("Detailed notes chapters payload is missing a chapter list: %s", task_id)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Failed to read detailed notes chapter count for %s: %s", task_id, exc)
+
+    def write_notes_progress(done: int, total: int) -> None:
+        """Persist notes progress without interrupting the notes generation flow."""
+        try:
+            written = cache_manager.update_task_progress(
+                task_id,
+                progress={"stage": "notes", "done": done, "total": total},
+            )
+            if not written:
+                logger.warning("Detailed notes progress update was rejected: %s", task_id)
+        except Exception:
+            logger.exception("Failed to persist detailed notes progress: %s", task_id)
+
+    write_notes_progress(0, chapter_count)
+
     try:
         notes_processor = NotesProcessor(
             llm_client=llm_coordinator.llm_client,
@@ -396,6 +427,7 @@ def _handle_notes_generation(
             notes_result = notes_processor.process(
                 cache_dir=cache_dir,
                 selected_models=selected_models,
+                progress_callback=write_notes_progress,
             )
 
         if (
