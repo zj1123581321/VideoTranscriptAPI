@@ -82,6 +82,76 @@ def test_prepare_success_view_renders_notes_with_chapter_anchors(tmp_path):
     assert "<strong>Key claim</strong>" in view_data["notes_html"]
 
 
+@pytest.mark.parametrize(
+    ("title", "notes_html", "chapter_index"),
+    [
+        (
+            "Understanding **bold**",
+            "<h2>Understanding <strong>bold</strong></h2>",
+            7,
+        ),
+        ("A  B", "<h2>A B</h2>", 8),
+        ("Rock & Roll", "<h2>Rock &amp; Roll</h2>", 9),
+    ],
+)
+def test_notes_anchors_match_titles_after_markdown_rendering(
+    title, notes_html, chapter_index
+):
+    chapters = [
+        {"index": chapter_index, "title": title, "start_time": None, "end_time": None}
+    ]
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert f'id="notes-chapter-{chapter_index}"' in result
+
+
+def test_notes_anchor_title_normalization_does_not_cascade_after_first_chapter():
+    chapters = [
+        {
+            "index": 3,
+            "title": "Understanding **bold**",
+            "start_time": None,
+            "end_time": None,
+        },
+        {"index": 4, "title": "Second", "start_time": None, "end_time": None},
+        {"index": 5, "title": "Third", "start_time": None, "end_time": None},
+    ]
+    notes_html = (
+        "<h2>Understanding <strong>bold</strong></h2>"
+        "<h2>Second</h2>"
+        "<h2>Third</h2>"
+    )
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert '<h2 id="notes-chapter-3">Understanding <strong>bold</strong></h2>' in result
+    assert '<h2 id="notes-chapter-4">Second</h2>' in result
+    assert '<h2 id="notes-chapter-5">Third</h2>' in result
+
+
+def test_notes_anchor_rendering_failure_skips_injecting_entire_chapter_group():
+    chapters = [
+        {"index": 0, "title": "First", "start_time": None, "end_time": None},
+        {"index": 1, "title": "Second", "start_time": None, "end_time": None},
+    ]
+    notes_html = "<h2>First</h2><h2>Second</h2>"
+
+    with (
+        patch(
+            "video_transcript_api.api.routes.views.render_markdown_to_html",
+            side_effect=["<p>First</p>", RuntimeError("renderer unavailable")],
+        ),
+        patch("video_transcript_api.api.routes.views.logger.warning") as warning,
+    ):
+        result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert result == notes_html
+    warning.assert_called_once_with(
+        "Notes chapter anchors skipped: chapter list unavailable"
+    )
+
+
 def test_notes_anchors_match_titles_with_different_persisted_times():
     chapters = [
         {
