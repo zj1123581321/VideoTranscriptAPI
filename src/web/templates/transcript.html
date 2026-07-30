@@ -12,6 +12,51 @@
 .section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .section-header h2 { margin-bottom: 0; }
 
+/* Detailed-notes generation placeholders stay presentational until the task succeeds. */
+.notes-generation-skeleton { display: grid; gap: 16px; }
+.notes-generation-placeholder {
+    position: relative;
+    overflow: hidden;
+    min-height: 116px;
+    padding: 16px;
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    background: var(--bg-secondary, #f5f5f5);
+}
+.notes-generation-placeholder::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+    animation: notesGenerationShimmer 1.6s ease-in-out infinite;
+}
+.notes-generation-placeholder-title,
+.notes-generation-placeholder-time,
+.notes-generation-placeholder-line {
+    position: relative;
+    z-index: 1;
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.notes-generation-placeholder-title { margin-bottom: 8px; font-weight: 600; }
+.notes-generation-placeholder-time { color: var(--text-secondary, #666); font-size: 0.85rem; }
+.notes-generation-placeholder-line {
+    height: 10px;
+    margin-top: 14px;
+    border-radius: 999px;
+    background: var(--border-primary);
+}
+.notes-generation-placeholder-line.short { width: 72%; }
+@keyframes notesGenerationShimmer {
+    to { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .notes-generation-placeholder::after { animation: none; }
+}
+
 /* Recalibrate button */
 .recalibrate-btn {
     background: var(--bg-secondary, #f5f5f5);
@@ -333,9 +378,11 @@
         </div>
     </details>
     {% elif stats and stats.get('chapters_status') == 'generated' %}
-    <div class="section">
+    <div class="section" id="notes-generation-section">
         <div class="section-header">
             <h2>📚 详细笔记</h2>
+            <span id="notesGenerationCount" role="status" aria-live="polite"></span>
+            <span id="notesGenerationProgress" role="status" aria-live="polite"></span>
             {% if view_token %}
             <span id="generateNotesArea">
                 <button class="recalibrate-btn" id="generateNotesBtn" type="button" data-protected-action="generate_notes">
@@ -344,7 +391,7 @@
             </span>
             {% endif %}
         </div>
-        <div class="content">
+        <div class="content" id="notes-generation-content">
             {% if notes_state|default(None) == 'failed' %}
             <p style="color: #991b1b; font-style: italic;">详细笔记生成失败，可重新提交生成。</p>
             {% else %}
@@ -441,6 +488,210 @@
         'resummarize': { buttonId: 'resummarizeBtn', areaId: 'resummarizeArea', running: '总结提交中...' },
         'generate_notes': { buttonId: 'generateNotesBtn', areaId: 'generateNotesArea', running: '详细笔记提交中...' }
     };
+    var notesGenerationStartedAt = null;
+    var notesGenerationState = null;
+
+    function localNow() {
+        return window.Date.now();
+    }
+
+    function notesGenerationElements() {
+        var section = document.getElementById('notes-generation-section');
+        var content = document.getElementById('notes-generation-content');
+        if (!section || !content) return null;
+        var counter = document.getElementById('notesGenerationCount');
+        var progress = document.getElementById('notesGenerationProgress');
+        if (!counter || !progress) {
+            var header = section.querySelector('.section-header');
+            if (!header) return null;
+            if (!counter) {
+                counter = document.createElement('span');
+                counter.id = 'notesGenerationCount';
+                counter.setAttribute('role', 'status');
+                counter.setAttribute('aria-live', 'polite');
+                header.appendChild(counter);
+            }
+            if (!progress) {
+                progress = document.createElement('span');
+                progress.id = 'notesGenerationProgress';
+                progress.setAttribute('role', 'status');
+                progress.setAttribute('aria-live', 'polite');
+                header.appendChild(progress);
+            }
+        }
+        return { section: section, content: content, counter: counter, progress: progress };
+    }
+
+    function readNotesChapters() {
+        var dataNode = document.getElementById('chapters-data');
+        if (!dataNode || typeof dataNode.textContent !== 'string') return null;
+        try {
+            var parsed = JSON.parse(dataNode.textContent);
+            if (!Array.isArray(parsed)) return null;
+            return parsed.map(function(chapter) {
+                return chapter && typeof chapter === 'object' && !Array.isArray(chapter) ? chapter : {};
+            });
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function formatChapterStartTime(seconds) {
+        if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) return '';
+        var total = Math.floor(seconds);
+        var hours = Math.floor(total / 3600);
+        var remainder = total % 3600;
+        var minutes = Math.floor(remainder / 60);
+        var secondsPart = remainder % 60;
+        var paddedMinutes = String(minutes).padStart(2, '0');
+        var paddedSeconds = String(secondsPart).padStart(2, '0');
+        return hours > 0 ? hours + ':' + paddedMinutes + ':' + paddedSeconds : paddedMinutes + ':' + paddedSeconds;
+    }
+
+    function formatNotesElapsed(startedAt) {
+        var elapsedMs = localNow() - startedAt;
+        if (!Number.isFinite(elapsedMs) || elapsedMs < 0) elapsedMs = 0;
+        var totalSeconds = Math.floor(elapsedMs / 1000);
+        var minutes = Math.floor(totalSeconds / 60);
+        var seconds = String(totalSeconds % 60).padStart(2, '0');
+        return minutes + ':' + seconds;
+    }
+
+    function readNotesProgress(body) {
+        var progress = body && body.data && body.data.progress;
+        if (!progress || typeof progress.done !== 'number' || typeof progress.total !== 'number') return null;
+        if (!Number.isFinite(progress.done) || !Number.isFinite(progress.total)) return null;
+        if (!Number.isInteger(progress.done) || !Number.isInteger(progress.total)) return null;
+        if (progress.done < 0 || progress.total <= 0 || progress.done > progress.total) return null;
+        return progress;
+    }
+
+    function updateNotesGenerationProgress(body) {
+        if (!notesGenerationState || notesGenerationStartedAt === null) return;
+        var progress = readNotesProgress(body);
+        var message = progress
+            ? '详细笔记生成中 ' + progress.done + '/' + progress.total + ' 章 · 已用 ' + formatNotesElapsed(notesGenerationStartedAt)
+            : '详细笔记生成中 · 已用 ' + formatNotesElapsed(notesGenerationStartedAt);
+        notesGenerationState.progress.textContent = message;
+        if (progress) {
+            notesGenerationState.counter.textContent = '已生成 ' + progress.done + '/' + progress.total + ' 章';
+        }
+    }
+
+    function removeNotesGenerationSkeleton(preserveStartedAt) {
+        var state = notesGenerationState;
+        notesGenerationState = null;
+        if (!preserveStartedAt) notesGenerationStartedAt = null;
+        if (!state) return;
+        try {
+            // Restore live DOM nodes (DocumentFragment is emptied after appendChild).
+            state.content.textContent = '';
+            state.content.appendChild(state.originalContentFragment);
+            state.counter.textContent = '';
+            state.progress.textContent = '';
+            state.section.removeAttribute('aria-busy');
+        } catch (error) {
+            // Cleanup is best effort when the page DOM is already unavailable.
+        }
+    }
+
+    function renderNotesGenerationSkeleton() {
+        var elements = notesGenerationElements();
+        var chapters = readNotesChapters();
+        if (!elements || !chapters) return false;
+        // Keep original content as live DOM nodes (no innerHTML serialization).
+        var originalContentFragment = notesGenerationState
+            ? notesGenerationState.originalContentFragment
+            : null;
+        try {
+            // Re-render restores originals into content and empties the fragment;
+            // first render leaves content untouched. Re-capture nodes either way.
+            removeNotesGenerationSkeleton(true);
+            if (!originalContentFragment) {
+                originalContentFragment = document.createDocumentFragment();
+            }
+            while (elements.content.firstChild) {
+                originalContentFragment.appendChild(elements.content.firstChild);
+            }
+            var skeleton = document.createElement('div');
+            skeleton.className = 'notes-generation-skeleton';
+            skeleton.setAttribute('aria-hidden', 'true');
+            chapters.forEach(function(chapter) {
+                var placeholder = document.createElement('article');
+                placeholder.className = 'notes-generation-placeholder';
+                placeholder.setAttribute('aria-hidden', 'true');
+                var title = document.createElement('div');
+                title.className = 'notes-generation-placeholder-title';
+                title.textContent = typeof chapter.title === 'string' ? chapter.title : '';
+                var time = document.createElement('div');
+                time.className = 'notes-generation-placeholder-time';
+                time.textContent = formatChapterStartTime(chapter.start_time);
+                var line = document.createElement('span');
+                line.className = 'notes-generation-placeholder-line';
+                var shortLine = document.createElement('span');
+                shortLine.className = 'notes-generation-placeholder-line short';
+                placeholder.appendChild(title);
+                placeholder.appendChild(time);
+                placeholder.appendChild(line);
+                placeholder.appendChild(shortLine);
+                skeleton.appendChild(placeholder);
+            });
+            elements.content.textContent = '';
+            elements.content.appendChild(skeleton);
+            notesGenerationState = {
+                section: elements.section,
+                content: elements.content,
+                counter: elements.counter,
+                progress: elements.progress,
+                originalContentFragment: originalContentFragment,
+            };
+            elements.counter.textContent = '已生成 0/' + chapters.length + ' 章';
+            elements.section.setAttribute('aria-busy', 'true');
+            updateNotesGenerationProgress();
+            return true;
+        } catch (error) {
+            if (notesGenerationState) {
+                removeNotesGenerationSkeleton(true);
+            } else {
+                elements.content.textContent = '';
+                if (originalContentFragment) {
+                    elements.content.appendChild(originalContentFragment);
+                }
+                elements.counter.textContent = '';
+                elements.progress.textContent = '';
+                elements.section.removeAttribute('aria-busy');
+            }
+            return false;
+        }
+    }
+
+    function handleNotesGenerationViewFailure(elements, originalLabel) {
+        removeNotesGenerationSkeleton();
+        restoreActionButton(elements, originalLabel, formatActionError(new Error('Notes generation view unavailable')));
+        enableProtectedActionButtons();
+    }
+
+    function createNotesGenerationCallbacks(elements, originalLabel) {
+        return {
+            onAccepted: function() {
+                try {
+                    notesGenerationStartedAt = localNow();
+                    if (!renderNotesGenerationSkeleton()) {
+                        handleNotesGenerationViewFailure(elements, originalLabel);
+                    }
+                } catch (error) {
+                    handleNotesGenerationViewFailure(elements, originalLabel);
+                }
+            },
+            onPoll: function(body) {
+                try {
+                    updateNotesGenerationProgress(body);
+                } catch (error) {
+                    // The controller isolates this callback if the DOM changes mid-poll.
+                }
+            }
+        };
+    }
 
     function setAuthStatus(message, isError) {
         if (!authStatus) return;
@@ -626,7 +877,14 @@
                 if (!activePrompt) promptTrigger = elements.button;
                 elements.area.setAttribute('aria-busy', 'true');
                 elements.button.textContent = definition.running;
-                controller.runProtectedAction(actionName, transcriptViewToken).catch(function(error) {
+                var callbacks = actionName === 'generate_notes'
+                    ? createNotesGenerationCallbacks(elements, originalLabel)
+                    : null;
+                var actionPromise = callbacks
+                    ? controller.runProtectedAction(actionName, transcriptViewToken, callbacks)
+                    : controller.runProtectedAction(actionName, transcriptViewToken);
+                actionPromise.catch(function(error) {
+                    if (actionName === 'generate_notes') removeNotesGenerationSkeleton();
                     restoreActionButton(elements, originalLabel, formatActionError(error));
                     enableProtectedActionButtons();
                 });

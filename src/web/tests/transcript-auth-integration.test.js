@@ -18,7 +18,26 @@ function adapterSource() {
     .replace('{{ view_token|tojson }}', JSON.stringify('view-token-1'));
 }
 
-function createFixture({ token = 'cached-token', withAuth = true, withController = true, deferTimers = false } = {}) {
+function createFixture({
+  token = 'cached-token',
+  withAuth = true,
+  withController = true,
+  deferTimers = false,
+  chaptersData = JSON.stringify([
+    { title: '第一章', start_time: 65 },
+    { title: '第二章', start_time: 3661 },
+  ]),
+  withNotesSection = true,
+} = {}) {
+  const notesMarkup = withNotesSection ? `
+    <div class="section" id="notes-generation-section">
+      <div class="section-header">
+        <h2>📚 详细笔记</h2>
+        <span id="notesGenerationProgress" role="status" aria-live="polite"></span>
+      </div>
+      <div class="content" id="notes-generation-content"><p id="original-notes">按现有章节逐章生成更完整的阅读笔记。</p></div>
+    </div>
+    <script type="application/json" id="chapters-data">${chaptersData}</script>` : '';
   const dom = new JSDOM(`<!doctype html><body>
     <div id="protectedActionAuthStatus"></div>
     <dialog id="protectedActionAuthDialog" aria-labelledby="protectedActionAuthTitle" aria-describedby="protectedActionAuthDescription">
@@ -37,6 +56,7 @@ function createFixture({ token = 'cached-token', withAuth = true, withController
     <span id="recalibrateArea"><button id="recalibrateBtn" data-protected-action="recalibrate">recalibrate</button></span>
     <span id="resummarizeArea"><button id="resummarizeBtn" data-protected-action="resummarize">resummarize</button></span>
     <span id="generateNotesArea"><button id="generateNotesBtn" data-protected-action="generate_notes">generate notes</button></span>
+    ${notesMarkup}
   </body>`, { runScripts: 'outside-only', url: 'https://example.test/view/view-token-1' });
   const authStorage = {
     readAuthToken: vi.fn(() => token),
@@ -156,6 +176,71 @@ describe('transcript protected action page adapter', () => {
       'resummarize',
       'generate notes',
     ]);
+  });
+
+  it('renders notes skeleton progress and restores the original HTML after failure', async () => {
+    const fixture = createFixture();
+    let callbacks;
+    let rejectAction;
+    fixture.controller.runProtectedAction.mockImplementationOnce((_name, _token, actionCallbacks) => {
+      callbacks = actionCallbacks;
+      return new Promise((_resolve, reject) => { rejectAction = reject; });
+    });
+    const content = fixture.dom.window.document.querySelector('#notes-generation-content');
+    const originalHtml = content.innerHTML;
+    const button = fixture.dom.window.document.querySelector('#generateNotesBtn');
+
+    button.click();
+    await Promise.resolve();
+    callbacks.onAccepted({ code: 202, data: { task_id: 'notes-task' } });
+
+    expect(fixture.dom.window.document.querySelector('#notesGenerationCount').textContent)
+      .toBe('已生成 0/2 章');
+    expect(content.querySelector('#original-notes')).toBeNull();
+    expect(content.querySelector('#notes-generation-content')).toBeNull();
+    expect(content.querySelectorAll('[aria-current="true"]')).toHaveLength(0);
+
+    callbacks.onPoll({ data: { status: 'processing', progress: { done: 1, total: 2 } } });
+    expect(fixture.dom.window.document.querySelector('#notesGenerationCount').textContent)
+      .toBe('已生成 1/2 章');
+    expect(fixture.dom.window.document.querySelector('#notesGenerationProgress').textContent)
+      .toMatch(/^详细笔记生成中 1\/2 章 · 已用 \d+:\d{2}$/);
+
+    callbacks.onPoll({ data: { status: 'processing', progress: { done: 4, total: 2 } } });
+    expect(fixture.dom.window.document.querySelector('#notesGenerationProgress').textContent)
+      .toMatch(/^详细笔记生成中 · 已用 \d+:\d{2}$/);
+    expect(fixture.dom.window.document.querySelector('#notesGenerationCount').textContent)
+      .toBe('已生成 1/2 章');
+
+    rejectAction(new Error('Polling timeout'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(content.innerHTML).toBe(originalHtml);
+    expect(fixture.dom.window.document.querySelectorAll('#notes-generation-content')).toHaveLength(1);
+    expect(fixture.dom.window.document.querySelectorAll('#original-notes')).toHaveLength(1);
+    expect(button.disabled).toBe(false);
+  });
+
+  it('fails safely when chapters JSON or notes DOM is unavailable', async () => {
+    const malformed = createFixture({ chaptersData: '{not-json' });
+    malformed.controller.runProtectedAction.mockImplementationOnce((_name, _token, callbacks) => {
+      callbacks.onAccepted({ code: 202, data: { task_id: 'malformed-notes-task' } });
+      return Promise.resolve();
+    });
+    malformed.dom.window.document.querySelector('#generateNotesBtn').click();
+    await Promise.resolve();
+    const malformedContent = malformed.dom.window.document.querySelector('#notes-generation-content');
+    expect(malformedContent.textContent).toContain('按现有章节');
+
+    const missingDom = createFixture({ withNotesSection: false });
+    missingDom.controller.runProtectedAction.mockImplementationOnce((_name, _token, callbacks) => {
+      callbacks.onAccepted({ code: 202, data: { task_id: 'missing-notes-dom-task' } });
+      return Promise.resolve();
+    });
+    missingDom.dom.window.document.querySelector('#generateNotesBtn').click();
+    await Promise.resolve();
+    expect(missingDom.dom.window.document.querySelector('#generateNotesBtn').disabled).toBe(false);
   });
 
   it('does not open the prompt for a cached-token action', async () => {

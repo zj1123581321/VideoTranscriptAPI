@@ -5,6 +5,7 @@ manual end-to-end flows. This file focuses on isolated, pytest-based unit tests
 with tmp_path fixtures and no side effects.
 """
 import json
+import sqlite3
 import threading
 import time
 
@@ -1286,6 +1287,62 @@ class TestLLMStatusColumnMigration:
             columns = [col[1] for col in cursor.fetchall()]
         assert "calibration_status" in columns
         assert "summary_status" in columns
+        assert "progress" in columns
+
+    def test_legacy_rebuild_preserves_rows_and_progress(self, tmp_path):
+        db_path = tmp_path / "legacy-progress.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            """
+            CREATE TABLE task_status (
+                task_id TEXT PRIMARY KEY,
+                view_token TEXT NOT NULL UNIQUE,
+                url TEXT NOT NULL,
+                platform TEXT,
+                media_id TEXT,
+                status TEXT NOT NULL DEFAULT 'queued',
+                progress TEXT,
+                title TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO task_status
+                (task_id, view_token, url, platform, media_id, status, progress, title)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "legacy-task",
+                "legacy-view",
+                "https://example.com/legacy",
+                "youtube",
+                "legacy-media",
+                "processing",
+                json.dumps({"stage": "notes", "done": 1, "total": 2}),
+                "Legacy title",
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        cm = CacheManager(cache_dir=str(tmp_path / "cache"), db_path=str(db_path))
+        try:
+            task = cm.get_task_by_id("legacy-task")
+            assert task["url"] == "https://example.com/legacy"
+            assert task["progress"] == {"stage": "notes", "done": 1, "total": 2}
+        finally:
+            cm.close()
+
+        cm = CacheManager(cache_dir=str(tmp_path / "cache"), db_path=str(db_path))
+        try:
+            assert cm.get_task_by_id("legacy-task")["title"] == "Legacy title"
+            with cm._get_cursor() as cursor:
+                cursor.execute("PRAGMA table_info(task_status)")
+                columns = [column[1] for column in cursor.fetchall()]
+            assert columns.count("progress") == 1
+        finally:
+            cm.close()
 
     def test_migration_is_idempotent(self, cache_dir):
         """Re-initializing CacheManager against the same on-disk DB (simulating
@@ -1323,6 +1380,16 @@ class TestUpdateTaskStatusLLMStatusColumns:
         row = cm.get_task_by_id(task["task_id"])
         assert row["calibration_status"] is None
         assert row["summary_status"] is None
+
+    def test_progress_roundtrip_serializes_json_object(self, cm):
+        task = cm.create_task(url="https://example.com/progress")
+        progress = {"stage": "notes", "done": 2, "total": 5}
+
+        assert cm.update_task_status(
+            task["task_id"], TaskStatus.PROCESSING, progress=progress
+        ) is True
+
+        assert cm.get_task_by_id(task["task_id"])["progress"] == progress
 
 
 # ---------------------------------------------------------------------------

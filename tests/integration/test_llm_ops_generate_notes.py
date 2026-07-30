@@ -6,7 +6,7 @@ All console output must stay ASCII-only.
 import os
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -193,6 +193,9 @@ def test_notes_task_only_adds_notes_layer(notes_cache):
         chapter_count=1,
     )
     processor, notification_router, contexts = _notes_patches(notes_cache, result)
+    processor.process.side_effect = lambda **kwargs: (
+        kwargs["progress_callback"](1, 1) or result
+    )
     for context in contexts:
         context.start()
     try:
@@ -215,7 +218,11 @@ def test_notes_task_only_adds_notes_layer(notes_cache):
     processor.process.assert_called_once_with(
         cache_dir=snapshot["file_path"],
         selected_models={},
+        progress_callback=ANY,
     )
+    assert notes_cache.get_task_by_id(task_id)["progress"] == {
+        "stage": "notes", "done": 1, "total": 1
+    }
     notification_router.send_long_text.assert_called_once()
     long_text_call = notification_router.send_long_text.call_args.kwargs
     assert long_text_call["title"] == "Notes demo"
