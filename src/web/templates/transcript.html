@@ -289,7 +289,7 @@
     </details>
     {% endif %}
 
-    <div class="section">
+    <div class="section" id="summary-section">
         <div class="section-header">
             <h2>📝 内容总结</h2>
             {% if summary_html %}
@@ -321,7 +321,7 @@
     </div>
 
     {% if notes_html is defined and notes_html %}
-    <details class="section notes-section" open>
+    <details class="section notes-section" id="notes-section" open>
         <summary class="section-header">
             <h2>📚 详细笔记</h2>
             <span class="section-header-actions">
@@ -333,7 +333,7 @@
         </div>
     </details>
     {% elif stats and stats.get('chapters_status') == 'generated' %}
-    <div class="section">
+    <div class="section" id="notes-section">
         <div class="section-header">
             <h2>📚 详细笔记</h2>
             {% if view_token %}
@@ -360,7 +360,7 @@
     {% endif %}
 
     {% if calibrated_html %}
-    <div class="section">
+    <div class="section" id="calibrated-section">
         <div class="section-header">
             <h2>✨ 校对文本</h2>
             <div class="section-header-actions">

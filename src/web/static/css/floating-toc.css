@@ -296,6 +296,62 @@
     transition: color 0.3s ease;
 }
 
+/* ========== 全文档大纲树 ========== */
+.toc-outline-section {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.toc-outline-header {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+}
+
+.toc-outline-header > .toc-item {
+    flex: 1;
+    min-width: 0;
+}
+
+.toc-outline-parent {
+    font-weight: 600;
+}
+
+.toc-outline-toggle {
+    flex: 0 0 36px;
+    border: none;
+    border-left: 1px solid var(--toc-hairline);
+    background: none;
+    color: var(--toc-text-secondary);
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 0;
+}
+
+.toc-outline-toggle:hover {
+    background: var(--toc-hover);
+    color: var(--toc-active);
+}
+
+.toc-outline-children {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.toc-outline-section.toc-outline-collapsed > .toc-outline-children {
+    display: none;
+}
+
+.toc-link.toc-link-disabled {
+    color: var(--toc-text-secondary);
+    cursor: default;
+    opacity: 0.55;
+    pointer-events: none;
+}
+
 /* ========== 移动端样式 ========== */
 @media (max-width: 768px) {
     /* 隐藏 PC 端浮动 TOC */
