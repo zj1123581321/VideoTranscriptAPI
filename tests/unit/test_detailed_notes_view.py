@@ -8,8 +8,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 import jinja2
+import pytest
 
-from video_transcript_api.api.routes.views import _prepare_success_view
+from video_transcript_api.api.routes.views import (
+    _add_notes_chapter_anchors,
+    _prepare_success_view,
+    load_notes_anchor_chapters,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +32,27 @@ def test_prepare_success_view_renders_notes_with_chapter_anchors(tmp_path):
             {
                 "chapters_status": "generated",
                 "notes_status": "generated",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "llm_chapters.json").write_text(
+        json.dumps(
+            {
+                "chapters": [
+                    {
+                        "index": 0,
+                        "title": "Intro",
+                        "start_time": 0,
+                        "end_time": 60,
+                    },
+                    {
+                        "index": 1,
+                        "title": "Detail",
+                        "start_time": 60,
+                        "end_time": 120,
+                    },
+                ]
             }
         ),
         encoding="utf-8",
@@ -49,11 +75,167 @@ def test_prepare_success_view_renders_notes_with_chapter_anchors(tmp_path):
 
     assert stats["notes_length"] > 0
     assert stats["notes_status"] == "generated"
+    assert 'id="notes-chapter-0"' in view_data["notes_html"]
     assert 'id="notes-chapter-1"' in view_data["notes_html"]
-    assert 'id="notes-chapter-2"' in view_data["notes_html"]
     assert 'id="intro"' not in view_data["notes_html"]
     assert 'id="detail"' not in view_data["notes_html"]
     assert "<strong>Key claim</strong>" in view_data["notes_html"]
+
+
+def test_notes_anchors_match_formatted_chapter_headings_by_chapter_index():
+    chapters = [
+        {
+            "index": 7,
+            "title": "C++ [intro].",
+            "start_time": 0,
+            "end_time": 61,
+        },
+        {
+            "index": 11,
+            "title": "Second",
+            "start_time": None,
+            "end_time": None,
+        },
+    ]
+    notes_html = (
+        '<h2 class="first">[00:00:00 - 00:01:01] C++ [intro].</h2>'
+        "<p>First</p>"
+        "<h2>Second</h2>"
+    )
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert 'id="notes-chapter-7"' in result
+    assert 'id="notes-chapter-11"' in result
+    assert 'id="notes-chapter-0"' not in result
+
+
+def test_notes_anchor_mismatch_does_not_advance_chapter_pointer():
+    chapters = [
+        {"index": 3, "title": "First", "start_time": None, "end_time": None},
+        {"index": 4, "title": "Second", "start_time": None, "end_time": None},
+    ]
+    notes_html = "<h2>Unrelated</h2><h2>First</h2><h2>Second</h2>"
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert result.startswith("<h2>Unrelated</h2>")
+    assert '<h2 id="notes-chapter-3">First</h2>' in result
+    assert '<h2 id="notes-chapter-4">Second</h2>' in result
+
+
+def test_notes_anchor_skips_noise_and_matches_timed_nonconsecutive_indices():
+    chapters = [
+        {
+            "index": 4,
+            "title": "Rust 1.0 (稳定版) [重要]",
+            "start_time": 0,
+            "end_time": 61,
+        },
+        {
+            "index": 12,
+            "title": "后续内容",
+            "start_time": 61,
+            "end_time": 122,
+        },
+    ]
+    notes_html = (
+        "<h2>本章概要</h2>"
+        "<h2>Rust 1.0 (稳定版) [重要]</h2>"
+        "<h2>详细内容</h2>"
+        "<h2>[00:00:00 - 00:01:01] Rust 1.0 (稳定版) [重要]</h2>"
+        "<h2>[00:01:01 - 00:02:02] 后续内容</h2>"
+    )
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert '<h2>本章概要</h2>' in result
+    assert '<h2>Rust 1.0 (稳定版) [重要]</h2>' in result
+    assert '<h2>详细内容</h2>' in result
+    assert '<h2 id="notes-chapter-4">[00:00:00 - 00:01:01] Rust 1.0 (稳定版) [重要]</h2>' in result
+    assert '<h2 id="notes-chapter-12">[00:01:01 - 00:02:02] 后续内容</h2>' in result
+
+
+def test_notes_anchor_overwrites_chapter_id_and_preserves_nonchapter_attributes():
+    chapters = [{"index": 5, "title": "First", "start_time": None, "end_time": None}]
+    notes_html = (
+        '<h2 class="chapter" id="old-id" data-kind="notes">First</h2>'
+        '<h2 class="keep" id="keep-id" data-kind="other">Unrelated</h2>'
+    )
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert '<h2 id="notes-chapter-5" class="chapter" data-kind="notes">First</h2>' in result
+    assert '<h2 class="keep" id="keep-id" data-kind="other">Unrelated</h2>' in result
+
+
+@pytest.mark.parametrize(
+    "cache_setup",
+    [
+        "missing",
+        "corrupt",
+        "wrong_shape",
+        "empty",
+        "read_failure",
+    ],
+)
+def test_unavailable_notes_anchor_chapters_leave_html_unchanged(tmp_path, cache_setup):
+    if cache_setup == "corrupt":
+        (tmp_path / "llm_chapters.json").write_text("{", encoding="utf-8")
+    elif cache_setup == "wrong_shape":
+        (tmp_path / "llm_chapters.json").write_text(
+            json.dumps({"chapters": "not-a-list"}), encoding="utf-8"
+        )
+    elif cache_setup == "empty":
+        (tmp_path / "llm_chapters.json").write_text(
+            json.dumps({"chapters": []}), encoding="utf-8"
+        )
+    elif cache_setup == "read_failure":
+        cache_file = tmp_path / "cache-file"
+        cache_file.write_text("not-a-directory", encoding="utf-8")
+        tmp_path = cache_file
+
+    notes_html = '<h2 id="keep">First</h2>'
+    chapters = load_notes_anchor_chapters(tmp_path)
+
+    with patch("video_transcript_api.api.routes.views.logger.warning") as warning:
+        result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert result == notes_html
+    warning.assert_called_once_with(
+        "Notes chapter anchors skipped: chapter list unavailable"
+    )
+
+
+def test_notes_anchors_ignore_chapter_status_and_jump_gates(tmp_path):
+    (tmp_path / "llm_chapters.json").write_text(
+        json.dumps(
+            {
+                "chapters": [
+                    {"index": 0, "title": "First", "start_time": None, "end_time": None}
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "llm_status.json").write_text(
+        json.dumps({"chapters_status": "failed", "notes_status": "generated"}),
+        encoding="utf-8",
+    )
+    view_data = {
+        "cache_dir": str(tmp_path),
+        "summary": None,
+        "notes": "## First\n- Fact",
+        "notes_state": "generated",
+    }
+
+    with patch(
+        "video_transcript_api.api.routes.views.get_config",
+        return_value={"llm": {}},
+    ):
+        _prepare_success_view(view_data)
+
+    assert '<h2 id="notes-chapter-0">First</h2>' in view_data["notes_html"]
 
 
 def _render_notes_template(**overrides):
@@ -93,7 +275,7 @@ def _render_notes_template(**overrides):
 
 def test_generated_notes_render_foldable_section_and_exports():
     html = _render_notes_template(
-        notes_html='<h2 id="notes-chapter-1">Intro</h2><ul><li>Fact</li></ul>',
+        notes_html='<h2 id="notes-chapter-0">Intro</h2><ul><li>Fact</li></ul>',
         notes_state="generated",
         stats={
             "original_length": 100,
@@ -107,7 +289,7 @@ def test_generated_notes_render_foldable_section_and_exports():
 
     assert "详细笔记" in html
     assert 'id="notes-content-block"' in html
-    assert 'id="notes-chapter-1"' in html
+    assert 'id="notes-chapter-0"' in html
     assert "?raw=notes" in html
     assert "?page=notes" in html
     # The shared controller keeps the action mapping in the page script even
