@@ -82,13 +82,13 @@ def test_prepare_success_view_renders_notes_with_chapter_anchors(tmp_path):
     assert "<strong>Key claim</strong>" in view_data["notes_html"]
 
 
-def test_notes_anchors_match_formatted_chapter_headings_by_chapter_index():
+def test_notes_anchors_match_titles_with_different_persisted_times():
     chapters = [
         {
             "index": 7,
             "title": "C++ [intro].",
-            "start_time": 0,
-            "end_time": 61,
+            "start_time": 600,
+            "end_time": None,
         },
         {
             "index": 11,
@@ -98,7 +98,7 @@ def test_notes_anchors_match_formatted_chapter_headings_by_chapter_index():
         },
     ]
     notes_html = (
-        '<h2 class="first">[00:00:00 - 00:01:01] C++ [intro].</h2>'
+        '<h2 class="first">[00:10:00 - 00:12:00] C++ [intro].</h2>'
         "<p>First</p>"
         "<h2>Second</h2>"
     )
@@ -108,6 +108,25 @@ def test_notes_anchors_match_formatted_chapter_headings_by_chapter_index():
     assert 'id="notes-chapter-7"' in result
     assert 'id="notes-chapter-11"' in result
     assert 'id="notes-chapter-0"' not in result
+
+
+def test_notes_anchors_do_not_cascade_after_time_mismatch():
+    chapters = [
+        {"index": 0, "title": "First", "start_time": 0, "end_time": 60},
+        {"index": 1, "title": "Second", "start_time": 720, "end_time": 840},
+        {"index": 2, "title": "Third", "start_time": 840, "end_time": 960},
+    ]
+    notes_html = (
+        "<h2>[00:10:00 - 00:12:00] First</h2>"
+        "<h2>[00:12:00 - 00:14:00] Second</h2>"
+        "<h2>[00:14:00 - 00:16:00] Third</h2>"
+    )
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert 'id="notes-chapter-0"' in result
+    assert 'id="notes-chapter-1"' in result
+    assert 'id="notes-chapter-2"' in result
 
 
 def test_notes_anchor_mismatch_does_not_advance_chapter_pointer():
@@ -141,10 +160,10 @@ def test_notes_anchor_skips_noise_and_matches_timed_nonconsecutive_indices():
     ]
     notes_html = (
         "<h2>本章概要</h2>"
+        "<h2>[00:10:00 - 00:12:00] Rust 1.0 (稳定版) [重要]</h2>"
         "<h2>Rust 1.0 (稳定版) [重要]</h2>"
         "<h2>详细内容</h2>"
-        "<h2>[00:00:00 - 00:01:01] Rust 1.0 (稳定版) [重要]</h2>"
-        "<h2>[00:01:01 - 00:02:02] 后续内容</h2>"
+        "<h2>[00:12:00 - 00:14:00] 后续内容</h2>"
     )
 
     result = _add_notes_chapter_anchors(notes_html, chapters)
@@ -152,8 +171,32 @@ def test_notes_anchor_skips_noise_and_matches_timed_nonconsecutive_indices():
     assert '<h2>本章概要</h2>' in result
     assert '<h2>Rust 1.0 (稳定版) [重要]</h2>' in result
     assert '<h2>详细内容</h2>' in result
-    assert '<h2 id="notes-chapter-4">[00:00:00 - 00:01:01] Rust 1.0 (稳定版) [重要]</h2>' in result
-    assert '<h2 id="notes-chapter-12">[00:01:01 - 00:02:02] 后续内容</h2>' in result
+    assert '<h2 id="notes-chapter-4">[00:10:00 - 00:12:00] Rust 1.0 (稳定版) [重要]</h2>' in result
+    assert '<h2 id="notes-chapter-12">[00:12:00 - 00:14:00] 后续内容</h2>' in result
+
+
+def test_notes_anchor_does_not_reuse_consumed_chapter_for_duplicate_bare_title():
+    chapters = [
+        {"index": 0, "title": "First", "start_time": None, "end_time": None},
+        {"index": 1, "title": "Second", "start_time": None, "end_time": None},
+    ]
+    notes_html = "<h2>First</h2><h2>First</h2><h2>Second</h2>"
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert result.count('id="notes-chapter-0"') == 1
+    assert '<h2>First</h2>' in result
+    assert '<h2 id="notes-chapter-1">Second</h2>' in result
+
+
+def test_notes_anchor_rejects_invalid_time_prefix_without_advancing_pointer():
+    chapters = [{"index": 0, "title": "标题", "start_time": None, "end_time": None}]
+    notes_html = "<h2>[备注] 标题</h2><h2>标题</h2>"
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert "<h2>[备注] 标题</h2>" in result
+    assert '<h2 id="notes-chapter-0">标题</h2>' in result
 
 
 def test_notes_anchor_overwrites_chapter_id_and_preserves_nonchapter_attributes():

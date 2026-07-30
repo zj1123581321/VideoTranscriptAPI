@@ -26,11 +26,6 @@ from ...utils.rendering import (
     render_markdown_to_html,
     render_transcript_content,
 )
-from ...llm.processors.notes_processor import (
-    NotesChapterSlice,
-    _format_chapter_heading,
-)
-from ...transcriber.segments import parse_time_to_seconds
 from ...utils.timeutil import format_datetime_for_display
 from ...utils.llm_status import CalibrationStatus, ChaptersStatus, NotesStatus
 
@@ -1030,34 +1025,16 @@ def load_notes_anchor_chapters(
     return chapters
 
 
-def _build_notes_anchor_chapter(chapter: Mapping[str, Any]) -> NotesChapterSlice:
-    """Adapt one persisted chapter to the notes processor heading formatter."""
-    chapter_index = chapter.get("index")
-    title = chapter.get("title")
-    if (
-        isinstance(chapter_index, bool)
-        or not isinstance(chapter_index, int)
-        or not isinstance(title, str)
-        or not title.strip()
-    ):
-        raise ValueError("invalid notes anchor chapter")
-
-    return NotesChapterSlice(
-        index=chapter_index,
-        title=title.strip(),
-        gist="",
-        start_seg=0,
-        end_seg=0,
-        segments=(),
-        start_time=parse_time_to_seconds(chapter.get("start_time")),
-        end_time=parse_time_to_seconds(chapter.get("end_time")),
-    )
-
-
 def _normalize_notes_heading_text(value: str) -> str:
     """Normalize rendered h2 text to browser-like plain heading text."""
     without_tags = re.sub(r"<[^>]*>", "", value)
     return re.sub(r"\s+", " ", unescape(without_tags)).strip()
+
+
+# Match only the complete ``[HH:MM:SS - HH:MM:SS]`` prefix.
+_NOTES_HEADING_TIME_PREFIX_RE = re.compile(
+    r"^\[\d{2}:\d{2}:\d{2} - \d{2}:\d{2}:\d{2}\]\s*"
+)
 
 
 def _add_notes_chapter_anchors(
@@ -1070,12 +1047,18 @@ def _add_notes_chapter_anchors(
         return notes_html
 
     try:
-        expected_headings = [
-            _normalize_notes_heading_text(
-                _format_chapter_heading(_build_notes_anchor_chapter(chapter))[3:]
-            )
-            for chapter in chapters
-        ]
+        expected_titles = []
+        for chapter in chapters:
+            chapter_index = chapter.get("index")
+            title = chapter.get("title")
+            if (
+                isinstance(chapter_index, bool)
+                or not isinstance(chapter_index, int)
+                or not isinstance(title, str)
+                or not title.strip()
+            ):
+                raise ValueError("invalid notes anchor chapter")
+            expected_titles.append(title.strip())
     except Exception:
         logger.warning("Notes chapter anchors skipped: chapter list unavailable")
         return notes_html
@@ -1084,11 +1067,18 @@ def _add_notes_chapter_anchors(
 
     def _replace_heading(match: re.Match[str]) -> str:
         nonlocal chapter_pointer
-        if chapter_pointer >= len(expected_headings):
+        if chapter_pointer >= len(expected_titles):
             return match.group(0)
 
         heading_text = _normalize_notes_heading_text(match.group("content"))
-        if heading_text != expected_headings[chapter_pointer]:
+        expected_title = expected_titles[chapter_pointer]
+        matches_title = heading_text == expected_title
+        if not matches_title:
+            prefix_match = _NOTES_HEADING_TIME_PREFIX_RE.match(heading_text)
+            matches_title = bool(
+                prefix_match and heading_text[prefix_match.end() :] == expected_title
+            )
+        if not matches_title:
             return match.group(0)
 
         chapter = chapters[chapter_pointer]
