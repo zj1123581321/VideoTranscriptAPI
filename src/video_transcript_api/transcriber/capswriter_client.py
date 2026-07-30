@@ -263,6 +263,14 @@ def _split_long_segment(segment: Dict[str, Any], max_len: int) -> List[Dict[str,
         orig_end,
         [split_segment["text"] for split_segment in split_segments],
     )
+    if orig_start is not None and orig_end is not None and orig_start == orig_end:
+        # Adapter compatibility branch: the legacy CapsWriter path preserved
+        # equal start/end timestamps for zero-span split segments. Keep that
+        # behavior here while the shared interpolator retains end <= start ->
+        # None for its honest general-purpose contract.
+        time_pairs = [
+            (orig_start, orig_end) for _ in split_segments
+        ]
     for split_segment, (start_time, end_time) in zip(split_segments, time_pairs):
         split_segment["start_time"] = (
             round(start_time, 2) if start_time is not None else None
