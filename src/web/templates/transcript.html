@@ -10,7 +10,6 @@
 <details class="owner-menu" id="ownerMenu">
     <summary class="owner-menu-summary" aria-label="所有者操作菜单">
         <span class="owner-menu-icon" aria-hidden="true">⚙</span>
-        <span class="owner-menu-token-dot" id="ownerMenuTokenDot" hidden aria-hidden="true"></span>
     </summary>
     <div class="owner-menu-panel">
         <nav class="site-nav">
@@ -122,6 +121,10 @@
 .protected-action-auth-tools .dialog-status { flex: 1 1 100%; margin-top: 0; }
 
 /* Owner gear menu in transcript header (details/summary, same pattern as export/LLM panels). */
+/* Gear + theme toggle are absolutely positioned; keep h1 clear of that row on all widths. */
+.header h1 {
+    margin-top: 52px;
+}
 .owner-menu {
     position: absolute;
     top: 20px;
@@ -159,16 +162,6 @@
     border-color: rgba(0, 0, 0, 0.3);
 }
 [data-theme="dark"] .owner-menu-summary:hover { background: rgba(0, 0, 0, 0.3); }
-.owner-menu-token-dot {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #34d399;
-    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15);
-}
 .owner-menu-panel {
     position: absolute;
     top: calc(100% + 8px);
@@ -229,7 +222,6 @@
 }
 .owner-menu-danger {
     font-size: 0.8rem;
-    min-height: 36px;
     opacity: 0.72;
     color: var(--text-secondary, #666);
 }
@@ -1042,9 +1034,6 @@
             promptForToken().then(function(token) {
                 if (authStorage.writeAuthToken(token) === false) throw new Error('Protected action token save failed');
                 setAuthStatus('访问令牌已更新。', false);
-                if (typeof window.__vtaRefreshOwnerMenuTokenDot === 'function') {
-                    window.__vtaRefreshOwnerMenuTokenDot();
-                }
             }).catch(function(error) {
                 if (error && error.message !== 'Protected action token prompt cancelled') setAuthStatus(formatActionError(error), true);
             });
@@ -1055,9 +1044,6 @@
                 return;
             }
             setAuthStatus('访问令牌已清除。', false);
-            if (typeof window.__vtaRefreshOwnerMenuTokenDot === 'function') {
-                window.__vtaRefreshOwnerMenuTokenDot();
-            }
         });
     }
 
@@ -1066,7 +1052,7 @@
 </script>
 {% endif %}
 <script>
-/* Owner gear menu: close on outside click / Escape; optional token-present indicator. */
+/* Owner gear menu: close on outside click / Escape. */
 (function installOwnerMenu() {
     'use strict';
 
@@ -1087,32 +1073,6 @@
         if (event.key === 'Escape' || event.key === 'Esc') {
             closeOwnerMenu();
         }
-    });
-
-    function refreshTokenDot() {
-        var dot = document.getElementById('ownerMenuTokenDot');
-        if (!dot) return;
-        var authStorage = window.VideoTranscriptAuthStorage;
-        var hasToken = false;
-        try {
-            if (authStorage && typeof authStorage.readAuthToken === 'function') {
-                var token = authStorage.readAuthToken();
-                hasToken = !!(token && String(token).length);
-            }
-        } catch (error) {
-            hasToken = false;
-        }
-        if (hasToken) {
-            dot.hidden = false;
-        } else {
-            dot.hidden = true;
-        }
-    }
-
-    window.__vtaRefreshOwnerMenuTokenDot = refreshTokenDot;
-    refreshTokenDot();
-    window.addEventListener('storage', function() {
-        refreshTokenDot();
     });
 })();
 </script>
