@@ -205,6 +205,65 @@ def test_notes_anchors_match_titles_with_different_persisted_times():
     assert 'id="notes-chapter-0"' not in result
 
 
+def test_notes_anchor_prefers_timed_heading_over_earlier_bare_heading():
+    chapters = [
+        {"index": 0, "title": "First", "start_time": 0, "end_time": 60},
+        {"index": 1, "title": "Second", "start_time": 60, "end_time": 120},
+    ]
+    notes_html = (
+        "<h2>[00:00:00 - 00:01:00] First</h2>"
+        "<h2>Second</h2>"
+        "<h2>[00:01:00 - 00:02:00] Second</h2>"
+    )
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert '<h2 id="notes-chapter-0">[00:00:00 - 00:01:00] First</h2>' in result
+    assert "<h2>Second</h2>" in result
+    assert '<h2 id="notes-chapter-1">[00:01:00 - 00:02:00] Second</h2>' in result
+
+
+def test_notes_anchor_uses_bare_heading_when_no_timed_version_exists():
+    chapters = [
+        {"index": 0, "title": "First", "start_time": 0, "end_time": 60}
+    ]
+
+    result = _add_notes_chapter_anchors("<h2>First</h2>", chapters)
+
+    assert result == '<h2 id="notes-chapter-0">First</h2>'
+
+
+def test_notes_anchor_matches_same_timed_title_chapters_in_order():
+    chapters = [
+        {"index": 3, "title": "Same", "start_time": 0, "end_time": 60},
+        {"index": 8, "title": "Same", "start_time": 60, "end_time": 120},
+    ]
+    notes_html = (
+        "<h2>[00:00:00 - 00:01:00] Same</h2>"
+        "<h2>[00:01:00 - 00:02:00] Same</h2>"
+    )
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert '<h2 id="notes-chapter-3">[00:00:00 - 00:01:00] Same</h2>' in result
+    assert '<h2 id="notes-chapter-8">[00:01:00 - 00:02:00] Same</h2>' in result
+
+
+def test_notes_anchor_keeps_position_when_chapter_heading_is_missing():
+    chapters = [
+        {"index": 0, "title": "First", "start_time": 0, "end_time": 60},
+        {"index": 1, "title": "Missing", "start_time": 60, "end_time": 120},
+        {"index": 2, "title": "Second", "start_time": 120, "end_time": 180},
+    ]
+    notes_html = "<h2>First</h2><h2>Second</h2>"
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert '<h2 id="notes-chapter-0">First</h2>' in result
+    assert '<h2 id="notes-chapter-2">Second</h2>' in result
+    assert 'id="notes-chapter-1"' not in result
+
+
 def test_notes_anchors_do_not_cascade_after_time_mismatch():
     chapters = [
         {"index": 0, "title": "First", "start_time": 0, "end_time": 60},

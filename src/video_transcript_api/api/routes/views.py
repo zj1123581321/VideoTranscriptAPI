@@ -1065,43 +1065,68 @@ def _add_notes_chapter_anchors(
         logger.warning("Notes chapter anchors skipped: chapter list unavailable")
         return notes_html
 
-    chapter_pointer = 0
-
-    def _replace_heading(match: re.Match[str]) -> str:
-        nonlocal chapter_pointer
-        if chapter_pointer >= len(expected_titles):
-            return match.group(0)
-
-        heading_text = _normalize_notes_heading_text(match.group("content"))
-        expected_title = expected_titles[chapter_pointer]
-        matches_title = heading_text == expected_title
-        if not matches_title:
-            prefix_match = _NOTES_HEADING_TIME_PREFIX_RE.match(heading_text)
-            matches_title = bool(
-                prefix_match and heading_text[prefix_match.end() :] == expected_title
-            )
-        if not matches_title:
-            return match.group(0)
-
-        chapter = chapters[chapter_pointer]
-        attributes = re.sub(
-            r"""\s+id\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""",
-            "",
-            match.group("attributes") or "",
-            flags=re.IGNORECASE,
-        )
-        chapter_pointer += 1
-        return (
-            f'<h2 id="notes-chapter-{chapter["index"]}"{attributes}>'
-            f'{match.group("content")}</h2>'
-        )
-
-    return re.sub(
+    headings = []
+    for match in re.finditer(
         r"<h2(?P<attributes>[^>]*)>(?P<content>.*?)</h2>",
-        _replace_heading,
         notes_html,
         flags=re.IGNORECASE | re.DOTALL,
-    )
+    ):
+        headings.append(
+            {
+                "match": match,
+                "span": match.span(),
+                "attributes": match.group("attributes") or "",
+                "content": match.group("content"),
+                "heading_text": _normalize_notes_heading_text(
+                    match.group("content")
+                ),
+            }
+        )
+
+    assigned = {}
+    pos = 0
+    for chapter, expected_title in zip(chapters, expected_titles):
+        timed_candidate = None
+        bare_candidate = None
+        for heading_index in range(pos, len(headings)):
+            heading_text = headings[heading_index]["heading_text"]
+            prefix_match = _NOTES_HEADING_TIME_PREFIX_RE.match(heading_text)
+            if prefix_match and heading_text[prefix_match.end() :] == expected_title:
+                timed_candidate = heading_index
+                break
+            if bare_candidate is None and heading_text == expected_title:
+                bare_candidate = heading_index
+
+        heading_index = (
+            timed_candidate if timed_candidate is not None else bare_candidate
+        )
+        if heading_index is not None:
+            assigned[heading_index] = chapter["index"]
+            pos = heading_index + 1
+
+    rebuilt = []
+    last_end = 0
+    for heading_index, heading in enumerate(headings):
+        start, end = heading["span"]
+        rebuilt.append(notes_html[last_end:start])
+        chapter_index = assigned.get(heading_index)
+        if chapter_index is None:
+            rebuilt.append(heading["match"].group(0))
+        else:
+            attributes = re.sub(
+                r"""\s+id\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""",
+                "",
+                heading["attributes"],
+                flags=re.IGNORECASE,
+            )
+            rebuilt.append(
+                f'<h2 id="notes-chapter-{chapter_index}"{attributes}>'
+                f'{heading["content"]}</h2>'
+            )
+        last_end = end
+
+    rebuilt.append(notes_html[last_end:])
+    return "".join(rebuilt)
 
 
 def _prepare_success_view(view_data: Dict[str, Any]) -> Dict[str, Any]:
