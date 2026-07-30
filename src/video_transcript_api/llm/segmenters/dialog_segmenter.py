@@ -160,14 +160,22 @@ class DialogSegmenter:
             [sub_dialog.get("text", "") for sub_dialog in sub_dialogs],
         )
 
+        # Format each shared boundary once with a single template so adjacent
+        # fragment end/start strings stay identical by construction.
         formatted_pairs: List[Tuple[str, str]] = []
-        for pair in time_pairs:
-            start_time = self._format_dialog_timestamp(pair[0], start_raw)
-            end_time = self._format_dialog_timestamp(pair[1], end_raw)
-            if start_time is None or end_time is None:
-                formatted_pairs = []
-                break
-            formatted_pairs.append((start_time, end_time))
+        template = self._pick_dialog_timestamp_template(start_raw, end_raw)
+        if template is not None and time_pairs:
+            boundaries = [time_pairs[0][0]]
+            boundaries.extend(pair[1] for pair in time_pairs)
+            formatted_boundaries = [
+                self._format_dialog_timestamp(boundary, template)
+                for boundary in boundaries
+            ]
+            if all(value is not None for value in formatted_boundaries):
+                formatted_pairs = [
+                    (formatted_boundaries[index], formatted_boundaries[index + 1])
+                    for index in range(len(time_pairs))
+                ]
 
         can_estimate = len(formatted_pairs) == len(sub_dialogs)
         if can_estimate:
@@ -184,12 +192,6 @@ class DialogSegmenter:
                 and end_time > start_time
                 for start_time, end_time in formatted_seconds
             )
-            if can_estimate:
-                can_estimate = all(
-                    formatted_seconds[index][0]
-                    == formatted_seconds[index - 1][1]
-                    for index in range(1, len(formatted_seconds))
-                )
 
         for index, sub_dialog in enumerate(sub_dialogs):
             sub_dialog["time_estimated"] = True
@@ -213,6 +215,40 @@ class DialogSegmenter:
                 f"text_length={len(dialog.get('text', ''))} "
                 f"parts={len(sub_dialogs)}"
             )
+
+    @staticmethod
+    def _timestamp_template_decimal_places(template: Any) -> Optional[int]:
+        """Return second-field decimal places for a usable clock template, else None."""
+        if not isinstance(template, str):
+            return None
+
+        parts = template.strip().split(":")
+        if len(parts) not in (2, 3) or any(
+            not re.fullmatch(r"\d+(?:\.\d+)?", part) for part in parts
+        ):
+            return None
+
+        second_template = parts[-1]
+        if "." not in second_template:
+            return 0
+        return len(second_template.split(".", 1)[1])
+
+    @classmethod
+    def _pick_dialog_timestamp_template(
+        cls, start_raw: Any, end_raw: Any
+    ) -> Optional[str]:
+        """Pick a single format template: the usable end with more decimal places."""
+        best_template: Optional[str] = None
+        best_places = -1
+        for raw in (start_raw, end_raw):
+            places = cls._timestamp_template_decimal_places(raw)
+            if places is None:
+                continue
+            # Prefer higher precision so both endpoints remain expressible.
+            if places > best_places:
+                best_places = places
+                best_template = raw.strip()
+        return best_template
 
     @staticmethod
     def _format_dialog_timestamp(

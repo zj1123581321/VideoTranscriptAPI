@@ -214,6 +214,38 @@ class TestDialogSegmenter:
         assert all(dialog["end_time"] is None for dialog in fragments)
         assert all(dialog["duration"] is None for dialog in fragments)
 
+    def test_mixed_precision_endpoints_keep_contiguous_timeline(
+        self, dialog_segmenter
+    ):
+        """Different start/end decimal precision must not wipe the timeline."""
+        sentence = "中性测试句子。"
+        dialogs = [
+            {
+                "speaker": "A",
+                "text": sentence * 100,
+                "start_time": "00:00:00",
+                "end_time": "00:00:10.0",
+            }
+        ]
+
+        result = dialog_segmenter.segment(dialogs)
+        fragments = [dialog for chunk in result for dialog in chunk]
+
+        assert len(fragments) > 1
+        assert all(dialog["start_time"] is not None for dialog in fragments)
+        assert all(dialog["end_time"] is not None for dialog in fragments)
+        assert all(dialog["duration"] is not None for dialog in fragments)
+        assert all(dialog["time_estimated"] is True for dialog in fragments)
+
+        assert parse_time_to_seconds(fragments[0]["start_time"]) == parse_time_to_seconds(
+            "00:00:00"
+        )
+        assert parse_time_to_seconds(fragments[-1]["end_time"]) == parse_time_to_seconds(
+            "00:00:10.0"
+        )
+        for index in range(1, len(fragments)):
+            assert fragments[index - 1]["end_time"] == fragments[index]["start_time"]
+
     def test_short_tail_merged(self, dialog_segmenter):
         """Very short last chunk should be merged into previous."""
         dialogs = [
