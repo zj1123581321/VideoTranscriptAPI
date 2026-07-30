@@ -228,10 +228,11 @@ describe('transcript protected action page adapter', () => {
     const malformed = createFixture({ chaptersData: '{not-json' });
     const malformedError = vi.spyOn(malformed.dom.window.console, 'error').mockImplementation(() => {});
     let malformedCallbacks;
+    let rejectMalformedAction;
     malformed.controller.runProtectedAction.mockImplementationOnce((_name, _token, callbacks) => {
       malformedCallbacks = callbacks;
       callbacks.onAccepted({ code: 202, data: { task_id: 'malformed-notes-task' } });
-      return Promise.resolve();
+      return new Promise((_resolve, reject) => { rejectMalformedAction = reject; });
     });
     const malformedButton = malformed.dom.window.document.querySelector('#generateNotesBtn');
     malformedButton.click();
@@ -250,6 +251,17 @@ describe('transcript protected action page adapter', () => {
     malformedCallbacks.onPoll({ data: { status: 'processing', progress: { done: 1, total: 2 } } });
     expect(malformed.dom.window.document.querySelector('#notesGenerationProgress').textContent)
       .toMatch(/^详细笔记生成中 1\/2 章 · 已用 \d+:\d{2}$/);
+
+    malformed.dom.window.document.querySelector('#notesGenerationCount').textContent = '残留计数';
+    rejectMalformedAction(new Error('Malformed chapters failure'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(malformed.dom.window.document.querySelector('#notesGenerationProgress').textContent).toBe('');
+    expect(malformed.dom.window.document.querySelector('#notesGenerationCount').textContent).toBe('');
+    expect(malformedButton.disabled).toBe(false);
+    expect(malformed.dom.window.document.querySelector('.recalibrate-error').textContent)
+      .toBe('Malformed chapters failure');
 
     const missingDom = createFixture({ withNotesSection: false });
     const missingDomError = vi.spyOn(missingDom.dom.window.console, 'error').mockImplementation(() => {});

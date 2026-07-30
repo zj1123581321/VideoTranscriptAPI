@@ -586,7 +586,17 @@
         var state = notesGenerationState;
         notesGenerationState = null;
         if (!preserveStartedAt) notesGenerationStartedAt = null;
-        if (!state) return;
+        if (!state) {
+            try {
+                var progress = document.getElementById('notesGenerationProgress');
+                var counter = document.getElementById('notesGenerationCount');
+                if (progress) progress.textContent = '';
+                if (counter) counter.textContent = '';
+            } catch (error) {
+                // Cleanup is best effort when the page DOM is already unavailable.
+            }
+            return;
+        }
         try {
             // Restore live DOM nodes (DocumentFragment is emptied after appendChild).
             state.content.textContent = '';
