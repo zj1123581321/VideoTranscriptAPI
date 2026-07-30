@@ -3,21 +3,23 @@
  * Responsive design for desktop and mobile.
  *
  * Features:
- * - Builds a page-order outline tree for summary, detailed notes, and
- *   calibrated transcript sections
+ * - Builds one directory tree containing summary headings, a chapter axis,
+ *   detailed notes, and calibrated transcript full-text leaves
  * - Chapters are read from the #chapters-data JSON island
  *   (items: {index,title,gist,start_time,start_seg,jump_ok}); a chapter row
- *   shows time + title + full gist and jumps to the inline
- *   #chapter-anchor-{index} header (fallback #dlg-{start_seg})
- * - Chapter pages: panel with "chapters | outline" tabs, current chapter
- *   tracking via IntersectionObserver on .chapter-anchor
+ *   shows time + title + full gist and targets notes-chapter-{index}, then
+ *   chapter-anchor-{index}, then dlg-{start_seg}. The latter two targets are
+ *   gated by jump_ok; rows remain visible but muted and disabled when they
+ *   cannot jump.
+ * - Chapter pages track the current chapter through notes and calibrated
+ *   anchors, while summary headings and full-text sections use scrollspy
  * - Breakpoints on chapter pages:
  *     >=1400px: docked expanded panel, body gets a right margin (toc-wide-margin)
  *     769-1399px: overlay panel, expanded by default, manually collapsible
  *       (state in localStorage key vta_toc_panel_collapsed)
  *     <=768px: sticky current-chapter bar + FAB + bottom drawer
- * - Pages without chapters keep the legacy behavior (collapsed indicator bar,
- *   hover/pin to expand, localStorage key vta_toc_pinned)
+ * - Pages without chapters use a collapsed indicator bar with optional pinning
+ *   (localStorage key vta_toc_pinned)
  * - Scroll highlight + smooth jump
  * - XSS: build all user/chapter text via DOM API + textContent only
  *   (never HTML-string concatenation of titles)
@@ -41,9 +43,9 @@
     // ========== State ==========
     let tocData = {
         headings: [],
-        notesHeadings: [],
+        summarySection: null,
+        notesSection: null,
         calibratedSection: null,
-        outlineSections: [],
         chapters: []
     };
 
@@ -243,19 +245,40 @@
         return headings;
     }
 
+    function parseChapterAnchorIndex(anchorId, prefix) {
+        const match = anchorId.match(new RegExp('^' + prefix + '-(\\d+)$'));
+        return match ? Number(match[1]) : null;
+    }
+
     /**
-     * Read note chapters only from the server-owned notes content block.
-     * The notes chapter id is the stable scroll target, not generated text.
+     * Append the original calibrated-text jump to every note chapter heading
+     * that has the matching zero-based chapter anchor.
      */
-    function extractNotesHeadings() {
-        return Array.from(document.querySelectorAll(
+    function appendNotesSourceLinks() {
+        document.querySelectorAll(
             '#notes-content-block h2[id^="notes-chapter-"]'
-        )).map((element) => ({
-            level: 2,
-            text: element.textContent.trim(),
-            id: element.id,
-            element: element
-        })).filter(heading => heading.text);
+        ).forEach((heading) => {
+            const chapterIndex = parseChapterAnchorIndex(
+                heading.id,
+                'notes-chapter'
+            );
+            if (chapterIndex === null) return;
+
+            const sourceId = 'chapter-anchor-' + chapterIndex;
+            if (!document.getElementById(sourceId)) return;
+            if (heading.querySelector('a.notes-source-link')) return;
+
+            heading.appendChild(document.createTextNode(' '));
+            const sourceLink = createEl('a', 'notes-source-link', '原文 ↗');
+            sourceLink.setAttribute('href', '#' + sourceId);
+            heading.appendChild(sourceLink);
+        });
+    }
+
+    function findNotesSection() {
+        return document.getElementById('notes-content-block')
+            ? findOutlineSection('详细笔记')
+            : null;
     }
 
     function findCalibratedSection() {
@@ -263,8 +286,7 @@
     }
 
     /**
-     * Assign stable section ids used by the outline parent links.
-     * The calibrated fallback keeps the existing #calibrated-section target.
+     * Assign stable section ids used by the full-text leaf links.
      */
     function ensureOutlineSectionId(section, fallbackId) {
         if (!section.id) {
@@ -274,55 +296,9 @@
     }
 
     /**
-     * Build top-level outline nodes in page order; collapsed state is local
-     * DOM state and is deliberately not persisted.
-     */
-    function buildOutlineSections() {
-        const definitions = [
-            {
-                key: 'summary',
-                label: '内容总结',
-                section: findOutlineSection('内容总结'),
-                children: tocData.headings,
-                fallbackId: 'summary-section'
-            },
-            {
-                key: 'notes',
-                label: '详细笔记',
-                section: findOutlineSection('详细笔记'),
-                children: tocData.notesHeadings,
-                fallbackId: 'notes-section'
-            },
-            {
-                key: 'calibrated',
-                label: '校对文本',
-                section: tocData.calibratedSection,
-                children: tocData.chapters,
-                fallbackId: 'calibrated-section'
-            }
-        ];
-
-        return definitions
-            .filter(definition => definition.section)
-            .map(definition => ({
-                key: definition.key,
-                label: definition.label,
-                section: definition.section,
-                sectionId: ensureOutlineSectionId(
-                    definition.section,
-                    definition.fallbackId
-                ),
-                children: definition.children
-            }))
-            .sort((left, right) => {
-                const order = left.section.compareDocumentPosition(right.section);
-                return order & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-            });
-    }
-
-    /**
-     * Read chapters from the #chapters-data JSON island.
-     * Only jumpable chapters (jump_ok) get a jump target.
+     * Read chapters from the #chapters-data JSON island. The row target
+     * priority is notes anchor, jumpable calibrated anchor, then #dlg-
+     * fallback; a row remains visible even when none exists.
      */
     function readChaptersData() {
         const island = document.getElementById('chapters-data');
@@ -356,8 +332,28 @@
             let startSeg = parseInt(ch.start_seg, 10);
             if (isNaN(startSeg)) startSeg = null;
 
-            const jumpOk = ch.jump_ok === true && startSeg !== null;
-            const anchorId = jumpOk ? ('chapter-anchor-' + index) : null;
+            const jumpOk = ch.jump_ok === true;
+            const anchorId = 'chapter-anchor-' + index;
+            const dlgId = startSeg === null ? null : 'dlg-' + startSeg;
+            const notesEl = document.getElementById('notes-chapter-' + index);
+            const anchorEl = jumpOk ? document.getElementById(anchorId) : null;
+            const dlgEl = jumpOk && dlgId ? document.getElementById(dlgId) : null;
+
+            let targetId = null;
+            let fallbackId = null;
+            let targetElement = null;
+            if (notesEl) {
+                targetId = notesEl.id;
+                targetElement = notesEl;
+            } else if (anchorEl) {
+                targetId = anchorId;
+                targetElement = anchorEl;
+            } else if (dlgEl) {
+                fallbackId = dlgId;
+                targetElement = dlgEl;
+            }
+
+            const canJump = Boolean(targetElement);
 
             chapters.push({
                 index: index,
@@ -367,8 +363,12 @@
                 startSeg: startSeg,
                 jumpOk: jumpOk,
                 anchorId: anchorId,
-                dlgId: jumpOk ? ('dlg-' + startSeg) : null,
-                anchorEl: anchorId ? document.getElementById(anchorId) : null
+                anchorEl: anchorEl,
+                dlgId: dlgId,
+                targetId: targetId,
+                fallbackId: fallbackId,
+                targetElement: targetElement,
+                canJump: canJump
             });
         });
 
@@ -378,57 +378,47 @@
 
     // ========== UI (DOM API) ==========
 
-    function formatOutlineChapter(chapter) {
-        return [chapter.timeLabel, chapter.title]
-            .filter(Boolean)
-            .join(' ');
+    function appendOutlineToggle(header, label, expanded) {
+        const toggle = createEl('button', 'toc-outline-toggle', expanded ? '▾' : '▸');
+        toggle.type = 'button';
+        toggle.setAttribute('aria-expanded', String(expanded));
+        toggle.setAttribute('aria-label', (expanded ? '折叠' : '展开') + label);
+        header.appendChild(toggle);
+        return toggle;
     }
 
-    function appendOutlineSection(listEl, sectionData) {
-        const item = createEl('li', 'toc-outline-section');
+    function appendSummaryNode(listEl) {
+        if (!tocData.summarySection) return;
+
+        const sectionId = ensureOutlineSectionId(
+            tocData.summarySection,
+            'summary-section'
+        );
+        const item = createEl('li', 'toc-outline-section toc-summary-node');
         const header = createEl('div', 'toc-outline-header');
         const parent = appendTocLink(header, {
-            href: '#' + sectionData.sectionId,
-            text: sectionData.label,
-            id: sectionData.sectionId,
+            href: '#' + sectionId,
+            text: '内容总结',
+            id: sectionId,
             itemTag: 'div',
             className: 'toc-link toc-outline-parent'
-                + (sectionData.key === 'calibrated' ? ' toc-anchor' : '')
         });
         parent.dataset.outlineRole = 'section';
 
-        if (sectionData.children.length > 0) {
-            const toggle = createEl('button', 'toc-outline-toggle', '▾');
-            toggle.type = 'button';
-            toggle.setAttribute('aria-expanded', 'true');
-            toggle.setAttribute('aria-label', '折叠' + sectionData.label);
-            header.appendChild(toggle);
+        if (tocData.headings.length > 0) {
+            item.classList.add('toc-outline-collapsed');
+            appendOutlineToggle(header, '内容总结', false);
         }
         item.appendChild(header);
 
-        if (sectionData.children.length > 0) {
+        if (tocData.headings.length > 0) {
             const childList = createEl('ul', 'toc-outline-children');
-            sectionData.children.forEach((child) => {
-                if (sectionData.key === 'calibrated') {
-                    const anchorId = child.anchorId || child.dlgId;
-                    appendTocLink(childList, {
-                        href: anchorId ? '#' + anchorId : '#',
-                        text: formatOutlineChapter(child),
-                        level: 2,
-                        id: child.anchorId || child.dlgId,
-                        targetId: child.anchorId,
-                        fallbackId: child.dlgId,
-                        disabled: !child.jumpOk,
-                        className: 'toc-link toc-outline-child'
-                    });
-                    return;
-                }
-
+            tocData.headings.forEach((heading) => {
                 appendTocLink(childList, {
-                    href: '#' + child.id,
-                    text: child.text,
-                    level: child.level,
-                    id: child.id,
+                    href: '#' + heading.id,
+                    text: heading.text,
+                    level: heading.level,
+                    id: heading.id,
                     className: 'toc-link toc-outline-child'
                 });
             });
@@ -438,12 +428,6 @@
         listEl.appendChild(item);
     }
 
-    function buildOutlineList(listEl) {
-        tocData.outlineSections.forEach(sectionData => {
-            appendOutlineSection(listEl, sectionData);
-        });
-    }
-
     /**
      * One chapter row, shared by the PC panel and the mobile drawer.
      * Time + title row (whole-row jump) with the full gist text below it.
@@ -451,23 +435,33 @@
      * no expand/collapse interaction.
      */
     function buildChapterItem(chapter) {
-        const item = createEl('div', 'toc-chapter-item');
+        const item = createEl('li', 'toc-outline-section toc-chapter-node toc-chapter-item');
         item.dataset.chapterIndex = String(chapter.index);
-        if (!chapter.jumpOk) {
+        if (!chapter.canJump) {
             item.classList.add('toc-chapter-disabled');
         }
 
+        const header = createEl('div', 'toc-outline-header toc-chapter-header');
         const main = createEl('button', 'toc-chapter-main');
         main.type = 'button';
-        if (chapter.jumpOk) {
-            main.dataset.targetId = chapter.anchorId || chapter.dlgId;
-            main.dataset.fallbackId = chapter.dlgId || '';
+        main.dataset.chapterIndex = String(chapter.index);
+        main.dataset.id = 'toc-chapter-' + chapter.index;
+        if (chapter.targetId) {
+            main.dataset.targetId = chapter.targetId;
+        }
+        if (chapter.fallbackId) {
+            main.dataset.fallbackId = chapter.fallbackId;
+        }
+        if (!chapter.canJump) {
+            main.disabled = true;
+            main.setAttribute('aria-disabled', 'true');
         }
         if (chapter.timeLabel) {
             main.appendChild(createEl('span', 'toc-chapter-time', chapter.timeLabel));
         }
         main.appendChild(createEl('span', 'toc-chapter-title', chapter.title));
-        item.appendChild(main);
+        header.appendChild(main);
+        item.appendChild(header);
 
         if (chapter.gist) {
             item.appendChild(createEl('div', 'toc-chapter-gist', chapter.gist));
@@ -476,64 +470,66 @@
         return item;
     }
 
-    function buildChaptersPane(isActive) {
-        const pane = createEl('div', 'toc-pane toc-chapters-pane' + (isActive ? ' active' : ''));
+    function buildChaptersNode(listEl) {
+        const item = createEl('li', 'toc-outline-section toc-chapters-node');
+        const header = createEl('div', 'toc-outline-header toc-chapters-header');
+        const title = createEl(
+            'div',
+            'toc-link toc-outline-parent',
+            '章节 (' + tocData.chapters.length + ')'
+        );
+        title.dataset.outlineRole = 'chapters';
+        header.appendChild(title);
+        appendOutlineToggle(
+            header,
+            '章节 (' + tocData.chapters.length + ')',
+            true
+        );
+        item.appendChild(header);
+
+        const childList = createEl('ul', 'toc-outline-children');
         tocData.chapters.forEach((chapter) => {
-            pane.appendChild(buildChapterItem(chapter));
+            childList.appendChild(buildChapterItem(chapter));
         });
-        return pane;
+        item.appendChild(childList);
+        listEl.appendChild(item);
     }
 
-    function buildOutlinePane(isActive) {
-        const pane = createEl('div', 'toc-pane toc-outline-pane' + (isActive ? ' active' : ''));
-        const list = createEl('ul', 'toc-list');
-        buildOutlineList(list);
-        pane.appendChild(list);
-        return pane;
+    function appendFullTextLeaf(listEl, label, section, className) {
+        if (!section) return;
+        const sectionId = ensureOutlineSectionId(
+            section,
+            className === 'toc-notes-leaf' ? 'notes-section' : 'calibrated-section'
+        );
+        appendTocLink(listEl, {
+            href: '#' + sectionId,
+            text: label,
+            id: sectionId,
+            targetId: sectionId,
+            level: 1,
+            className: 'toc-link toc-full-text-leaf ' + className
+        });
     }
 
-    function buildTabs() {
-        const tabs = createEl('div', 'toc-tabs');
-        tabs.setAttribute('role', 'tablist');
+    function buildTocTree(listEl) {
+        appendSummaryNode(listEl);
 
-        const chapterTab = createEl('button', 'toc-tab', '章节');
-        chapterTab.type = 'button';
-        chapterTab.dataset.tab = 'chapters';
-        chapterTab.setAttribute('role', 'tab');
-        chapterTab.classList.add('active'); // chapters tab is the default
-
-        const outlineTab = createEl('button', 'toc-tab', '大纲');
-        outlineTab.type = 'button';
-        outlineTab.dataset.tab = 'outline';
-        outlineTab.setAttribute('role', 'tab');
-
-        tabs.appendChild(chapterTab);
-        tabs.appendChild(outlineTab);
-        return tabs;
-    }
-
-    /**
-     * Switch tabs within one widget root (PC container or mobile drawer).
-     */
-    function setActiveTab(rootEl, tabName) {
-        rootEl.querySelectorAll('.toc-tab').forEach(tab => {
-            tab.classList.toggle('active', tab.dataset.tab === tabName);
-        });
-        rootEl.querySelectorAll('.toc-chapters-pane').forEach(pane => {
-            pane.classList.toggle('active', tabName === 'chapters');
-        });
-        rootEl.querySelectorAll('.toc-outline-pane').forEach(pane => {
-            pane.classList.toggle('active', tabName === 'outline');
-        });
-
-        // When switching back to chapters, keep the current chapter visible.
-        if (tabName === 'chapters' && currentChapterIndex !== null) {
-            const scroller = rootEl.querySelector('.toc-content') || rootEl.querySelector('.toc-mobile-body');
-            const item = rootEl.querySelector('.toc-chapter-item.current');
-            if (scroller && item) {
-                ensureItemVisible(scroller, item);
-            }
+        if (hasChapters) {
+            buildChaptersNode(listEl);
         }
+
+        appendFullTextLeaf(
+            listEl,
+            '详细笔记（全文）',
+            tocData.notesSection,
+            'toc-notes-leaf'
+        );
+        appendFullTextLeaf(
+            listEl,
+            '校对文本（全文）',
+            tocData.calibratedSection,
+            'toc-calibrated-leaf'
+        );
     }
 
     function createPCToc() {
@@ -554,7 +550,7 @@
 
         const header = createEl('div', 'toc-header');
         if (hasChapters) {
-            header.appendChild(buildTabs());
+            header.appendChild(createEl('div', 'toc-title', '目录'));
             const collapseBtn = createEl('button', 'toc-collapse-btn');
             collapseBtn.id = 'toc-collapse-btn';
             collapseBtn.type = 'button';
@@ -573,14 +569,9 @@
         container.appendChild(header);
 
         const content = createEl('div', 'toc-content');
-        if (hasChapters) {
-            content.appendChild(buildChaptersPane(true));
-            content.appendChild(buildOutlinePane(false));
-        } else {
-            const list = createEl('ul', 'toc-list');
-            buildOutlineList(list);
-            content.appendChild(list);
-        }
+        const list = createEl('ul', 'toc-list');
+        buildTocTree(list);
+        content.appendChild(list);
         container.appendChild(content);
 
         return container;
@@ -602,11 +593,7 @@
 
         const mobileContent = createEl('div', 'toc-mobile-content');
         const mobileHeader = createEl('div', 'toc-mobile-header');
-        if (hasChapters) {
-            mobileHeader.appendChild(buildTabs());
-        } else {
-            mobileHeader.appendChild(createEl('div', 'toc-mobile-title', '目录'));
-        }
+        mobileHeader.appendChild(createEl('div', 'toc-mobile-title', '目录'));
         const closeBtn = createEl('button', 'toc-mobile-close-btn');
         closeBtn.id = 'toc-mobile-close-btn';
         closeBtn.type = 'button';
@@ -615,14 +602,9 @@
         mobileContent.appendChild(mobileHeader);
 
         const body = createEl('div', 'toc-mobile-body');
-        if (hasChapters) {
-            body.appendChild(buildChaptersPane(true));
-            body.appendChild(buildOutlinePane(false));
-        } else {
-            const list = createEl('ul', 'toc-list');
-            buildOutlineList(list);
-            body.appendChild(list);
-        }
+        const list = createEl('ul', 'toc-list');
+        buildTocTree(list);
+        body.appendChild(list);
         mobileContent.appendChild(body);
         panel.appendChild(mobileContent);
 
@@ -645,9 +627,10 @@
     }
 
     function hasTocContent() {
-        return tocData.outlineSections.length > 0
-            || tocData.headings.length > 0
+        return !!tocData.summarySection
+            || !!tocData.notesSection
             || !!tocData.calibratedSection
+            || tocData.headings.length > 0
             || tocData.chapters.length > 0;
     }
 
@@ -669,7 +652,7 @@
             return;
         }
 
-        // Pure DOM append — no insertAdjacentHTML for titles
+        // Pure DOM append — user text is never inserted as an HTML string.
         document.body.appendChild(createPCToc());
         const mobile = createMobileTocParts();
         document.body.appendChild(mobile.btn);
@@ -753,8 +736,8 @@
     }
 
     /**
-     * Scroll outline or chapter-tab targets through one fallback-aware path.
-     * Chapter links prefer chapter-anchor-{index}, then dlg-{start_seg}.
+     * Scroll tree targets through one fallback-aware path and open any closed
+     * details ancestor before the smooth jump.
      */
     function scrollToTocTarget(targetId, fallbackId) {
         const targetElement = resolveTocTarget(targetId, fallbackId);
@@ -793,13 +776,17 @@
     }
 
     function handleChapterJump(mainEl) {
-        const targetId = mainEl.dataset.targetId;
-        if (!targetId) {
-            // Chapter is not jumpable (fingerprint mismatch / no anchors).
+        if (mainEl.disabled || mainEl.getAttribute('aria-disabled') === 'true') {
             return;
         }
 
-        if (!scrollToTocTarget(targetId, mainEl.dataset.fallbackId)) {
+        const targetId = mainEl.dataset.targetId;
+        const fallbackId = mainEl.dataset.fallbackId;
+        if (!targetId && !fallbackId) {
+            return;
+        }
+
+        if (!scrollToTocTarget(targetId, fallbackId)) {
             return;
         }
 
@@ -859,8 +846,9 @@
         if (!section) return;
 
         const expanded = toggleEl.getAttribute('aria-expanded') === 'true';
-        const label = section.querySelector('.toc-outline-parent');
+        const label = section.querySelector('.toc-outline-parent, .toc-chapter-main');
         toggleEl.setAttribute('aria-expanded', String(!expanded));
+        toggleEl.textContent = expanded ? '▸' : '▾';
         toggleEl.setAttribute(
             'aria-label',
             (expanded ? '展开' : '折叠') + (label ? label.textContent : '区块')
@@ -893,14 +881,29 @@
         }
     }
 
+    /**
+     * Resolve a TOC link to its visible parent while its outline section is collapsed.
+     */
+    function resolveVisibleTocLink(link) {
+        const children = link.closest('.toc-outline-children');
+        if (!children) return link;
+        const section = children.closest('.toc-outline-section');
+        if (!section || !section.classList.contains('toc-outline-collapsed')) {
+            return link;
+        }
+        return section.querySelector('.toc-outline-parent') || link;
+    }
+
     function updateActiveLink(activeId) {
-        const links = document.querySelectorAll('.toc-link');
+        const links = document.querySelectorAll('.toc-link, .toc-chapter-main');
+        const activeLinks = new Set();
         links.forEach(link => {
             if (link.dataset && link.dataset.id === activeId) {
-                link.classList.add('active');
-            } else {
-                link.classList.remove('active');
+                activeLinks.add(resolveVisibleTocLink(link));
             }
+        });
+        links.forEach(link => {
+            link.classList.toggle('active', activeLinks.has(link));
         });
     }
 
@@ -935,10 +938,8 @@
         if (currentChapterIndex === null || mode === 'mobile') return;
         const container = document.getElementById('floating-toc');
         if (!container) return;
-        const pane = container.querySelector('.toc-chapters-pane');
-        if (!pane || !pane.classList.contains('active')) return;
         const content = container.querySelector('.toc-content');
-        const item = pane.querySelector('.toc-chapter-item.current');
+        const item = container.querySelector('.toc-chapter-item.current');
         if (content && item) {
             ensureItemVisible(content, item);
         }
@@ -959,39 +960,55 @@
         updateStickyBar();
     }
 
-    function setupChapterObserver() {
-        if (!hasChapters) return;
+    function collectChapterObserverAnchors() {
+        return Array.from(document.querySelectorAll(
+            '#notes-content-block h2[id^="notes-chapter-"], '
+                + '#calibrated-content-block [id^="chapter-anchor-"]'
+        )).map((element) => {
+            const chapterIndex = element.id.startsWith('notes-chapter-')
+                ? parseChapterAnchorIndex(element.id, 'notes-chapter')
+                : parseChapterAnchorIndex(element.id, 'chapter-anchor');
+            return { element: element, chapterIndex: chapterIndex };
+        }).filter(anchor => anchor.chapterIndex !== null);
+    }
 
-        const indexByEl = new Map();
-        tocData.chapters.forEach(ch => {
-            if (ch.anchorEl) {
-                indexByEl.set(ch.anchorEl, ch.index);
-            }
-        });
-        if (indexByEl.size === 0) return;
+    function setupChapterObserver() {
+        const chapterAnchors = collectChapterObserverAnchors();
+        if (chapterAnchors.length === 0) return;
+
+        if (chapterObserver) {
+            chapterObserver.disconnect();
+        }
+        passedAnchors.clear();
+        const positionByElement = new Map(
+            chapterAnchors.map((anchor, position) => [anchor.element, position])
+        );
 
         chapterObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
-                const idx = indexByEl.get(entry.target);
-                if (idx === undefined) return;
+                const position = positionByElement.get(entry.target);
+                if (position === undefined) return;
                 // Anchor in view, or already scrolled above the viewport top,
                 // means its chapter has been reached.
-                if (entry.isIntersecting || entry.boundingClientRect.top < 0) {
-                    passedAnchors.add(idx);
+                const passed = entry.isIntersecting
+                    || entry.boundingClientRect.top < 0;
+                if (passed) {
+                    passedAnchors.add(position);
                 } else {
-                    passedAnchors.delete(idx);
+                    passedAnchors.delete(position);
                 }
             });
 
             if (passedAnchors.size > 0) {
-                setCurrentChapter(Math.max.apply(null, Array.from(passedAnchors)));
+                const latestPosition = Math.max(...Array.from(passedAnchors));
+                setCurrentChapter(chapterAnchors[latestPosition].chapterIndex);
             } else {
                 setCurrentChapter(null);
             }
         }, { threshold: 0 });
 
-        indexByEl.forEach((idx, el) => {
-            chapterObserver.observe(el);
+        chapterAnchors.forEach((anchor) => {
+            chapterObserver.observe(anchor.element);
         });
 
         console.log('Chapter observer ready');
@@ -1020,33 +1037,42 @@
             observer.disconnect();
         }
 
-        const elements = [];
         const idByElement = new Map();
         const addTarget = (element, activeId) => {
             if (!element || !activeId || idByElement.has(element)) return;
-            elements.push(element);
             idByElement.set(element, activeId);
         };
 
+        if (tocData.summarySection) {
+            addTarget(
+                tocData.summarySection,
+                ensureOutlineSectionId(tocData.summarySection, 'summary-section')
+            );
+        }
         tocData.headings.forEach(heading => {
             addTarget(heading.element, heading.id);
         });
-        tocData.notesHeadings.forEach(heading => {
-            addTarget(heading.element, heading.id);
-        });
-
         tocData.chapters.forEach(chapter => {
-            if (!chapter.jumpOk) return;
-            const anchorId = chapter.anchorId;
-            const targetElement = resolveTocTarget(anchorId, chapter.dlgId);
-            addTarget(targetElement, anchorId || chapter.dlgId);
+            if (!chapter.targetElement) return;
+            addTarget(chapter.targetElement, 'toc-chapter-' + chapter.index);
         });
+        if (tocData.notesSection) {
+            addTarget(
+                tocData.notesSection,
+                ensureOutlineSectionId(tocData.notesSection, 'notes-section')
+            );
+        }
+        if (tocData.calibratedSection) {
+            addTarget(
+                tocData.calibratedSection,
+                ensureOutlineSectionId(
+                    tocData.calibratedSection,
+                    'calibrated-section'
+                )
+            );
+        }
 
-        tocData.outlineSections.forEach(sectionData => {
-            addTarget(sectionData.section, sectionData.sectionId);
-        });
-
-        if (elements.length === 0) return;
+        if (idByElement.size === 0) return;
 
         observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
@@ -1058,8 +1084,8 @@
             });
         }, CONFIG.OBSERVER_OPTIONS);
 
-        elements.forEach(element => {
-            if (element) observer.observe(element);
+        idByElement.forEach((_activeId, element) => {
+            observer.observe(element);
         });
 
         console.log('Scroll observer ready');
@@ -1090,18 +1116,9 @@
                 return;
             }
 
-            if (e.target.closest('.toc-tab')) {
-                const tab = e.target.closest('.toc-tab');
-                const root = tab.closest('#floating-toc, #toc-mobile-panel');
-                if (root) {
-                    setActiveTab(root, tab.dataset.tab);
-                }
-                return;
-            }
-
             // Whole chapter row is one jump target: title row or gist.
             // Route through the row's .toc-chapter-main (it carries the
-            // jump dataset; jump_ok=false rows have none and no-op).
+            // target priority and disabled state).
             if (e.target.closest('.toc-chapter-main, .toc-chapter-gist')) {
                 const item = e.target.closest('.toc-chapter-item');
                 const main = item ? item.querySelector('.toc-chapter-main') : null;
@@ -1147,11 +1164,12 @@
 
         mode = computeMode();
 
-        tocData.headings = extractHeadings();
-        tocData.notesHeadings = extractNotesHeadings();
+        tocData.summarySection = findOutlineSection('内容总结');
+        tocData.notesSection = findNotesSection();
         tocData.calibratedSection = findCalibratedSection();
+        tocData.headings = extractHeadings();
+        appendNotesSourceLinks();
         tocData.chapters = readChaptersData();
-        tocData.outlineSections = buildOutlineSections();
         hasChapters = tocData.chapters.length > 0;
 
         if (!hasTocContent()) {
