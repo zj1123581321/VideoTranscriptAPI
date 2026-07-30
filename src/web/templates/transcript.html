@@ -5,6 +5,29 @@
 {% block og_title %}{{ title or "视频转录" }} - 视频转录查看器{% endblock %}
 {% block og_description %}{{ title or "视频转录" }} 的转录校对结果{% endblock %}
 
+{% block site_nav %}
+{# Transcript page: fold owner actions into a gear menu; theme toggle stays outside. #}
+<details class="owner-menu" id="ownerMenu">
+    <summary class="owner-menu-summary" aria-label="所有者操作菜单">
+        <span class="owner-menu-icon" aria-hidden="true">⚙</span>
+    </summary>
+    <div class="owner-menu-panel">
+        <nav class="site-nav">
+            <a href="/add_task_by_web" class="site-nav-link">📝 提交任务</a>
+            <a href="/static/history.html?v={{ asset_v }}" class="site-nav-link">📋 任务历史</a>
+        </nav>
+        {% if view_token %}
+        <div class="owner-menu-divider" role="separator"></div>
+        <div class="protected-action-auth-tools" aria-live="polite">
+            <button class="recalibrate-btn" id="protectedActionAuthChange" type="button">设置/更换访问令牌</button>
+            <button class="recalibrate-btn owner-menu-danger" id="protectedActionAuthClear" type="button">清除访问令牌</button>
+            <span id="protectedActionAuthStatus" class="dialog-status"></span>
+        </div>
+        {% endif %}
+    </div>
+</details>
+{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/floating-toc.css?v={{ asset_v }}">
 <style>
@@ -83,7 +106,7 @@
     cursor: not-allowed;
 }
 
-/* Protected-action controls own their spacing so auth state stays attached to the transcript. */
+/* Protected-action controls (now nested inside the owner gear menu). */
 .protected-action-auth-tools {
     display: flex;
     align-items: center;
@@ -96,6 +119,118 @@
     background: var(--bg-secondary);
 }
 .protected-action-auth-tools .dialog-status { flex: 1 1 100%; margin-top: 0; }
+
+/* Owner gear menu in transcript header (details/summary, same pattern as export/LLM panels). */
+/* Gear + theme toggle are absolutely positioned; keep h1 clear of that row on all widths. */
+.header h1 {
+    margin-top: 52px;
+}
+.owner-menu {
+    position: absolute;
+    top: 20px;
+    right: 72px;
+    z-index: 5;
+    text-align: left;
+}
+.owner-menu-summary {
+    list-style: none;
+    cursor: pointer;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--header-text);
+    font-size: 1.15rem;
+    user-select: none;
+    position: relative;
+    box-sizing: border-box;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+.owner-menu-summary::-webkit-details-marker { display: none; }
+.owner-menu-summary:hover { background: rgba(255, 255, 255, 0.3); transform: scale(1.05); }
+.owner-menu-summary:focus-visible {
+    outline: 3px solid var(--header-text);
+    outline-offset: 2px;
+}
+[data-theme="dark"] .owner-menu-summary {
+    background: rgba(0, 0, 0, 0.2);
+    border-color: rgba(0, 0, 0, 0.3);
+}
+[data-theme="dark"] .owner-menu-summary:hover { background: rgba(0, 0, 0, 0.3); }
+.owner-menu-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 220px;
+    max-width: min(280px, calc(100vw - 24px));
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border-primary);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    box-sizing: border-box;
+}
+.owner-menu .site-nav,
+.owner-menu-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 6px;
+    margin: 0;
+}
+.owner-menu .site-nav-link {
+    display: block;
+    text-align: left;
+    opacity: 1;
+    color: var(--text-primary);
+    border-color: var(--border-primary);
+    background: var(--bg-secondary);
+    padding: 8px 12px;
+    min-height: 40px;
+    box-sizing: border-box;
+    line-height: 1.4;
+}
+.owner-menu .site-nav-link:hover {
+    background: var(--bg-tertiary, #e8e8e8);
+}
+.owner-menu-divider {
+    height: 1px;
+    margin: 10px 0;
+    background: var(--border-primary);
+    border: 0;
+}
+.owner-menu .protected-action-auth-tools {
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+}
+.owner-menu .protected-action-auth-tools .recalibrate-btn {
+    width: 100%;
+    text-align: left;
+}
+.owner-menu-danger {
+    font-size: 0.8rem;
+    opacity: 0.72;
+    color: var(--text-secondary, #666);
+}
+.owner-menu-danger:hover { opacity: 1; }
+.owner-menu .protected-action-auth-tools .dialog-status {
+    width: 100%;
+    margin-top: 0;
+    font-size: 0.78rem;
+}
 
 /* Copy content button (shares base look with recalibrate button) */
 .copy-content-btn.copied {
@@ -438,11 +573,6 @@
     {% endif %}
 
     {% if view_token %}
-    <div class="protected-action-auth-tools" aria-live="polite">
-        <button class="recalibrate-btn" id="protectedActionAuthChange" type="button">设置/更换访问令牌</button>
-        <button class="recalibrate-btn" id="protectedActionAuthClear" type="button">清除访问令牌</button>
-        <span id="protectedActionAuthStatus" class="dialog-status"></span>
-    </div>
     <dialog id="protectedActionAuthDialog" class="recalibrate-dialog"
             aria-labelledby="protectedActionAuthTitle"
             aria-describedby="protectedActionAuthDescription">
@@ -921,4 +1051,29 @@
 })();
 </script>
 {% endif %}
+<script>
+/* Owner gear menu: close on outside click / Escape. */
+(function installOwnerMenu() {
+    'use strict';
+
+    var menu = document.getElementById('ownerMenu');
+    if (!menu) return;
+
+    function closeOwnerMenu() {
+        if (menu.open) menu.open = false;
+    }
+
+    document.addEventListener('click', function(event) {
+        if (!menu.open) return;
+        if (menu.contains(event.target)) return;
+        closeOwnerMenu();
+    });
+
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' || event.key === 'Esc') {
+            closeOwnerMenu();
+        }
+    });
+})();
+</script>
 {% endblock %}
