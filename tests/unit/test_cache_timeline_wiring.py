@@ -469,3 +469,19 @@ class TestSplitLongSegmentInvertedTimes:
             et = part["end_time"]
             if st is not None and et is not None:
                 assert et >= st
+
+    def test_zero_span_interval_degrades_times_to_none(self):
+        text = "part one，" + "x" * 40 + "，part two"
+        segment = {
+            "start_time": 10.0,
+            "end_time": 10.0,
+            "text": text,
+            "length": len(text),
+        }
+
+        parts = _split_long_segment(segment, max_len=50)
+
+        assert len(parts) >= 2
+        assert all(part["start_time"] is None for part in parts)
+        assert all(part["end_time"] is None for part in parts)
+        assert "".join(part["text"] for part in parts) == text

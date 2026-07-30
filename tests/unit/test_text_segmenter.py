@@ -10,6 +10,8 @@ Covers:
 All console output must be in English only (no emoji, no Chinese).
 """
 
+import re
+
 import pytest
 from unittest.mock import Mock
 from video_transcript_api.llm.segmenters.text_segmenter import TextSegmenter
@@ -155,6 +157,14 @@ class TestDialogSegmenter:
         ends = [parse_time_to_seconds(dialog["end_time"]) for dialog in fragments]
         assert starts[0] == parse_time_to_seconds("00:00:21")
         assert ends[-1] == parse_time_to_seconds("00:56:24")
+        assert all(
+            re.fullmatch(r"\d{2}:\d{2}:\d{2}", dialog["start_time"])
+            for dialog in fragments
+        )
+        assert all(
+            re.fullmatch(r"\d{2}:\d{2}:\d{2}", dialog["end_time"])
+            for dialog in fragments
+        )
         assert all(start < end for start, end in zip(starts, ends))
         assert starts == sorted(starts)
         assert len(set(starts)) == len(starts)
@@ -164,6 +174,22 @@ class TestDialogSegmenter:
             if index:
                 assert starts[index] == ends[index - 1]
                 assert starts[index] >= ends[index - 1]
+
+    @pytest.mark.parametrize(
+        ("seconds", "template", "expected"),
+        [
+            (1.5, "00:00:00", "00:00:01"),
+            (1.0, "00:00:00.0", "00:00:01.0"),
+            (1.5, "00:00:00.00", "00:00:01.50"),
+        ],
+    )
+    def test_dialog_timestamp_format_preserves_template_precision(
+        self, dialog_segmenter, seconds, template, expected
+    ):
+        assert (
+            dialog_segmenter._format_dialog_timestamp(seconds, template)
+            == expected
+        )
 
     def test_long_dialog_with_invalid_times_keeps_text_and_drops_timeline(
         self, dialog_segmenter

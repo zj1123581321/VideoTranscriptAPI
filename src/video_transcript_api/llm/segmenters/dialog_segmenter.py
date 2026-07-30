@@ -229,14 +229,12 @@ class DialogSegmenter:
             return None
 
         second_template = parts[-1]
+        has_fraction = "." in second_template
         decimal_places = (
-            len(second_template.split(".", 1)[1])
-            if "." in second_template
-            else 2
+            len(second_template.split(".", 1)[1]) if has_fraction else 0
         )
-        decimal_places = max(2, decimal_places)
         scale = 10**decimal_places
-        total_units = int(round(seconds * scale))
+        total_units = int(round(seconds * scale)) if has_fraction else int(seconds)
         whole_seconds, fractional_units = divmod(total_units, scale)
         hours, remainder = divmod(whole_seconds, 3600)
         minutes, second_value = divmod(remainder, 60)
@@ -253,7 +251,7 @@ class DialogSegmenter:
             minute_width = max(2, len(parts[0]))
             formatted = f"{minute_total:0{minute_width}d}:{second_value:02d}"
 
-        if fractional_units:
+        if has_fraction:
             formatted += f".{fractional_units:0{decimal_places}d}"
         return formatted
 
