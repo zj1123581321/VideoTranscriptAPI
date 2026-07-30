@@ -130,6 +130,31 @@ def test_notes_anchor_title_normalization_does_not_cascade_after_first_chapter()
     assert '<h2 id="notes-chapter-5">Third</h2>' in result
 
 
+@pytest.mark.parametrize(
+    ("first_title", "rendered_first_title"),
+    [("1. 概述", "1. 概述"), ("# 深入", "# 深入"), ("深入 #", "深入")],
+)
+def test_notes_anchors_continue_after_block_markdown_title(
+    first_title, rendered_first_title
+):
+    chapters = [
+        {"index": 0, "title": first_title, "start_time": None, "end_time": None},
+        {"index": 1, "title": "第二章", "start_time": None, "end_time": None},
+        {"index": 2, "title": "第三章", "start_time": None, "end_time": None},
+    ]
+    notes_html = (
+        f"<h2>[00:00:00 - 00:01:00] {rendered_first_title}</h2>"
+        "<h2>第二章</h2>"
+        "<h2>第三章</h2>"
+    )
+
+    result = _add_notes_chapter_anchors(notes_html, chapters)
+
+    assert '<h2 id="notes-chapter-0">' in result
+    assert '<h2 id="notes-chapter-1">第二章</h2>' in result
+    assert '<h2 id="notes-chapter-2">第三章</h2>' in result
+
+
 def test_notes_anchor_rendering_failure_skips_injecting_entire_chapter_group():
     chapters = [
         {"index": 0, "title": "First", "start_time": None, "end_time": None},

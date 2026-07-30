@@ -1059,7 +1059,7 @@ def _add_notes_chapter_anchors(
             ):
                 raise ValueError("invalid notes anchor chapter")
             expected_titles.append(
-                _normalize_notes_heading_text(render_markdown_to_html(title))
+                _normalize_notes_heading_text(render_markdown_to_html("## " + title))
             )
     except Exception:
         logger.warning("Notes chapter anchors skipped: chapter list unavailable")
