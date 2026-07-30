@@ -539,47 +539,7 @@
     }
 }
 
-/* ========== 章节页新模式（toc-new）：tab + 章节速览 ========== */
-
-/* 面板顶部 tab 切换 */
-.toc-tabs {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex: 1;
-    min-width: 0;
-}
-
-.toc-tab {
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    border-radius: 4px 4px 0 0;
-    padding: 6px 10px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--toc-text-secondary);
-    cursor: pointer;
-    transition: color 0.2s ease, border-color 0.2s ease;
-}
-
-.toc-tab:hover {
-    color: var(--toc-text);
-}
-
-.toc-tab.active {
-    color: var(--toc-active);
-    border-bottom-color: var(--toc-active);
-}
-
-/* tab 面板显隐 */
-.toc-pane {
-    display: none;
-}
-
-.toc-pane.active {
-    display: block;
-}
+/* ========== 章节页新模式（toc-new）：章节主轴树 ========== */
 
 /* 收起按钮（中屏浮层模式） */
 .toc-collapse-btn {
@@ -695,6 +655,8 @@ body.toc-wide-margin {
 }
 
 .toc-chapter-main {
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     align-items: baseline;
     gap: 8px;
@@ -707,6 +669,12 @@ body.toc-wide-margin {
     line-height: 1.4;
     color: var(--toc-text);
     cursor: pointer;
+}
+
+.toc-chapter-number {
+    flex-shrink: 0;
+    color: var(--toc-text-secondary);
+    font-weight: 600;
 }
 
 .toc-chapter-time {
@@ -745,6 +713,39 @@ body.toc-wide-margin {
 .toc-chapter-item.toc-chapter-disabled .toc-chapter-main,
 .toc-chapter-item.toc-chapter-disabled .toc-chapter-gist {
     cursor: default;
+}
+
+.toc-chapter-children {
+    margin-top: 8px;
+}
+
+.toc-chapter-leaf {
+    color: var(--toc-text-secondary);
+    font-size: 0.8rem;
+    padding: 6px 10px 6px 24px;
+}
+
+.toc-chapter-leaf:hover {
+    color: var(--toc-active);
+}
+
+.toc-full-text-leaf {
+    margin: 4px 8px;
+    border-radius: 6px;
+    color: var(--toc-text-secondary);
+}
+
+.notes-source-link {
+    margin-left: 0.45em;
+    color: var(--toc-active);
+    font-size: 0.82em;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.notes-source-link:hover {
+    text-decoration: underline;
 }
 
 /* ========== 移动端：吸顶当前章条 ========== */
@@ -813,12 +814,4 @@ body.toc-wide-margin {
         font-size: 0.9rem;
     }
 
-    .toc-mobile-header .toc-tabs {
-        flex: 0 1 auto;
-    }
-
-    .toc-mobile-header .toc-tab {
-        font-size: 1rem;
-        padding: 8px 14px;
-    }
 }
