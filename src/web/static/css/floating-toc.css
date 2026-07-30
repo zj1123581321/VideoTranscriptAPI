@@ -671,6 +671,11 @@ body.toc-wide-margin {
     cursor: pointer;
 }
 
+.toc-chapters-header .toc-outline-parent {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .toc-chapter-number {
     flex-shrink: 0;
     color: var(--toc-text-secondary);
@@ -713,20 +718,6 @@ body.toc-wide-margin {
 .toc-chapter-item.toc-chapter-disabled .toc-chapter-main,
 .toc-chapter-item.toc-chapter-disabled .toc-chapter-gist {
     cursor: default;
-}
-
-.toc-chapter-children {
-    margin-top: 8px;
-}
-
-.toc-chapter-leaf {
-    color: var(--toc-text-secondary);
-    font-size: 0.8rem;
-    padding: 6px 10px 6px 24px;
-}
-
-.toc-chapter-leaf:hover {
-    color: var(--toc-active);
 }
 
 .toc-full-text-leaf {

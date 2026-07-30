@@ -348,33 +348,27 @@
             if (isNaN(startSeg)) startSeg = null;
 
             const jumpOk = ch.jump_ok === true;
-            const notesId = 'notes-chapter-' + index;
             const anchorId = 'chapter-anchor-' + index;
             const dlgId = startSeg === null ? null : 'dlg-' + startSeg;
-            const notesEl = document.getElementById(notesId);
+            const notesEl = document.getElementById('notes-chapter-' + index);
             const anchorEl = jumpOk ? document.getElementById(anchorId) : null;
             const dlgEl = dlgId ? document.getElementById(dlgId) : null;
 
             let targetId = null;
             let fallbackId = null;
             let targetElement = null;
-            let targetKind = null;
             if (notesEl) {
-                targetId = notesId;
+                targetId = notesEl.id;
                 targetElement = notesEl;
-                targetKind = 'notes';
             } else if (anchorEl) {
                 targetId = anchorId;
                 targetElement = anchorEl;
-                targetKind = 'calibrated';
             } else if (dlgEl) {
                 fallbackId = dlgId;
                 targetElement = dlgEl;
-                targetKind = 'dialog';
             }
 
             const canJump = Boolean(targetElement);
-            const calibratedTargetElement = jumpOk ? (anchorEl || dlgEl) : null;
 
             chapters.push({
                 index: index,
@@ -383,20 +377,13 @@
                 timeLabel: formatChapterSeconds(ch.start_time),
                 startSeg: startSeg,
                 jumpOk: jumpOk,
-                notesId: notesId,
-                notesEl: notesEl,
                 anchorId: anchorId,
                 anchorEl: anchorEl,
                 dlgId: dlgId,
                 targetId: targetId,
                 fallbackId: fallbackId,
                 targetElement: targetElement,
-                targetKind: targetKind,
-                canJump: canJump,
-                calibratedTargetId: calibratedTargetElement === anchorEl
-                    ? anchorId
-                    : (calibratedTargetElement ? dlgId : null),
-                calibratedTargetElement: calibratedTargetElement
+                canJump: canJump
             });
         });
 
@@ -456,28 +443,6 @@
         listEl.appendChild(item);
     }
 
-    function findNotesHeading(chapterIndex) {
-        return tocData.notesHeadings.find(
-            heading => heading.chapterIndex === chapterIndex
-        ) || null;
-    }
-
-    function appendChapterLeaf(childList, options) {
-        const targetId = options.targetId || null;
-        const fallbackId = options.fallbackId || null;
-        const hrefId = targetId || fallbackId;
-        appendTocLink(childList, {
-            href: hrefId ? '#' + hrefId : '#',
-            text: options.text,
-            level: 2,
-            id: hrefId || options.id,
-            targetId: targetId,
-            fallbackId: fallbackId,
-            disabled: !options.targetElement,
-            className: 'toc-link toc-chapter-leaf ' + options.className
-        });
-    }
-
     /**
      * One chapter row, shared by the PC panel and the mobile drawer.
      * Time + title row (whole-row jump) with the full gist text below it.
@@ -516,34 +481,38 @@
         }
         main.appendChild(createEl('span', 'toc-chapter-title', chapter.title));
         header.appendChild(main);
-        appendOutlineToggle(header, '章节 ' + (chapter.index + 1), true);
         item.appendChild(header);
 
         if (chapter.gist) {
             item.appendChild(createEl('div', 'toc-chapter-gist', chapter.gist));
         }
 
-        const childList = createEl('ul', 'toc-outline-children toc-chapter-children');
-        const notesHeading = findNotesHeading(chapter.index);
-        if (notesHeading) {
-            appendChapterLeaf(childList, {
-                text: '详细笔记（全文）',
-                id: notesHeading.id,
-                targetId: notesHeading.id,
-                targetElement: notesHeading.element,
-                className: 'toc-notes-leaf'
-            });
-        }
-        appendChapterLeaf(childList, {
-            text: '校对文本（全文）',
-            id: chapter.calibratedTargetId,
-            targetId: chapter.calibratedTargetId,
-            targetElement: chapter.calibratedTargetElement,
-            className: 'toc-calibrated-leaf'
+        return item;
+    }
+
+    function buildChaptersNode(listEl) {
+        const item = createEl('li', 'toc-outline-section toc-chapters-node');
+        const header = createEl('div', 'toc-outline-header toc-chapters-header');
+        const title = createEl(
+            'div',
+            'toc-link toc-outline-parent',
+            '章节 (' + tocData.chapters.length + ')'
+        );
+        title.dataset.outlineRole = 'chapters';
+        header.appendChild(title);
+        appendOutlineToggle(
+            header,
+            '章节 (' + tocData.chapters.length + ')',
+            true
+        );
+        item.appendChild(header);
+
+        const childList = createEl('ul', 'toc-outline-children');
+        tocData.chapters.forEach((chapter) => {
+            childList.appendChild(buildChapterItem(chapter));
         });
         item.appendChild(childList);
-
-        return item;
+        listEl.appendChild(item);
     }
 
     function appendFullTextLeaf(listEl, label, section, className) {
@@ -566,10 +535,7 @@
         appendSummaryNode(listEl);
 
         if (hasChapters) {
-            tocData.chapters.forEach((chapter) => {
-                listEl.appendChild(buildChapterItem(chapter));
-            });
-            return;
+            buildChaptersNode(listEl);
         }
 
         appendFullTextLeaf(
@@ -705,7 +671,7 @@
             return;
         }
 
-        // Pure DOM append — no insertAdjacentHTML for titles
+        // Pure DOM append — user text is never inserted as an HTML string.
         document.body.appendChild(createPCToc());
         const mobile = createMobileTocParts();
         document.body.appendChild(mobile.btn);
@@ -1075,11 +1041,9 @@
             observer.disconnect();
         }
 
-        const elements = [];
         const idByElement = new Map();
         const addTarget = (element, activeId) => {
             if (!element || !activeId || idByElement.has(element)) return;
-            elements.push(element);
             idByElement.set(element, activeId);
         };
 
@@ -1090,7 +1054,7 @@
             );
         }
         tocData.chapters.forEach(chapter => {
-            if (!chapter.targetElement || !chapter.canJump) return;
+            if (!chapter.targetElement) return;
             addTarget(chapter.targetElement, 'toc-chapter-' + chapter.index);
         });
         if (tocData.notesSection) {
@@ -1109,7 +1073,7 @@
             );
         }
 
-        if (elements.length === 0) return;
+        if (idByElement.size === 0) return;
 
         observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
@@ -1121,8 +1085,8 @@
             });
         }, CONFIG.OBSERVER_OPTIONS);
 
-        elements.forEach(element => {
-            if (element) observer.observe(element);
+        idByElement.forEach((_activeId, element) => {
+            observer.observe(element);
         });
 
         console.log('Scroll observer ready');

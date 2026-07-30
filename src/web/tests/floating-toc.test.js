@@ -99,6 +99,10 @@ function chapterObserver(observers) {
     ));
 }
 
+function scrollObserver(observers) {
+  return observers.find(observer => observer.options.threshold === 0.5);
+}
+
 function passedEntry(target, { isIntersecting = true, top = 0 } = {}) {
   return {
     target,
@@ -152,6 +156,48 @@ describe('floating chapter-axis TOC', () => {
 
     expect(pcChapter(dom).querySelector('.toc-chapter-gist').textContent)
       .toBe('完整 gist 文本');
+  });
+
+  it('renders one chapter axis node and one copy of each full-text leaf', () => {
+    const { dom, observers } = createFixture({
+      chapters: [
+        { index: 0, title: '第一章', start_time: 1, start_seg: 0, jump_ok: true },
+        { index: 1, title: '第二章', start_time: 2, start_seg: 1, jump_ok: true },
+      ],
+      notes: [
+        { index: 0, title: '笔记第一章' },
+        { index: 1, title: '笔记第二章' },
+      ],
+      calibrated: [0, 1],
+      dialogs: [0, 1],
+    });
+    const toc = dom.window.document.querySelector('#floating-toc');
+    const chaptersNode = toc.querySelector('.toc-chapters-node');
+    const scroll = scrollObserver(observers);
+    const observedIds = scroll.observed.map(element => element.id);
+
+    expect(toc.querySelectorAll('.toc-chapters-node')).toHaveLength(1);
+    expect(chaptersNode.querySelector('.toc-outline-parent').textContent)
+      .toBe('章节 (2)');
+    expect(chaptersNode.querySelectorAll('.toc-chapter-item')).toHaveLength(2);
+    expect(chaptersNode.querySelectorAll('.toc-outline-toggle')).toHaveLength(1);
+    expect(chaptersNode.querySelectorAll('.toc-chapter-leaf')).toHaveLength(0);
+    expect(chaptersNode.querySelectorAll('.toc-full-text-leaf')).toHaveLength(0);
+    expect(toc.querySelectorAll('.toc-full-text-leaf.toc-notes-leaf'))
+      .toHaveLength(1);
+    expect(toc.querySelectorAll('.toc-full-text-leaf.toc-calibrated-leaf'))
+      .toHaveLength(1);
+
+    expect(new Set(observedIds).size).toBe(observedIds.length);
+    expect(observedIds).toContain('notes-section');
+    expect(observedIds).toContain('calibrated-section');
+
+    scroll.trigger([passedEntry(dom.window.document.getElementById('notes-section'))]);
+    expect(toc.querySelector('.toc-notes-leaf').classList.contains('active'))
+      .toBe(true);
+    scroll.trigger([passedEntry(dom.window.document.getElementById('calibrated-section'))]);
+    expect(toc.querySelector('.toc-calibrated-leaf').classList.contains('active'))
+      .toBe(true);
   });
 
   it('uses document-order anchor positions for scrollspy across notes and calibrated text', () => {
