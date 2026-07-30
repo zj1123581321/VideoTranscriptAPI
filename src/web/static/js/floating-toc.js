@@ -179,11 +179,6 @@
         return link;
     }
 
-    function appendSectionTitle(listEl, text) {
-        const title = createEl('div', 'toc-section-title', text);
-        listEl.appendChild(title);
-    }
-
     /**
      * Scroll the container just enough to reveal the item; no-op when the
      * item is already fully visible (avoids panel jitter).
@@ -294,9 +289,7 @@
             {
                 key: 'notes',
                 label: '详细笔记',
-                section: document.getElementById('notes-content-block')
-                    ? findOutlineSection('详细笔记')
-                    : null,
+                section: findOutlineSection('详细笔记'),
                 children: tocData.notesHeadings,
                 fallbackId: 'notes-section'
             },
@@ -493,10 +486,10 @@
         return pane;
     }
 
-    function buildOutlinePane(isActive, showSectionTitles) {
+    function buildOutlinePane(isActive) {
         const pane = createEl('div', 'toc-pane toc-outline-pane' + (isActive ? ' active' : ''));
         const list = createEl('ul', 'toc-list');
-        buildOutlineList(list, showSectionTitles);
+        buildOutlineList(list);
         pane.appendChild(list);
         return pane;
     }
@@ -584,10 +577,10 @@
         const content = createEl('div', 'toc-content');
         if (hasChapters) {
             content.appendChild(buildChaptersPane(true));
-            content.appendChild(buildOutlinePane(false, true));
+            content.appendChild(buildOutlinePane(false));
         } else {
             const list = createEl('ul', 'toc-list');
-            buildOutlineList(list, true);
+            buildOutlineList(list);
             content.appendChild(list);
         }
         container.appendChild(content);
@@ -626,10 +619,10 @@
         const body = createEl('div', 'toc-mobile-body');
         if (hasChapters) {
             body.appendChild(buildChaptersPane(true));
-            body.appendChild(buildOutlinePane(false, true));
+            body.appendChild(buildOutlinePane(false));
         } else {
             const list = createEl('ul', 'toc-list');
-            buildOutlineList(list, true);
+            buildOutlineList(list);
             body.appendChild(list);
         }
         mobileContent.appendChild(body);
@@ -749,6 +742,19 @@
     }
 
     /**
+     * Open closed details ancestors before a TOC target is scrolled into view.
+     */
+    function openTocDetailsAncestors(targetElement) {
+        let currentElement = targetElement;
+        while (currentElement) {
+            if (currentElement instanceof HTMLDetailsElement && !currentElement.open) {
+                currentElement.open = true;
+            }
+            currentElement = currentElement.parentElement;
+        }
+    }
+
+    /**
      * Scroll outline or chapter-tab targets through one fallback-aware path.
      * Chapter links prefer chapter-anchor-{index}, then dlg-{start_seg}.
      */
@@ -759,6 +765,7 @@
             return false;
         }
 
+        openTocDetailsAncestors(targetElement);
         targetElement.scrollIntoView({
             behavior: 'smooth',
             block: 'start'
@@ -794,16 +801,9 @@
             return;
         }
 
-        const targetElement = resolveTocTarget(targetId, mainEl.dataset.fallbackId);
-        if (!targetElement) {
-            console.warn('Chapter jump target not found:', targetId);
+        if (!scrollToTocTarget(targetId, mainEl.dataset.fallbackId)) {
             return;
         }
-
-        targetElement.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-        });
 
         if (mode === 'mobile') {
             closeMobilePanel();
@@ -1157,10 +1157,6 @@
         tocData.chapters = readChaptersData();
         tocData.outlineSections = buildOutlineSections();
         hasChapters = tocData.chapters.length > 0;
-
-        if (tocData.calibratedSection && !tocData.calibratedSection.id) {
-            tocData.calibratedSection.id = 'calibrated-section';
-        }
 
         if (!hasTocContent()) {
             console.log('No headings/chapters/calibrated section; skip TOC');
