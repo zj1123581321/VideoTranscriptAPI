@@ -3,21 +3,23 @@
  * Responsive design for desktop and mobile.
  *
  * Features:
- * - Builds one chapter-axis tree for summary, chapters, detailed notes, and
- *   calibrated transcript sections
+ * - Builds one directory tree containing summary headings, a chapter axis,
+ *   detailed notes, and calibrated transcript full-text leaves
  * - Chapters are read from the #chapters-data JSON island
  *   (items: {index,title,gist,start_time,start_seg,jump_ok}); a chapter row
- *   shows time + title + full gist and jumps to the inline
- *   #chapter-anchor-{index} header (fallback #dlg-{start_seg})
- * - Chapter pages: one tree with current chapter tracking via
- *   IntersectionObserver on notes and calibrated anchors
+ *   shows time + title + full gist and targets notes-chapter-{index}, then
+ *   chapter-anchor-{index}, then dlg-{start_seg}. The latter two targets are
+ *   gated by jump_ok; rows remain visible but muted and disabled when they
+ *   cannot jump.
+ * - Chapter pages track the current chapter through notes and calibrated
+ *   anchors, while summary headings and full-text sections use scrollspy
  * - Breakpoints on chapter pages:
  *     >=1400px: docked expanded panel, body gets a right margin (toc-wide-margin)
  *     769-1399px: overlay panel, expanded by default, manually collapsible
  *       (state in localStorage key vta_toc_panel_collapsed)
  *     <=768px: sticky current-chapter bar + FAB + bottom drawer
- * - Pages without chapters keep the legacy behavior (collapsed indicator bar,
- *   hover/pin to expand, localStorage key vta_toc_pinned)
+ * - Pages without chapters use a collapsed indicator bar with optional pinning
+ *   (localStorage key vta_toc_pinned)
  * - Scroll highlight + smooth jump
  * - XSS: build all user/chapter text via DOM API + textContent only
  *   (never HTML-string concatenation of titles)
@@ -41,7 +43,6 @@
     // ========== State ==========
     let tocData = {
         headings: [],
-        notesHeadings: [],
         summarySection: null,
         notesSection: null,
         calibratedSection: null,
@@ -274,22 +275,6 @@
         });
     }
 
-    /**
-     * Read note chapters only from the server-owned notes content block.
-     * The notes chapter id is the stable scroll target, not generated text.
-     */
-    function extractNotesHeadings() {
-        return Array.from(document.querySelectorAll(
-            '#notes-content-block h2[id^="notes-chapter-"]'
-        )).map((element) => ({
-            level: 2,
-            chapterIndex: parseChapterAnchorIndex(element.id, 'notes-chapter'),
-            text: element.textContent.trim(),
-            id: element.id,
-            element: element
-        })).filter(heading => heading.text && heading.chapterIndex !== null);
-    }
-
     function findNotesSection() {
         return document.getElementById('notes-content-block')
             ? findOutlineSection('详细笔记')
@@ -352,7 +337,7 @@
             const dlgId = startSeg === null ? null : 'dlg-' + startSeg;
             const notesEl = document.getElementById('notes-chapter-' + index);
             const anchorEl = jumpOk ? document.getElementById(anchorId) : null;
-            const dlgEl = dlgId ? document.getElementById(dlgId) : null;
+            const dlgEl = jumpOk && dlgId ? document.getElementById(dlgId) : null;
 
             let targetId = null;
             let fallbackId = null;
@@ -471,11 +456,6 @@
             main.disabled = true;
             main.setAttribute('aria-disabled', 'true');
         }
-        main.appendChild(createEl(
-            'span',
-            'toc-chapter-number',
-            '章节 ' + (chapter.index + 1)
-        ));
         if (chapter.timeLabel) {
             main.appendChild(createEl('span', 'toc-chapter-time', chapter.timeLabel));
         }
@@ -650,6 +630,7 @@
         return !!tocData.summarySection
             || !!tocData.notesSection
             || !!tocData.calibratedSection
+            || tocData.headings.length > 0
             || tocData.chapters.length > 0;
     }
 
@@ -1053,6 +1034,9 @@
                 ensureOutlineSectionId(tocData.summarySection, 'summary-section')
             );
         }
+        tocData.headings.forEach(heading => {
+            addTarget(heading.element, heading.id);
+        });
         tocData.chapters.forEach(chapter => {
             if (!chapter.targetElement) return;
             addTarget(chapter.targetElement, 'toc-chapter-' + chapter.index);
@@ -1169,7 +1153,6 @@
         tocData.notesSection = findNotesSection();
         tocData.calibratedSection = findCalibratedSection();
         tocData.headings = extractHeadings();
-        tocData.notesHeadings = extractNotesHeadings();
         appendNotesSourceLinks();
         tocData.chapters = readChaptersData();
         hasChapters = tocData.chapters.length > 0;

@@ -41,7 +41,7 @@ function createFixture({
   const summaryMarkup = includeSummary ? `
     <div class="section" id="summary-section">
       <div class="section-header"><h2>内容总结</h2></div>
-      <div class="content"><h3>关键观点</h3><p>summary</p></div>
+      <div class="content"><h2 id="summary-heading">关键观点</h2><h3 id="summary-subheading">子观点</h3><p>summary</p></div>
     </div>` : '';
   const notesMarkup = notes.length > 0 ? `
     <details class="section notes-section" id="notes-section" open>
@@ -140,6 +140,7 @@ describe('floating chapter-axis TOC', () => {
   it('keeps a jump-disabled chapter visible and non-clickable', () => {
     const { dom } = createFixture({
       chapters: [{ index: 0, title: '失配章节', start_time: 65, start_seg: 0, jump_ok: false }],
+      dialogs: [0],
     });
     const item = pcChapter(dom);
     const main = item.querySelector('.toc-chapter-main');
@@ -147,6 +148,8 @@ describe('floating chapter-axis TOC', () => {
     expect(item).not.toBeNull();
     expect(item.classList.contains('toc-chapter-disabled')).toBe(true);
     expect(main.disabled).toBe(true);
+    expect(main.dataset.targetId || '').not.toContain('dlg-0');
+    expect(main.dataset.fallbackId || '').not.toContain('dlg-0');
   });
 
   it('renders the full chapter gist as text', () => {
@@ -183,14 +186,21 @@ describe('floating chapter-axis TOC', () => {
     expect(chaptersNode.querySelectorAll('.toc-outline-toggle')).toHaveLength(1);
     expect(chaptersNode.querySelectorAll('.toc-chapter-leaf')).toHaveLength(0);
     expect(chaptersNode.querySelectorAll('.toc-full-text-leaf')).toHaveLength(0);
+    expect(chaptersNode.querySelector('.toc-chapter-item').textContent)
+      .not.toContain('章节 1');
     expect(toc.querySelectorAll('.toc-full-text-leaf.toc-notes-leaf'))
       .toHaveLength(1);
     expect(toc.querySelectorAll('.toc-full-text-leaf.toc-calibrated-leaf'))
       .toHaveLength(1);
 
     expect(new Set(observedIds).size).toBe(observedIds.length);
+    expect(observedIds).toContain('summary-heading');
     expect(observedIds).toContain('notes-section');
     expect(observedIds).toContain('calibrated-section');
+
+    scroll.trigger([passedEntry(dom.window.document.getElementById('summary-heading'))]);
+    expect(toc.querySelector('.toc-outline-child[data-id="summary-heading"]')
+      .classList.contains('active')).toBe(true);
 
     scroll.trigger([passedEntry(dom.window.document.getElementById('notes-section'))]);
     expect(toc.querySelector('.toc-notes-leaf').classList.contains('active'))

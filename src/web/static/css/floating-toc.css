@@ -676,12 +676,6 @@ body.toc-wide-margin {
     min-width: 0;
 }
 
-.toc-chapter-number {
-    flex-shrink: 0;
-    color: var(--toc-text-secondary);
-    font-weight: 600;
-}
-
 .toc-chapter-time {
     flex-shrink: 0;
     font-size: 0.75rem;
