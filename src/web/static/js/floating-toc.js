@@ -297,9 +297,7 @@
                 key: 'calibrated',
                 label: '校对文本',
                 section: tocData.calibratedSection,
-                children: tocData.chapters.some(chapter => chapter.jumpOk)
-                    ? tocData.chapters
-                    : [],
+                children: tocData.chapters,
                 fallbackId: 'calibrated-section'
             }
         ];
@@ -1045,9 +1043,7 @@
         });
 
         tocData.outlineSections.forEach(sectionData => {
-            if (sectionData.key === 'calibrated' || sectionData.children.length === 0) {
-                addTarget(sectionData.section, sectionData.sectionId);
-            }
+            addTarget(sectionData.section, sectionData.sectionId);
         });
 
         if (elements.length === 0) return;
