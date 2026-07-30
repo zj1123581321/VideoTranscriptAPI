@@ -1344,6 +1344,104 @@ class TestLLMStatusColumnMigration:
         finally:
             cm.close()
 
+    def test_legacy_alter_table_adds_progress_preserves_rows(self, tmp_path):
+        """Upgrade path: pre-progress schema gains the column via ALTER TABLE.
+
+        Uses a table without view_token UNIQUE so migration takes the
+        ADD COLUMN branch rather than full table rebuild. Existing rows
+        must stay intact with NULL progress.
+        """
+        db_path = tmp_path / "legacy-no-progress.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            """
+            CREATE TABLE task_status (
+                task_id TEXT PRIMARY KEY,
+                view_token TEXT NOT NULL,
+                url TEXT NOT NULL,
+                platform TEXT,
+                media_id TEXT,
+                status TEXT NOT NULL DEFAULT 'queued',
+                title TEXT
+            )
+            """
+        )
+        rows = [
+            (
+                "alter-task-1",
+                "alter-view-1",
+                "https://example.com/alter-1",
+                "youtube",
+                "alter-media-1",
+                "processing",
+                "Alter title 1",
+            ),
+            (
+                "alter-task-2",
+                "alter-view-2",
+                "https://example.com/alter-2",
+                "bilibili",
+                "alter-media-2",
+                "queued",
+                "Alter title 2",
+            ),
+            (
+                "alter-task-3",
+                "alter-view-3",
+                "https://example.com/alter-3",
+                "youtube",
+                "alter-media-3",
+                "success",
+                "Alter title 3",
+            ),
+        ]
+        conn.executemany(
+            """
+            INSERT INTO task_status
+                (task_id, view_token, url, platform, media_id, status, title)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        conn.commit()
+        # Precondition: no progress column before CacheManager init.
+        pre_columns = [
+            col[1] for col in conn.execute("PRAGMA table_info(task_status)").fetchall()
+        ]
+        assert "progress" not in pre_columns
+        conn.close()
+
+        cm = CacheManager(cache_dir=str(tmp_path / "cache-alter"), db_path=str(db_path))
+        try:
+            with cm._get_cursor() as cursor:
+                cursor.execute("PRAGMA table_info(task_status)")
+                columns = [column[1] for column in cursor.fetchall()]
+            assert columns.count("progress") == 1
+
+            for task_id, view_token, url, platform, media_id, status, title in rows:
+                task = cm.get_task_by_id(task_id)
+                assert task is not None
+                assert task["view_token"] == view_token
+                assert task["url"] == url
+                assert task["platform"] == platform
+                assert task["media_id"] == media_id
+                assert task["status"] == status
+                assert task["title"] == title
+                assert task["progress"] is None
+
+            with cm._get_cursor() as cursor:
+                cursor.execute(
+                    "SELECT task_id, progress FROM task_status ORDER BY task_id"
+                )
+                sql_rows = cursor.fetchall()
+            assert len(sql_rows) == 3
+            for sql_row in sql_rows:
+                # sqlite3.Row or tuple depending on row_factory
+                progress_value = sql_row["progress"] if hasattr(sql_row, "keys") else sql_row[1]
+                assert progress_value is None
+        finally:
+            cm.close()
+
     def test_migration_is_idempotent(self, cache_dir):
         """Re-initializing CacheManager against the same on-disk DB (simulating
         a process restart) must not error and must not duplicate the columns."""

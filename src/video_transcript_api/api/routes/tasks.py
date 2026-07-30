@@ -469,16 +469,8 @@ async def get_task_status(
         status = task_info.get("status") or TaskStatus.QUEUED
         code = http_code_for_status(status)
 
+        # progress is already dict|None from CacheManager.get_task_by_id
         progress = task_info.get("progress")
-        if progress is not None and not isinstance(progress, dict):
-            try:
-                progress = json.loads(progress)
-            except (TypeError, json.JSONDecodeError):
-                logger.warning("Invalid progress JSON for task %s", task_id)
-                progress = None
-            if not isinstance(progress, dict):
-                logger.warning("Progress JSON is not an object for task %s", task_id)
-                progress = None
 
         # 干净的元信息形状 + 显式 status；正文走 view_token 获取
         data = {
