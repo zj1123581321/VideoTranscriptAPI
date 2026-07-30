@@ -3,9 +3,11 @@
 基于 structured_calibrator.py 的 _intelligent_chunking 逻辑重构
 """
 
+import math
 import re
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
+from ...transcriber.segments import interpolate_segment_times, parse_time_to_seconds
 from ...utils.logging import setup_logger
 from ..core.config import LLMConfig
 
@@ -140,7 +142,154 @@ class DialogSegmenter:
             sub_dialogs.append(sub_dialog)
 
         logger.debug(f"Long dialog split: length {len(text)} -> {len(sub_dialogs)} fragments")
+        if len(sub_dialogs) > 1:
+            self._interpolate_dialog_times(dialog, sub_dialogs)
         return sub_dialogs
+
+    def _interpolate_dialog_times(
+        self, dialog: Dict[str, Any], sub_dialogs: List[Dict[str, Any]]
+    ) -> None:
+        """为实际切出的子对话写回字符串时间，无法格式化时保留文本并置空时间。"""
+        start_raw = dialog.get("start_time")
+        end_raw = dialog.get("end_time")
+        start_seconds = parse_time_to_seconds(start_raw)
+        end_seconds = parse_time_to_seconds(end_raw)
+        time_pairs = interpolate_segment_times(
+            start_seconds,
+            end_seconds,
+            [sub_dialog.get("text", "") for sub_dialog in sub_dialogs],
+        )
+
+        # Format each shared boundary once with a single template so adjacent
+        # fragment end/start strings stay identical by construction.
+        formatted_pairs: List[Tuple[str, str]] = []
+        template = self._pick_dialog_timestamp_template(start_raw, end_raw)
+        if template is not None and time_pairs:
+            boundaries = [time_pairs[0][0]]
+            boundaries.extend(pair[1] for pair in time_pairs)
+            formatted_boundaries = [
+                self._format_dialog_timestamp(boundary, template)
+                for boundary in boundaries
+            ]
+            if all(value is not None for value in formatted_boundaries):
+                formatted_pairs = [
+                    (formatted_boundaries[index], formatted_boundaries[index + 1])
+                    for index in range(len(time_pairs))
+                ]
+
+        can_estimate = len(formatted_pairs) == len(sub_dialogs)
+        if can_estimate:
+            formatted_seconds: List[Tuple[Optional[float], Optional[float]]] = [
+                (
+                    parse_time_to_seconds(start_time),
+                    parse_time_to_seconds(end_time),
+                )
+                for start_time, end_time in formatted_pairs
+            ]
+            can_estimate = all(
+                start_time is not None
+                and end_time is not None
+                and end_time > start_time
+                for start_time, end_time in formatted_seconds
+            )
+
+        for index, sub_dialog in enumerate(sub_dialogs):
+            sub_dialog["time_estimated"] = True
+            if not can_estimate:
+                sub_dialog["start_time"] = None
+                sub_dialog["end_time"] = None
+                sub_dialog["duration"] = None
+                continue
+
+            start_time, end_time = formatted_pairs[index]
+            start_value = parse_time_to_seconds(start_time)
+            end_value = parse_time_to_seconds(end_time)
+            sub_dialog["start_time"] = start_time
+            sub_dialog["end_time"] = end_time
+            sub_dialog["duration"] = end_value - start_value
+
+        if can_estimate:
+            logger.warning(
+                "Estimated dialog timestamps after splitting segment: "
+                f"span_seconds={end_seconds - start_seconds:.2f} "
+                f"text_length={len(dialog.get('text', ''))} "
+                f"parts={len(sub_dialogs)}"
+            )
+
+    @staticmethod
+    def _timestamp_template_decimal_places(template: Any) -> Optional[int]:
+        """Return second-field decimal places for a usable clock template, else None."""
+        if not isinstance(template, str):
+            return None
+
+        parts = template.strip().split(":")
+        if len(parts) not in (2, 3) or any(
+            not re.fullmatch(r"\d+(?:\.\d+)?", part) for part in parts
+        ):
+            return None
+
+        second_template = parts[-1]
+        if "." not in second_template:
+            return 0
+        return len(second_template.split(".", 1)[1])
+
+    @classmethod
+    def _pick_dialog_timestamp_template(
+        cls, start_raw: Any, end_raw: Any
+    ) -> Optional[str]:
+        """Pick a single format template: the usable end with more decimal places."""
+        best_template: Optional[str] = None
+        best_places = -1
+        for raw in (start_raw, end_raw):
+            places = cls._timestamp_template_decimal_places(raw)
+            if places is None:
+                continue
+            # Prefer higher precision so both endpoints remain expressible.
+            if places > best_places:
+                best_places = places
+                best_template = raw.strip()
+        return best_template
+
+    @staticmethod
+    def _format_dialog_timestamp(
+        seconds: Optional[float], template: Any
+    ) -> Optional[str]:
+        """Format an interpolated timestamp without changing the source field type."""
+        if seconds is None or not math.isfinite(seconds) or not isinstance(template, str):
+            return None
+
+        parts = template.strip().split(":")
+        if len(parts) not in (2, 3) or any(
+            not re.fullmatch(r"\d+(?:\.\d+)?", part) for part in parts
+        ):
+            return None
+
+        second_template = parts[-1]
+        has_fraction = "." in second_template
+        decimal_places = (
+            len(second_template.split(".", 1)[1]) if has_fraction else 0
+        )
+        scale = 10**decimal_places
+        total_units = int(round(seconds * scale)) if has_fraction else int(seconds)
+        whole_seconds, fractional_units = divmod(total_units, scale)
+        hours, remainder = divmod(whole_seconds, 3600)
+        minutes, second_value = divmod(remainder, 60)
+
+        if len(parts) == 3:
+            hour_width = max(2, len(parts[0]))
+            minute_width = max(2, len(parts[1]))
+            formatted = (
+                f"{hours:0{hour_width}d}:{minutes:0{minute_width}d}:"
+                f"{second_value:02d}"
+            )
+        else:
+            minute_total = hours * 60 + minutes
+            minute_width = max(2, len(parts[0]))
+            formatted = f"{minute_total:0{minute_width}d}:{second_value:02d}"
+
+        if has_fraction:
+            formatted += f".{fractional_units:0{decimal_places}d}"
+        return formatted
 
     def _split_by_sentences(self, text: str) -> List[str]:
         """按句子分割文本"""

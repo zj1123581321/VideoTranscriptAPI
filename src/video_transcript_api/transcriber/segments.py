@@ -20,7 +20,7 @@ import json
 import math
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from ..utils.logging import setup_logger
 
@@ -195,6 +195,62 @@ def sanitize_time_pair(
     if start is not None and end is not None and end < start:
         end = None
     return start, end
+
+
+def interpolate_segment_times(
+    start: Optional[float],
+    end: Optional[float],
+    text_parts: Sequence[str],
+) -> List[Tuple[Optional[float], Optional[float]]]:
+    """按文本字符占比插值连续片段时间，保持首尾对齐且无时间空洞。
+
+    ``start`` 和 ``end`` 必须是有限秒数，且 ``end`` 严格大于 ``start``；
+    否则为每个文本片段返回 ``(None, None)``，由调用方保留文本并诚实降级。
+    当非空片段的总字符数为零时，使用片段数量做稳定的等长切分。
+
+    Args:
+        start: 原始区间起点（秒）。
+        end: 原始区间终点（秒）。
+        text_parts: 已按业务规则切好的文本片段，顺序必须与输出一致。
+
+    Returns:
+        与 ``text_parts`` 一一对应的 ``(start, end)`` 时间对。
+    """
+    if not text_parts:
+        return []
+
+    if (
+        start is None
+        or end is None
+        or not math.isfinite(start)
+        or not math.isfinite(end)
+        or end <= start
+    ):
+        return [(None, None) for _ in text_parts]
+
+    span = end - start
+    if not math.isfinite(span):
+        return [(None, None) for _ in text_parts]
+
+    text_lengths = [len(text) for text in text_parts]
+    total_characters = sum(text_lengths)
+    if total_characters == 0:
+        denominator = len(text_parts)
+        boundaries = [
+            start + span * index / denominator
+            for index in range(denominator)
+        ] + [end]
+    else:
+        cumulative_characters = 0
+        boundaries = [start]
+        for index, text_length in enumerate(text_lengths[:-1], start=1):
+            cumulative_characters += text_length
+            boundaries.append(
+                start + span * cumulative_characters / total_characters
+            )
+        boundaries.append(end)
+
+    return list(zip(boundaries, boundaries[1:]))
 
 
 def normalize_segments(

@@ -10,10 +10,13 @@ Covers:
 All console output must be in English only (no emoji, no Chinese).
 """
 
+import re
+
 import pytest
 from unittest.mock import Mock
 from video_transcript_api.llm.segmenters.text_segmenter import TextSegmenter
 from video_transcript_api.llm.core.config import LLMConfig
+from video_transcript_api.transcriber.segments import parse_time_to_seconds
 
 
 @pytest.fixture
@@ -128,6 +131,120 @@ class TestDialogSegmenter:
         dialogs = [{"speaker": "A", "text": long_text, "start_time": 0}]
         result = dialog_segmenter.segment(dialogs)
         assert len(result) >= 2
+
+    def test_long_dialog_interpolates_timestamps_without_copying(self, dialog_segmenter):
+        """Long dialog fragments retain the original sentence split order and timeline."""
+        sentence = "中性测试句子。"
+        long_text = sentence * 200
+        dialogs = [
+            {
+                "speaker": "A",
+                "text": long_text,
+                "start_time": "00:00:21",
+                "end_time": "00:56:24",
+            }
+        ]
+
+        result = dialog_segmenter.segment(dialogs)
+        fragments = [dialog for chunk in result for dialog in chunk]
+        expected_texts = [sentence * 28] * 7 + [sentence * 4]
+
+        assert [dialog["text"] for dialog in fragments] == expected_texts
+        assert len(fragments) == len(expected_texts)
+        assert all(dialog["time_estimated"] is True for dialog in fragments)
+
+        starts = [parse_time_to_seconds(dialog["start_time"]) for dialog in fragments]
+        ends = [parse_time_to_seconds(dialog["end_time"]) for dialog in fragments]
+        assert starts[0] == parse_time_to_seconds("00:00:21")
+        assert ends[-1] == parse_time_to_seconds("00:56:24")
+        assert all(
+            re.fullmatch(r"\d{2}:\d{2}:\d{2}", dialog["start_time"])
+            for dialog in fragments
+        )
+        assert all(
+            re.fullmatch(r"\d{2}:\d{2}:\d{2}", dialog["end_time"])
+            for dialog in fragments
+        )
+        assert all(start < end for start, end in zip(starts, ends))
+        assert starts == sorted(starts)
+        assert len(set(starts)) == len(starts)
+
+        for index, dialog in enumerate(fragments):
+            assert dialog["duration"] == pytest.approx(ends[index] - starts[index])
+            if index:
+                assert starts[index] == ends[index - 1]
+                assert starts[index] >= ends[index - 1]
+
+    @pytest.mark.parametrize(
+        ("seconds", "template", "expected"),
+        [
+            (1.5, "00:00:00", "00:00:01"),
+            (1.0, "00:00:00.0", "00:00:01.0"),
+            (1.5, "00:00:00.00", "00:00:01.50"),
+        ],
+    )
+    def test_dialog_timestamp_format_preserves_template_precision(
+        self, dialog_segmenter, seconds, template, expected
+    ):
+        assert (
+            dialog_segmenter._format_dialog_timestamp(seconds, template)
+            == expected
+        )
+
+    def test_long_dialog_with_invalid_times_keeps_text_and_drops_timeline(
+        self, dialog_segmenter
+    ):
+        sentence = "中性测试句子。"
+        dialogs = [
+            {
+                "speaker": "A",
+                "text": sentence * 100,
+                "start_time": "not-a-time",
+                "end_time": "00:10:00",
+            }
+        ]
+
+        result = dialog_segmenter.segment(dialogs)
+        fragments = [dialog for chunk in result for dialog in chunk]
+
+        assert len(fragments) > 1
+        assert "".join(dialog["text"] for dialog in fragments) == dialogs[0]["text"]
+        assert all(dialog["time_estimated"] is True for dialog in fragments)
+        assert all(dialog["start_time"] is None for dialog in fragments)
+        assert all(dialog["end_time"] is None for dialog in fragments)
+        assert all(dialog["duration"] is None for dialog in fragments)
+
+    def test_mixed_precision_endpoints_keep_contiguous_timeline(
+        self, dialog_segmenter
+    ):
+        """Different start/end decimal precision must not wipe the timeline."""
+        sentence = "中性测试句子。"
+        dialogs = [
+            {
+                "speaker": "A",
+                "text": sentence * 100,
+                "start_time": "00:00:00",
+                "end_time": "00:00:10.0",
+            }
+        ]
+
+        result = dialog_segmenter.segment(dialogs)
+        fragments = [dialog for chunk in result for dialog in chunk]
+
+        assert len(fragments) > 1
+        assert all(dialog["start_time"] is not None for dialog in fragments)
+        assert all(dialog["end_time"] is not None for dialog in fragments)
+        assert all(dialog["duration"] is not None for dialog in fragments)
+        assert all(dialog["time_estimated"] is True for dialog in fragments)
+
+        assert parse_time_to_seconds(fragments[0]["start_time"]) == parse_time_to_seconds(
+            "00:00:00"
+        )
+        assert parse_time_to_seconds(fragments[-1]["end_time"]) == parse_time_to_seconds(
+            "00:00:10.0"
+        )
+        for index in range(1, len(fragments)):
+            assert fragments[index - 1]["end_time"] == fragments[index]["start_time"]
 
     def test_short_tail_merged(self, dialog_segmenter):
         """Very short last chunk should be merged into previous."""
