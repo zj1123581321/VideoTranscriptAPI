@@ -123,3 +123,43 @@
 **Priority:** P2
 
 **Depends on:** PWA 化（feat/pwa-installable）先落地
+
+---
+
+## P3: vitest 接入 CI（共享 gate workflow 支持 node）
+
+**What:** 让 CI（zlxlabs/gate reusable workflow，tier: personal）执行 `npx vitest run`，或在仓库内加独立 JS 测试 workflow。
+
+**Why:** PWA 化引入 vitest 测 SW 决策表/分享预填/轮询终态等纯函数；CI 不跑则测试逐渐腐烂。
+
+**Pros:** JS 测试有强制力，与 pytest 同等级保障。
+
+**Cons:** 依赖共享 gate 仓库是否支持 node 工具链，时间不可控；或需本仓库独立 workflow（与 gate 并存）。
+
+**Context:** 触发点：`docs/designs/pwa.md` 的 T8 落地后。先确认 gate 是否已有 node 支持；没有则评估本仓库加 `js-test.yml`（actions/setup-node + npx vitest run）。
+
+**Effort:** S（人工）→ S（CC）
+
+**Priority:** P3
+
+**Depends on:** PWA 化 T8（vitest 工具链落地）
+
+---
+
+## P3: 建立 DESIGN.md（设计系统权威出处）
+
+**What:** 编写仓库根 DESIGN.md，固化品牌色（indigo #4f46e5/#667eea）、按钮与组件词汇、交互状态规范（loading/empty/error/success）、无障碍基线（44px 触控、对比度、aria 约定）。
+
+**Why:** PWA 化评审发现设计决策只散落在 styles.css 和各页面内联样式里，没有权威出处；每次设计评审都从零校准。
+
+**Pros:** 新组件有参照系；design review 效率和质量提升；AI 生成 UI 时有一致的约束输入。
+
+**Cons:** 需要一次盘点现有样式的梳理工作；后续要维护。
+
+**Context:** 切入点：PWA 化落地的设计规格（docs/designs/pwa.md 的"设计规格"一节）可作为第一章；styles.css 的 CSS 变量和 history.html 的 --accent-primary 等 token 是素材。
+
+**Effort:** M（人工）→ S（CC）
+
+**Priority:** P3
+
+**Depends on:** 无（PWA 化完成后内容更全）
