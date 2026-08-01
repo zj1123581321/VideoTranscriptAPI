@@ -185,6 +185,27 @@ describe('floating chapter-axis TOC', () => {
       .toBe('chapter-anchor-0');
   });
 
+  it('falls back to notes inside the calibrated zone when calibrated targets are absent', () => {
+    const { dom } = createFixture({
+      chapters: [{ index: 0, title: '第一章', start_time: 65, start_seg: 0, jump_ok: true }],
+      notes: [{ index: 0, title: '笔记第一章' }],
+      calibrated: [1],
+    });
+    const note = dom.window.document.getElementById('notes-chapter-0');
+    const main = pcChapter(dom).querySelector('.toc-chapter-main');
+
+    expect(dom.window.document.getElementById('calibrated-section')).not.toBeNull();
+    expect(dom.window.document.getElementById('chapter-anchor-0')).toBeNull();
+    expect(dom.window.document.getElementById('dlg-0')).toBeNull();
+    note.scrollIntoView = vi.fn();
+    main.click();
+
+    expect(note.scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  });
+
   it('falls back from a missing calibrated anchor to its dialog target', () => {
     const { dom } = createFixture({
       chapters: [{ index: 0, title: '第一章', start_time: 65, start_seg: 0, jump_ok: true }],
