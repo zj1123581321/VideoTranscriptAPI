@@ -155,6 +155,13 @@
         //   "low"/"medium"/"high" - 三家通用
         //   "max"/"xhigh" - DeepSeek V4 特有；其他服务商会 clamp 到 high
         //   "none"        - 已弃用，启动时自动迁移到 "disabled" 并 warn
+        //
+        // 【坑】经中转网关（one-api/new-api 之类）访问 DeepSeek 时，"disabled" 可能静默失效：
+        //   llm-compat 用裸 httpx 发 JSON，把它编码成嵌套的 extra_body.thinking.type，
+        //   而 extra_body 是 OpenAI SDK 的封装概念（SDK 才会展开到顶层），网关不认识就整块忽略。
+        //   2026-07-31 在 v4-flash 上实测(n=3)：null 中位 46.6s/out 6462，"disabled" 52.0s/out 7046
+        //   （两者分布重合＝没生效），"low" 24.4s/out 3251 且无极端值。
+        //   需要压低思考时优先用 "low"（走顶层 reasoning_effort，网关必然识别），别用 "disabled"。
         "calibrate_model": "gpt-4.1-mini",      // 校对使用的模型
         "calibrate_reasoning_effort": null,     // GPT-4.x 不支持 reasoning_effort，设任何值都会被 drop
 
