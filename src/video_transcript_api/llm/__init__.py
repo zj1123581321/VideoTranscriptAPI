@@ -88,6 +88,9 @@ from .prompts import (
     # System prompts
     CALIBRATE_SYSTEM_PROMPT,
     CALIBRATE_SYSTEM_PROMPT_WITH_SPEAKER,
+    NOTES_SYSTEM_PROMPT_BASE,
+    NOTES_SYSTEM_PROMPT_SPEAKER,
+    NOTES_SYSTEM_PROMPT_NO_SPEAKER,
     SUMMARY_SYSTEM_PROMPT_SINGLE_SPEAKER,
     SUMMARY_SYSTEM_PROMPT_MULTI_SPEAKER,
     STRUCTURED_CALIBRATE_SYSTEM_PROMPT,
@@ -101,6 +104,7 @@ from .prompts import (
     build_validation_user_prompt,
     build_unified_validation_user_prompt,
     build_speaker_inference_user_prompt,
+    build_notes_user_prompt,
 )
 
 # 新架构模块
@@ -163,6 +167,9 @@ __all__ = [
     # Prompts
     "CALIBRATE_SYSTEM_PROMPT",
     "CALIBRATE_SYSTEM_PROMPT_WITH_SPEAKER",
+    "NOTES_SYSTEM_PROMPT_BASE",
+    "NOTES_SYSTEM_PROMPT_SPEAKER",
+    "NOTES_SYSTEM_PROMPT_NO_SPEAKER",
     "SUMMARY_SYSTEM_PROMPT_SINGLE_SPEAKER",
     "SUMMARY_SYSTEM_PROMPT_MULTI_SPEAKER",
     "STRUCTURED_CALIBRATE_SYSTEM_PROMPT",
@@ -175,4 +182,5 @@ __all__ = [
     "build_validation_user_prompt",
     "build_unified_validation_user_prompt",
     "build_speaker_inference_user_prompt",
+    "build_notes_user_prompt",
 ]

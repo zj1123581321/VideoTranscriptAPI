@@ -10,15 +10,32 @@ from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import math
+import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from ...transcriber.segments import load_segments, parse_time_to_seconds
+from ...utils.logging import setup_logger
 from ...utils.llm_status import NotesStatus
 from ..core.config import LLMConfig
 from ..core.llm_client import LLMClient
-from ..prompts import NOTES_SYSTEM_PROMPT, build_notes_user_prompt
+from ..prompts import (
+    NOTES_SYSTEM_PROMPT_NO_SPEAKER,
+    NOTES_SYSTEM_PROMPT_SPEAKER,
+    build_notes_user_prompt,
+)
 from .chapters_processor import _compute_fingerprint
+
+
+logger = setup_logger(__name__)
+
+_NOTES_HEADING_PATTERN = re.compile(r"^(#{1,2})\s+(.*)$")
+_NOTES_TIMESTAMP_PREFIX_PATTERN = re.compile(
+    r"^\[\d{1,2}:\d{2}:\d{2}(?:\s*-\s*\d{1,2}:\d{2}:\d{2})?\]\s*"
+)
+_NOTES_DENSITY_RETRY_PROMPT = (
+    "警告：你上一次的输出篇幅接近原文，这是誊抄不是笔记。请严格执行 40%-60% 篇幅预算，应用'必须丢弃'清单。"
+)
 
 
 @dataclass(frozen=True)
@@ -318,18 +335,66 @@ def _segment_speaker(segment: Mapping[str, Any]) -> str:
     return "Unknown"
 
 
-def format_notes_segment_slice(segments: Sequence[Mapping[str, Any]]) -> str:
-    """Render timestamped, speaker-labelled source lines for one chapter."""
+def detect_notes_speaker_labels(segments: Sequence[Any]) -> bool:
+    """Return whether the full source has any non-empty speaker label."""
+    for segment in segments:
+        if not isinstance(segment, Mapping):
+            continue
+        if any(
+            segment.get(key) is not None and str(segment.get(key)).strip()
+            for key in ("speaker", "speaker_name", "spk", "speaker_id")
+        ):
+            return True
+    return False
+
+
+def format_notes_segment_slice(
+    segments: Sequence[Mapping[str, Any]],
+    *,
+    include_speaker: bool = True,
+) -> str:
+    """Render timestamped source lines, optionally retaining speaker labels."""
     lines = []
     for segment in segments:
         text = segment.get("text")
         if not isinstance(text, str) or not text.strip():
             continue
-        lines.append(
-            f"[{_format_segment_time_range(segment)}] "
-            f"{_segment_speaker(segment)}: {text.strip()}"
-        )
+        timestamp = f"[{_format_segment_time_range(segment)}]"
+        if include_speaker:
+            lines.append(f"{timestamp} {_segment_speaker(segment)}: {text.strip()}")
+        else:
+            lines.append(f"{timestamp} {text.strip()}")
     return "\n".join(lines)
+
+
+def sanitize_notes_chapter_output(note_text: str, chapter_title: str) -> str:
+    """Remove duplicate h1/h2 chapter titles and demote other h1/h2 headings."""
+    sanitized_lines = []
+    normalized_title = chapter_title.strip()
+    for line in note_text.splitlines():
+        match = _NOTES_HEADING_PATTERN.match(line)
+        if match is None:
+            sanitized_lines.append(line)
+            continue
+
+        original_heading_text = match.group(2).strip()
+        comparison_text = _NOTES_TIMESTAMP_PREFIX_PATTERN.sub(
+            "", original_heading_text, count=1
+        ).strip()
+        if comparison_text == normalized_title:
+            continue
+        sanitized_lines.append(
+            f"### {original_heading_text}" if original_heading_text else "###"
+        )
+    return "\n".join(sanitized_lines).strip()
+
+
+def _notes_slice_body_length(segments: Sequence[Mapping[str, Any]]) -> int:
+    return sum(
+        len(text.strip())
+        for segment in segments
+        if isinstance(text := segment.get("text"), str) and text.strip()
+    )
 
 
 def _format_chapter_heading(chapter: NotesChapterSlice) -> str:
@@ -406,8 +471,18 @@ class NotesProcessor:
                 )
 
             model, reasoning_effort = self._resolve_model(selected_models)
+            has_speaker_labels = detect_notes_speaker_labels(source)
+            system_prompt = (
+                NOTES_SYSTEM_PROMPT_SPEAKER
+                if has_speaker_labels
+                else NOTES_SYSTEM_PROMPT_NO_SPEAKER
+            )
+
             def generate_chapter_notes(position: int, chapter: NotesChapterSlice) -> str:
-                chapter_text = format_notes_segment_slice(chapter.segments)
+                chapter_text = format_notes_segment_slice(
+                    chapter.segments,
+                    include_speaker=has_speaker_labels,
+                )
                 if not chapter_text:
                     raise RuntimeError(
                         f"chapter {position} has no renderable transcript"
@@ -426,26 +501,51 @@ class NotesProcessor:
                     previous_title=previous_title,
                     next_title=next_title,
                 )
-                try:
-                    response = self.llm_client.call(
-                        model=model,
-                        system_prompt=NOTES_SYSTEM_PROMPT,
-                        user_prompt=user_prompt,
-                        reasoning_effort=reasoning_effort,
-                        task_type="notes",
-                    )
-                except Exception as exc:  # noqa: BLE001 - preserve processor contract
-                    raise RuntimeError(
-                        f"chapter {position} notes generation failed: {exc}"
-                    ) from exc
 
-                chapter_notes = (
-                    response
-                    if isinstance(response, str)
-                    else getattr(response, "text", "")
+                def call_notes(user_prompt: str) -> str:
+                    try:
+                        response = self.llm_client.call(
+                            model=model,
+                            system_prompt=system_prompt,
+                            user_prompt=user_prompt,
+                            reasoning_effort=reasoning_effort,
+                            task_type="notes",
+                        )
+                    except Exception as exc:  # noqa: BLE001 - preserve processor contract
+                        raise RuntimeError(
+                            f"chapter {position} notes generation failed: {exc}"
+                        ) from exc
+
+                    response_text = (
+                        response
+                        if isinstance(response, str)
+                        else getattr(response, "text", "")
+                    )
+                    if not isinstance(response_text, str) or not response_text.strip():
+                        raise RuntimeError(f"chapter {position} notes response is empty")
+                    return response_text
+
+                chapter_notes = sanitize_notes_chapter_output(
+                    call_notes(user_prompt), chapter.title
                 )
-                if not isinstance(chapter_notes, str) or not chapter_notes.strip():
+                if not chapter_notes:
                     raise RuntimeError(f"chapter {position} notes response is empty")
+
+                body_length = _notes_slice_body_length(chapter.segments)
+                ratio = len(chapter_notes) / body_length
+                if ratio > 0.8:
+                    retry_prompt = f"{user_prompt}\n\n{_NOTES_DENSITY_RETRY_PROMPT}"
+                    retry_notes = sanitize_notes_chapter_output(
+                        call_notes(retry_prompt), chapter.title
+                    )
+                    if not retry_notes:
+                        raise RuntimeError(f"chapter {position} notes response is empty")
+                    ratio = len(retry_notes) / body_length
+                    if ratio > 0.8:
+                        logger.warning(
+                            f"Notes chapter {position} remains over length budget after retry: ratio={ratio:.3f}"
+                        )
+                    chapter_notes = retry_notes
                 return f"{_format_chapter_heading(chapter)}\n{chapter_notes.strip()}"
 
             max_workers = min(len(mapping.slices), self.config.notes_concurrency)
@@ -523,7 +623,9 @@ __all__ = [
     "NotesProcessor",
     "NotesResult",
     "compute_notes_anchor_fingerprint",
+    "detect_notes_speaker_labels",
     "format_notes_segment_slice",
     "load_notes_source_segments",
     "map_notes_chapter_slices",
+    "sanitize_notes_chapter_output",
 ]
