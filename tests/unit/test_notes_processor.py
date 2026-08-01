@@ -4,16 +4,23 @@ import json
 import threading
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
+
+import pytest
 
 from video_transcript_api.llm.core.config import LLMConfig
 from video_transcript_api.llm.core.usage_context import get_context, set_context
 from video_transcript_api.llm.processors.notes_processor import (
     NotesProcessor,
     compute_notes_anchor_fingerprint,
+    detect_notes_speaker_labels,
     load_notes_source_segments,
+    sanitize_notes_chapter_output,
 )
 from video_transcript_api.llm.prompts import (
-    NOTES_SYSTEM_PROMPT,
+    NOTES_SYSTEM_PROMPT_BASE,
+    NOTES_SYSTEM_PROMPT_NO_SPEAKER,
+    NOTES_SYSTEM_PROMPT_SPEAKER,
     build_notes_user_prompt,
 )
 from video_transcript_api.utils.llm_status import NotesStatus
@@ -99,7 +106,7 @@ def _chapter_batch(count):
             "start_time": index * 10,
             "end_time": index * 10 + 10,
             "speaker": "Speaker",
-            "text": f"Chapter {index} source text",
+            "text": f"Chapter {index} source text with enough context to avoid density retry",
         }
         for index in range(count)
     ]
@@ -116,6 +123,23 @@ def _chapter_batch(count):
                 "end_seg": index,
             }
             for index in range(count)
+        ],
+    }
+
+
+def _single_chapter_payload(segments, title="单章"):
+    return {
+        "source": {
+            "kind": "segments",
+            "fingerprint": compute_notes_anchor_fingerprint(segments),
+        },
+        "chapters": [
+            {
+                "title": title,
+                "gist": "单章概要",
+                "start_seg": 0,
+                "end_seg": len(segments) - 1,
+            }
         ],
     }
 
@@ -146,7 +170,9 @@ def test_structured_slice_is_closed_and_calls_notes_sequentially():
     )
     assert len(client.calls) == 2
     assert [call["task_type"] for call in client.calls] == ["notes", "notes"]
-    assert all(call["system_prompt"] == NOTES_SYSTEM_PROMPT for call in client.calls)
+    assert all(
+        call["system_prompt"] == NOTES_SYSTEM_PROMPT_SPEAKER for call in client.calls
+    )
     assert all(call["model"] == "notes-model" for call in client.calls)
     assert all(call["reasoning_effort"] == "high" for call in client.calls)
     assert "[00:00:00 - 00:00:05] Alice: 第一" in client.calls[0]["user_prompt"]
@@ -156,7 +182,7 @@ def test_structured_slice_is_closed_and_calls_notes_sequentially():
     assert "下一章标题：无" in client.calls[1]["user_prompt"]
 
 
-def test_plain_source_slice_uses_segments_and_unknown_speaker():
+def test_plain_source_slice_uses_no_speaker_variant_without_unknown_speaker():
     segments = [
         {"start": 1, "end": 2, "text": "纯文本第一句"},
         {"start": 2, "end": 3, "text": "纯文本第二句"},
@@ -185,8 +211,134 @@ def test_plain_source_slice_uses_segments_and_unknown_speaker():
 
     assert result.status is NotesStatus.GENERATED
     prompt = client.calls[0]["user_prompt"]
-    assert "[00:00:01 - 00:00:02] Unknown: 纯文本第一句" in prompt
-    assert "[00:00:02 - 00:00:03] Unknown: 纯文本第二句" in prompt
+    assert client.calls[0]["system_prompt"] == NOTES_SYSTEM_PROMPT_NO_SPEAKER
+    assert "[00:00:01 - 00:00:02] 纯文本第一句" in prompt
+    assert "[00:00:02 - 00:00:03] 纯文本第二句" in prompt
+    assert "Unknown" not in prompt
+
+
+@pytest.mark.parametrize(
+    ("segments", "expected_speaker"),
+    [
+        (
+            [
+                {"text": "有标签一这是一段足够长的内容", "speaker": "Alice"},
+                {"text": "有标签二这是一段足够长的内容", "speaker": "Bob"},
+            ],
+            True,
+        ),
+        (
+            [
+                {"text": "无标签一这是一段足够长的内容"},
+                {"text": "无标签二这是一段足够长的内容"},
+            ],
+            False,
+        ),
+        (
+            [
+                {"text": "混合一这是一段足够长的内容", "speaker": "Alice"},
+                {"text": "混合二这是一段足够长的内容"},
+            ],
+            True,
+        ),
+    ],
+)
+def test_notes_speaker_variant_is_selected_from_full_source(
+    segments, expected_speaker
+):
+    assert detect_notes_speaker_labels(segments) is expected_speaker
+    client = FakeNotesClient(["- note"])
+
+    result = NotesProcessor(client, _config()).process(
+        chapters=_single_chapter_payload(segments),
+        source_segments=segments,
+    )
+
+    assert result.status is NotesStatus.GENERATED
+    expected_prompt = (
+        NOTES_SYSTEM_PROMPT_SPEAKER
+        if expected_speaker
+        else NOTES_SYSTEM_PROMPT_NO_SPEAKER
+    )
+    assert client.calls[0]["system_prompt"] == expected_prompt
+    if expected_speaker and "speaker" not in segments[1]:
+        assert "Unknown: 混合二这是一段足够长的内容" in client.calls[0]["user_prompt"]
+
+
+def test_notes_sanitizer_demotes_h1_h2_and_removes_duplicate_chapter_title():
+    result = sanitize_notes_chapter_output(
+        "# [00:00:00] 本章\n"
+        "## [00:00:10 - 00:00:20] 另一个小节\n"
+        "### [00:00:30] 已有三级标题\n"
+        "- 内容",
+        "本章",
+    )
+
+    assert result == (
+        "### [00:00:10 - 00:00:20] 另一个小节\n"
+        "### [00:00:30] 已有三级标题\n"
+        "- 内容"
+    )
+
+
+def test_notes_process_removes_duplicate_model_chapter_heading():
+    segments = [
+        {
+            "start": 0,
+            "end": 1,
+            "text": "这一章的正文内容足够长，用于验证章节标题拼接行为。" * 4,
+        }
+    ]
+    client = FakeNotesClient(["## [00:00:00] 单章\n- 结论"])
+
+    result = NotesProcessor(client, _config()).process(
+        chapters=_single_chapter_payload(segments),
+        source_segments=segments,
+    )
+
+    assert result.status is NotesStatus.GENERATED
+    assert result.text == "## [00:00:00 - 00:00:01] 单章\n- 结论"
+
+
+def test_notes_density_retry_uses_fixed_instruction_when_first_output_is_too_long():
+    segments = [{"start": 0, "end": 1, "text": "abcdefghij"}]
+    client = FakeNotesClient(["xxxxxxxxx", "- 合格笔记"])
+
+    result = NotesProcessor(client, _config()).process(
+        chapters=_single_chapter_payload(segments),
+        source_segments=segments,
+    )
+
+    assert result.status is NotesStatus.GENERATED
+    assert result.text.endswith("- 合格笔记")
+    assert len(client.calls) == 2
+    assert client.calls[1]["system_prompt"] == client.calls[0]["system_prompt"]
+    assert client.calls[1]["model"] == client.calls[0]["model"]
+    assert client.calls[1]["reasoning_effort"] == client.calls[0]["reasoning_effort"]
+    assert client.calls[1]["task_type"] == client.calls[0]["task_type"]
+    assert client.calls[1]["user_prompt"].endswith(
+        "警告：你上一次的输出篇幅接近原文，这是誊抄不是笔记。请严格执行 40%-60% 篇幅预算，应用'必须丢弃'清单。"
+    )
+
+
+def test_notes_density_retry_warns_and_keeps_second_long_output():
+    segments = [{"start": 0, "end": 1, "text": "abcdefghij"}]
+    client = FakeNotesClient(["xxxxxxxxx", "yyyyyyyyy"])
+
+    with patch(
+        "video_transcript_api.llm.processors.notes_processor.logger.warning"
+    ) as warning:
+        result = NotesProcessor(client, _config()).process(
+            chapters=_single_chapter_payload(segments),
+            source_segments=segments,
+        )
+
+    assert result.status is NotesStatus.GENERATED
+    assert result.text.endswith("yyyyyyyyy")
+    warning.assert_called_once()
+    warning_message = warning.call_args.args[0]
+    assert "Notes chapter 0" in warning_message
+    assert "ratio=0.900" in warning_message
 
 
 def test_cache_source_loader_selects_structured_or_plain_path(tmp_path: Path):
@@ -387,11 +539,12 @@ def test_notes_prompt_contract_contains_context_and_constraints():
         next_title="下一章",
     )
 
-    assert "只输出中文 Markdown" in NOTES_SYSTEM_PROMPT
-    assert "分层 bullets" in NOTES_SYSTEM_PROMPT
-    assert "人名、数字、时间点" in NOTES_SYSTEM_PROMPT
-    assert "不得新增事实" in NOTES_SYSTEM_PROMPT
-    assert "使用 Markdown 加粗" in NOTES_SYSTEM_PROMPT
+    assert "目标篇幅为输入正文的 40%-60%" in NOTES_SYSTEM_PROMPT_BASE
+    assert "不使用 emoji" in NOTES_SYSTEM_PROMPT_BASE
+    assert "输入每行格式为 `[时间戳] 说话人: 内容`" in NOTES_SYSTEM_PROMPT_SPEAKER
+    assert "不得新增事实" in NOTES_SYSTEM_PROMPT_NO_SPEAKER
+    assert "不得使用 \"Unknown\"" in NOTES_SYSTEM_PROMPT_NO_SPEAKER
+    assert "生成本章精读笔记" in prompt
     assert "本章标题：本章" in prompt
     assert "本章概要：本章概要" in prompt
     assert "上一章标题：上一章" in prompt
