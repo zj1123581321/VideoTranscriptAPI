@@ -37,6 +37,9 @@ function createFixture({
   calibrated = [],
   dialogs = [],
   includeSummary = true,
+  calibratedTop = 0,
+  notesOpen = true,
+  mobile = false,
 } = {}) {
   const summaryMarkup = includeSummary ? `
     <div class="section" id="summary-section">
@@ -44,17 +47,17 @@ function createFixture({
       <div class="content"><h2 id="summary-heading">关键观点</h2><h3 id="summary-subheading">子观点</h3><p>summary</p></div>
     </div>` : '';
   const notesMarkup = notes.length > 0 ? `
-    <details class="section notes-section" id="notes-section" open>
+    <details class="section notes-section" id="notes-section" ${notesOpen ? 'open' : ''}>
       <summary class="section-header"><h2>详细笔记</h2></summary>
       <div class="content" id="notes-content-block">
         ${notes.map(({ index, title }) => `<h2 id="notes-chapter-${index}">${title}</h2>`).join('')}
       </div>
     </details>` : '';
-  const calibratedMarkup = calibrated.length > 0 ? `
+  const calibratedMarkup = calibrated.length > 0 || dialogs.length > 0 ? `
     <div class="section" id="calibrated-section">
       <div class="section-header"><h2>校对文本</h2></div>
       <div class="content" id="calibrated-content-block">
-        ${calibrated.map(index => `<div class="chapter-anchor" id="chapter-anchor-${index}"></div>`).join('')}
+        ${calibrated.map(index => `<div class="chapter-anchor" id="chapter-anchor-${index}"><span class="chapter-anchor-title">校对章节 ${index}</span></div>`).join('')}
         ${dialogs.map(index => `<div class="dialog-item" id="dlg-${index}"></div>`).join('')}
       </div>
     </div>` : (dialogs.length > 0 ? `
@@ -70,11 +73,21 @@ function createFixture({
   </body>`, { runScripts: 'outside-only', url: 'https://example.test/view/token' });
 
   TestIntersectionObserver.instances = [];
-  dom.window.matchMedia = vi.fn(() => ({
-    matches: false,
+  dom.window.matchMedia = vi.fn(query => ({
+    matches: mobile && query === '(max-width: 768px)',
     addEventListener: vi.fn(),
     addListener: vi.fn(),
   }));
+  Object.defineProperty(dom.window, 'innerHeight', {
+    configurable: true,
+    value: 800,
+  });
+  const calibratedSection = dom.window.document.getElementById('calibrated-section');
+  if (calibratedSection) {
+    calibratedSection.getBoundingClientRect = vi.fn(() => ({
+      top: calibratedTop,
+    }));
+  }
   dom.window.IntersectionObserver = TestIntersectionObserver;
   dom.window.HTMLElement.prototype.scrollIntoView = vi.fn();
   dom.window.console.log = vi.fn();
@@ -114,7 +127,7 @@ function passedEntry(target, { isIntersecting = true, top = 0 } = {}) {
 describe('floating chapter-axis TOC', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('prefers the matching notes chapter target for a chapter row', () => {
+  it('prefers the calibrated anchor in the calibrated viewport zone', () => {
     const { dom } = createFixture({
       chapters: [{ index: 0, title: '第一章', gist: 'gist', start_time: 65, start_seg: 0, jump_ok: true }],
       notes: [{ index: 0, title: '笔记第一章' }],
@@ -122,24 +135,97 @@ describe('floating chapter-axis TOC', () => {
       dialogs: [0],
     });
 
-    expect(pcChapter(dom).querySelector('.toc-chapter-main').dataset.targetId)
-      .toBe('notes-chapter-0');
+    const main = pcChapter(dom).querySelector('.toc-chapter-main');
+    expect(main.dataset.calTargetId).toBe('chapter-anchor-0');
+    expect(main.dataset.calFallbackId).toBe('dlg-0');
+    expect(main.dataset.notesTargetId).toBe('notes-chapter-0');
+
+    const note = dom.window.document.getElementById('notes-chapter-0');
+    const anchor = dom.window.document.getElementById('chapter-anchor-0');
+    note.scrollIntoView = vi.fn();
+    anchor.scrollIntoView = vi.fn();
+    main.click();
+
+    expect(anchor.scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'start',
+    });
+    expect(note.scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it('uses the calibrated chapter anchor when notes are absent', () => {
+  it('prefers notes outside the calibrated viewport zone', () => {
+    const { dom } = createFixture({
+      chapters: [{ index: 0, title: '第一章', start_time: 65, start_seg: 0, jump_ok: true }],
+      notes: [{ index: 0, title: '笔记第一章' }],
+      calibrated: [0],
+      dialogs: [0],
+      calibratedTop: 500,
+    });
+
+    const note = dom.window.document.getElementById('notes-chapter-0');
+    const main = pcChapter(dom).querySelector('.toc-chapter-main');
+    note.scrollIntoView = vi.fn();
+    dom.window.document.getElementById('chapter-anchor-0').scrollIntoView = vi.fn();
+    main.click();
+
+    expect(note.scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  });
+
+  it('uses the calibrated anchor when notes are absent', () => {
     const { dom } = createFixture({
       chapters: [{ index: 0, title: '第一章', start_time: 65, start_seg: 0, jump_ok: true }],
       calibrated: [0],
       dialogs: [0],
     });
 
-    expect(pcChapter(dom).querySelector('.toc-chapter-main').dataset.targetId)
+    expect(pcChapter(dom).querySelector('.toc-chapter-main').dataset.calTargetId)
       .toBe('chapter-anchor-0');
+  });
+
+  it('falls back to notes inside the calibrated zone when calibrated targets are absent', () => {
+    const { dom } = createFixture({
+      chapters: [{ index: 0, title: '第一章', start_time: 65, start_seg: 0, jump_ok: true }],
+      notes: [{ index: 0, title: '笔记第一章' }],
+      calibrated: [1],
+    });
+    const note = dom.window.document.getElementById('notes-chapter-0');
+    const main = pcChapter(dom).querySelector('.toc-chapter-main');
+
+    expect(dom.window.document.getElementById('calibrated-section')).not.toBeNull();
+    expect(dom.window.document.getElementById('chapter-anchor-0')).toBeNull();
+    expect(dom.window.document.getElementById('dlg-0')).toBeNull();
+    note.scrollIntoView = vi.fn();
+    main.click();
+
+    expect(note.scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  });
+
+  it('falls back from a missing calibrated anchor to its dialog target', () => {
+    const { dom } = createFixture({
+      chapters: [{ index: 0, title: '第一章', start_time: 65, start_seg: 0, jump_ok: true }],
+      dialogs: [0],
+    });
+    const main = pcChapter(dom).querySelector('.toc-chapter-main');
+    const dialog = dom.window.document.getElementById('dlg-0');
+    dialog.scrollIntoView = vi.fn();
+    main.click();
+
+    expect(dialog.scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'start',
+    });
   });
 
   it('keeps a jump-disabled chapter visible and non-clickable', () => {
     const { dom } = createFixture({
       chapters: [{ index: 0, title: '失配章节', start_time: 65, start_seg: 0, jump_ok: false }],
+      calibrated: [0],
       dialogs: [0],
     });
     const item = pcChapter(dom);
@@ -148,8 +234,22 @@ describe('floating chapter-axis TOC', () => {
     expect(item).not.toBeNull();
     expect(item.classList.contains('toc-chapter-disabled')).toBe(true);
     expect(main.disabled).toBe(true);
-    expect(main.dataset.targetId || '').not.toContain('dlg-0');
-    expect(main.dataset.fallbackId || '').not.toContain('dlg-0');
+    expect(main.dataset.calTargetId || '').not.toContain('dlg-0');
+    expect(main.dataset.calFallbackId || '').not.toContain('dlg-0');
+  });
+
+  it('disables a chapter when both notes and calibrated targets are absent', () => {
+    const { dom } = createFixture({
+      chapters: [{ index: 0, title: '失配章节', start_time: 65, start_seg: 0, jump_ok: true }],
+    });
+    const item = pcChapter(dom);
+    const main = item.querySelector('.toc-chapter-main');
+
+    expect(item.classList.contains('toc-chapter-disabled')).toBe(true);
+    expect(main.disabled).toBe(true);
+    expect(main.dataset.notesTargetId).toBeUndefined();
+    expect(main.dataset.calTargetId).toBeUndefined();
+    expect(main.dataset.calFallbackId).toBeUndefined();
   });
 
   it('renders the full chapter gist as text', () => {
@@ -320,5 +420,92 @@ describe('floating chapter-axis TOC', () => {
     expect(sourceLink.textContent).toBe('原文 ↗');
     expect(sourceLink.getAttribute('href')).toBe('#chapter-anchor-0');
     expect(note1.querySelector('a.notes-source-link')).toBeNull();
+  });
+
+  it('adds calibrated-to-notes links only when matching notes exist and is idempotent', () => {
+    const { dom } = createFixture({
+      notes: [{ index: 0, title: '笔记第一章' }],
+      calibrated: [0, 1],
+    });
+    const calibrated0 = dom.window.document.getElementById('chapter-anchor-0');
+    const calibrated1 = dom.window.document.getElementById('chapter-anchor-1');
+
+    expect(calibrated0.querySelector('a.calibrated-notes-link').textContent)
+      .toBe('笔记 ↗');
+    expect(calibrated0.querySelector('a.calibrated-notes-link').getAttribute('href'))
+      .toBe('#notes-chapter-0');
+    expect(calibrated1.querySelector('a.calibrated-notes-link')).toBeNull();
+
+    dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+
+    expect(calibrated0.querySelectorAll('a.calibrated-notes-link'))
+      .toHaveLength(1);
+  });
+
+  it('uses smooth scroll and opens details for both cross-section links', () => {
+    const { dom } = createFixture({
+      notes: [{ index: 0, title: '笔记第一章' }],
+      calibrated: [0],
+      notesOpen: false,
+    });
+    const note = dom.window.document.getElementById('notes-chapter-0');
+    const anchor = dom.window.document.getElementById('chapter-anchor-0');
+    const sourceLink = note.querySelector('a.notes-source-link');
+    const notesLink = anchor.querySelector('a.calibrated-notes-link');
+    const noteSection = dom.window.document.getElementById('notes-section');
+    const sourceEvent = new dom.window.MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+    });
+    const notesEvent = new dom.window.MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+    });
+    anchor.scrollIntoView = vi.fn();
+    note.scrollIntoView = vi.fn();
+
+    sourceLink.dispatchEvent(sourceEvent);
+    expect(sourceEvent.defaultPrevented).toBe(true);
+    expect(anchor.scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'start',
+    });
+
+    noteSection.open = false;
+    notesLink.dispatchEvent(notesEvent);
+    expect(notesEvent.defaultPrevented).toBe(true);
+    expect(noteSection.open).toBe(true);
+    expect(note.scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  });
+
+  it('routes the mobile sticky chapter entry through the shared jump handler', () => {
+    const { dom, observers } = createFixture({
+      chapters: [{ index: 0, title: '第一章', start_time: 1, start_seg: 0, jump_ok: true }],
+      notes: [{ index: 0, title: '笔记第一章' }],
+      calibrated: [0],
+      mobile: true,
+    });
+    const anchor = dom.window.document.getElementById('chapter-anchor-0');
+    const chapterTracker = chapterObserver(observers);
+    const transcriptTracker = observers.find(observer => observer.observed.includes(
+      dom.window.document.getElementById('calibrated-content-block')
+    ));
+    anchor.scrollIntoView = vi.fn();
+    chapterTracker.trigger([passedEntry(anchor)]);
+    transcriptTracker.trigger([passedEntry(
+      dom.window.document.getElementById('calibrated-content-block')
+    )]);
+
+    const sticky = dom.window.document.querySelector('.chapter-sticky-bar');
+    expect(sticky.hidden).toBe(false);
+    sticky.click();
+
+    expect(anchor.scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'start',
+    });
   });
 });

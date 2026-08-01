@@ -720,7 +720,8 @@ body.toc-wide-margin {
     color: var(--toc-text-secondary);
 }
 
-.notes-source-link {
+.notes-source-link,
+.calibrated-notes-link {
     margin-left: 0.45em;
     color: var(--toc-active);
     font-size: 0.82em;
@@ -729,7 +730,8 @@ body.toc-wide-margin {
     white-space: nowrap;
 }
 
-.notes-source-link:hover {
+.notes-source-link:hover,
+.calibrated-notes-link:hover {
     text-decoration: underline;
 }
 

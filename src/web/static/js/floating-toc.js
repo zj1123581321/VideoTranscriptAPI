@@ -7,10 +7,11 @@
  *   detailed notes, and calibrated transcript full-text leaves
  * - Chapters are read from the #chapters-data JSON island
  *   (items: {index,title,gist,start_time,start_seg,jump_ok}); a chapter row
- *   shows time + title + full gist and targets notes-chapter-{index}, then
- *   chapter-anchor-{index}, then dlg-{start_seg}. The latter two targets are
- *   gated by jump_ok; rows remain visible but muted and disabled when they
- *   cannot jump.
+ *   shows time + title + full gist. Its jump target is chosen at click time:
+ *   while the calibrated section is in the upper viewport half, calibrated
+ *   anchor/dialog targets win; otherwise notes win before calibrated targets.
+ *   Calibrated targets are gated by jump_ok; rows remain visible but muted and
+ *   disabled when neither side can jump.
  * - Chapter pages track the current chapter through notes and calibrated
  *   anchors, while summary headings and full-text sections use scrollspy
  * - Breakpoints on chapter pages:
@@ -275,6 +276,36 @@
         });
     }
 
+    /**
+     * Append an idempotent notes jump to every calibrated chapter header whose
+     * matching notes chapter exists.
+     */
+    function appendCalibratedNotesLinks() {
+        document.querySelectorAll(
+            '#calibrated-content-block .chapter-anchor[id^="chapter-anchor-"]'
+        ).forEach((anchor) => {
+            const chapterIndex = parseChapterAnchorIndex(
+                anchor.id,
+                'chapter-anchor'
+            );
+            if (chapterIndex === null) return;
+
+            const notesId = 'notes-chapter-' + chapterIndex;
+            if (!document.getElementById(notesId)) return;
+            if (anchor.querySelector('a.calibrated-notes-link')) return;
+
+            const title = anchor.querySelector('.chapter-anchor-title') || anchor;
+            title.appendChild(document.createTextNode(' '));
+            const notesLink = createEl(
+                'a',
+                'calibrated-notes-link',
+                '笔记 ↗'
+            );
+            notesLink.setAttribute('href', '#' + notesId);
+            title.appendChild(notesLink);
+        });
+    }
+
     function findNotesSection() {
         return document.getElementById('notes-content-block')
             ? findOutlineSection('详细笔记')
@@ -296,9 +327,10 @@
     }
 
     /**
-     * Read chapters from the #chapters-data JSON island. The row target
-     * priority is notes anchor, jumpable calibrated anchor, then #dlg-
-     * fallback; a row remains visible even when none exists.
+     * Read chapter-side target IDs from the #chapters-data JSON island.
+     * Notes targets are independent from calibrated targets; the latter two
+     * are only recorded when jump_ok is true. Click-time priority is handled
+     * by resolveChapterJumpTarget so the same row follows the current viewport.
      */
     function readChaptersData() {
         const island = document.getElementById('chapters-data');
@@ -335,25 +367,23 @@
             const jumpOk = ch.jump_ok === true;
             const anchorId = 'chapter-anchor-' + index;
             const dlgId = startSeg === null ? null : 'dlg-' + startSeg;
-            const notesEl = document.getElementById('notes-chapter-' + index);
-            const anchorEl = jumpOk ? document.getElementById(anchorId) : null;
-            const dlgEl = jumpOk && dlgId ? document.getElementById(dlgId) : null;
-
-            let targetId = null;
-            let fallbackId = null;
-            let targetElement = null;
-            if (notesEl) {
-                targetId = notesEl.id;
-                targetElement = notesEl;
-            } else if (anchorEl) {
-                targetId = anchorId;
-                targetElement = anchorEl;
-            } else if (dlgEl) {
-                fallbackId = dlgId;
-                targetElement = dlgEl;
-            }
-
-            const canJump = Boolean(targetElement);
+            const notesTargetElement = document.getElementById(
+                'notes-chapter-' + index
+            );
+            const calibratedTargetElement = jumpOk
+                ? document.getElementById(anchorId)
+                : null;
+            const calibratedFallbackElement = jumpOk && dlgId
+                ? document.getElementById(dlgId)
+                : null;
+            const targetElement = notesTargetElement
+                || calibratedTargetElement
+                || calibratedFallbackElement;
+            const canJump = Boolean(
+                notesTargetElement
+                || calibratedTargetElement
+                || calibratedFallbackElement
+            );
 
             chapters.push({
                 index: index,
@@ -363,10 +393,17 @@
                 startSeg: startSeg,
                 jumpOk: jumpOk,
                 anchorId: anchorId,
-                anchorEl: anchorEl,
                 dlgId: dlgId,
-                targetId: targetId,
-                fallbackId: fallbackId,
+                notesTargetId: notesTargetElement ? notesTargetElement.id : null,
+                calibratedTargetId: calibratedTargetElement
+                    ? calibratedTargetElement.id
+                    : null,
+                calibratedFallbackId: calibratedFallbackElement
+                    ? calibratedFallbackElement.id
+                    : null,
+                notesTargetElement: notesTargetElement,
+                calibratedTargetElement: calibratedTargetElement,
+                calibratedFallbackElement: calibratedFallbackElement,
                 targetElement: targetElement,
                 canJump: canJump
             });
@@ -446,11 +483,14 @@
         main.type = 'button';
         main.dataset.chapterIndex = String(chapter.index);
         main.dataset.id = 'toc-chapter-' + chapter.index;
-        if (chapter.targetId) {
-            main.dataset.targetId = chapter.targetId;
+        if (chapter.notesTargetId) {
+            main.dataset.notesTargetId = chapter.notesTargetId;
         }
-        if (chapter.fallbackId) {
-            main.dataset.fallbackId = chapter.fallbackId;
+        if (chapter.calibratedTargetId) {
+            main.dataset.calTargetId = chapter.calibratedTargetId;
+        }
+        if (chapter.calibratedFallbackId) {
+            main.dataset.calFallbackId = chapter.calibratedFallbackId;
         }
         if (!chapter.canJump) {
             main.disabled = true;
@@ -714,12 +754,54 @@
 
     // ========== Events ==========
 
+    /**
+     * Whether the calibrated section begins at or above the viewport midpoint.
+     * Missing sections are outside the calibrated zone.
+     */
+    function isViewportInCalibratedZone() {
+        const section = document.getElementById('calibrated-section');
+        if (!section) return false;
+        return section.getBoundingClientRect().top <= window.innerHeight / 2;
+    }
+
     function resolveTocTarget(targetId, fallbackId) {
         let targetElement = targetId ? document.getElementById(targetId) : null;
         if (!targetElement && fallbackId) {
             targetElement = document.getElementById(fallbackId);
         }
         return targetElement;
+    }
+
+    /**
+     * Resolve one chapter's live target using the current viewport context.
+     * Calibrated anchor/dialog candidates stay gated by jump_ok in the stored
+     * IDs; a missing candidate naturally falls through to the other side.
+     */
+    function resolveChapterJumpTarget(chapter) {
+        const calibratedFirst = isViewportInCalibratedZone();
+        const candidates = calibratedFirst
+            ? [
+                {
+                    targetId: chapter.calibratedTargetId,
+                    fallbackId: chapter.calibratedFallbackId
+                },
+                { targetId: chapter.notesTargetId, fallbackId: null }
+            ]
+            : [
+                { targetId: chapter.notesTargetId, fallbackId: null },
+                {
+                    targetId: chapter.calibratedTargetId,
+                    fallbackId: chapter.calibratedFallbackId
+                }
+            ];
+
+        for (const candidate of candidates) {
+            if (!candidate.targetId && !candidate.fallbackId) continue;
+            if (resolveTocTarget(candidate.targetId, candidate.fallbackId)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     /**
@@ -777,21 +859,32 @@
 
     function handleChapterJump(mainEl) {
         if (mainEl.disabled || mainEl.getAttribute('aria-disabled') === 'true') {
-            return;
+            return false;
         }
 
-        const targetId = mainEl.dataset.targetId;
-        const fallbackId = mainEl.dataset.fallbackId;
-        if (!targetId && !fallbackId) {
-            return;
-        }
+        const chapterIndex = Number(mainEl.dataset.chapterIndex);
+        const chapter = tocData.chapters.find(
+            item => item.index === chapterIndex
+        );
+        if (!chapter) return false;
 
-        if (!scrollToTocTarget(targetId, fallbackId)) {
-            return;
+        const target = resolveChapterJumpTarget(chapter);
+        if (!target || !scrollToTocTarget(target.targetId, target.fallbackId)) {
+            return false;
         }
 
         if (mode === 'mobile') {
             closeMobilePanel();
+        }
+        return true;
+    }
+
+    function handleCrossSectionLink(e, link) {
+        e.preventDefault();
+        const href = link.getAttribute('href') || '';
+        const targetId = href.startsWith('#') ? href.substring(1) : '';
+        if (targetId) {
+            scrollToTocTarget(targetId, null);
         }
     }
 
@@ -931,6 +1024,7 @@
         if (stickyBarLabel) {
             stickyBarLabel.textContent = (chapter.index + 1) + '. ' + chapter.title;
         }
+        stickyBar.dataset.chapterIndex = String(chapter.index);
         stickyBar.hidden = false;
     }
 
@@ -1129,7 +1223,17 @@
             }
 
             if (e.target.closest('.chapter-sticky-bar')) {
-                openMobilePanel();
+                const sticky = e.target.closest('.chapter-sticky-bar');
+                const chapterIndex = sticky.dataset.chapterIndex;
+                const main = chapterIndex === undefined
+                    ? null
+                    : document.querySelector(
+                        '.toc-chapter-main[data-chapter-index="'
+                            + chapterIndex + '"]'
+                    );
+                if (!main || !handleChapterJump(main)) {
+                    openMobilePanel();
+                }
                 return;
             }
 
@@ -1147,6 +1251,14 @@
 
             if (e.target.closest('#toc-mobile-overlay')) {
                 closeMobilePanel();
+                return;
+            }
+
+            const crossSectionLink = e.target.closest(
+                'a.notes-source-link, a.calibrated-notes-link'
+            );
+            if (crossSectionLink) {
+                handleCrossSectionLink(e, crossSectionLink);
                 return;
             }
 
@@ -1169,6 +1281,7 @@
         tocData.calibratedSection = findCalibratedSection();
         tocData.headings = extractHeadings();
         appendNotesSourceLinks();
+        appendCalibratedNotesLinks();
         tocData.chapters = readChaptersData();
         hasChapters = tocData.chapters.length > 0;
 
