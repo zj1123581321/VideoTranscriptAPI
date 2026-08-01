@@ -1269,7 +1269,7 @@
                     var targetId = btn.getAttribute('data-copy-target');
                     var targetEl = targetId ? document.getElementById(targetId) : null;
                     if (!targetEl) return;
-                    var sourceLinks = targetEl.querySelectorAll('.notes-source-link');
+                    var sourceLinks = targetEl.querySelectorAll('.notes-source-link, .calibrated-notes-link');
                     sourceLinks.forEach(function(link) {
                         link.style.display = 'none';
                     });
