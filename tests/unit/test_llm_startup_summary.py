@@ -69,6 +69,7 @@ class TestLogLLMConfigSummary:
             log_llm_config_summary(config)
         # disabled 任务能被识别
         assert "disabled" in caplog.text.lower()
+        assert "thinking=disabled(thinking)" in caplog.text
         assert "high" in caplog.text.lower()
 
     def test_handles_missing_llm_key(self, caplog):

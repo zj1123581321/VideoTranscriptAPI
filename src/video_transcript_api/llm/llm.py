@@ -450,7 +450,7 @@ def _call_with_text_output(
             )
 
         start_time = time.time()
-        result = client.chat(model, messages, reasoning_effort=effort, stream=False)
+        result = client.chat(model, messages, reasoning_effort=effort)
         # 记录 usage 快照供 llm_client.call() 落审计库（token 用量审计，参见 usage_context.py）
         _record_chat_usage(model, result)
         content = str(result)
@@ -512,7 +512,6 @@ def _call_with_json_schema_mode(
             model, messages,
             reasoning_effort=reasoning_effort,
             response_format=response_format,
-            stream=False,
         )
         # 记录 usage 快照供 llm_client.call() 落审计库（token 用量审计，参见 usage_context.py）
         _record_chat_usage(model, result)
@@ -576,7 +575,6 @@ def _call_with_json_object_mode(
                 model, messages,
                 reasoning_effort=reasoning_effort,
                 response_format={"type": "json_object"},
-                stream=False,
             )
             # 记录 usage 快照供 llm_client.call() 落审计库（token 用量审计，参见 usage_context.py）
             _record_chat_usage(model, result)

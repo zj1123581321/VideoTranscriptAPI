@@ -714,8 +714,8 @@ sdist = { url = "https://files.pythonhosted.org/packages/34/b8/aa7d6cf2d5efdd2fc
 
 [[package]]
 name = "llm-compat"
-version = "0.2.0"
-source = { git = "https://github.com/zj1123581321/llm-compat.git#b93c52a8ebd4648add73163b94300799097646d6" }
+version = "0.8.0"
+source = { git = "https://github.com/zlxlabs/llm-compat.git?tag=v0.8.0#bc57401ed98a6b52b458b8f2a5fed5ba70e9fd05" }
 dependencies = [
     { name = "httpx", extra = ["socks"] },
     { name = "pydantic" },
@@ -4494,7 +4494,7 @@ requires-dist = [
     { name = "ffmpeg-python", specifier = ">=0.2.0" },
     { name = "jinja2", specifier = ">=3.0.0" },
     { name = "keyboard", specifier = "==0.13.5" },
-    { name = "llm-compat", git = "https://github.com/zj1123581321/llm-compat.git" },
+    { name = "llm-compat", git = "https://github.com/zlxlabs/llm-compat.git?tag=v0.8.0" },
     { name = "loguru", specifier = "==0.7.0" },
     { name = "markdown", specifier = ">=3.4.0" },
     { name = "nh3", specifier = ">=0.2.0" },

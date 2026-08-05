@@ -79,4 +79,4 @@ exclude_lines = [
 ]
 
 [tool.uv.sources]
-llm-compat = { git = "https://github.com/zj1123581321/llm-compat.git" }
+llm-compat = { git = "https://github.com/zlxlabs/llm-compat.git", tag = "v0.8.0" }

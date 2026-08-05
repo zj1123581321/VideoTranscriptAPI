@@ -38,6 +38,7 @@ class TestTextOutputPassesCorrectParams:
 
         call_kwargs = mock_client.chat.call_args
         assert call_kwargs.kwargs["reasoning_effort"] == "disabled"
+        assert "stream" not in call_kwargs.kwargs
         assert call_kwargs.args[0] == "deepseek-v4-flash"
 
     @patch("video_transcript_api.llm.llm.get_sync_client")
@@ -79,6 +80,7 @@ class TestJsonSchemaPassesResponseFormat:
         )
 
         call_kwargs = mock_client.chat.call_args
+        assert "stream" not in call_kwargs.kwargs
         rf = call_kwargs.kwargs["response_format"]
         assert rf["type"] == "json_schema"
         assert rf["json_schema"]["strict"] is True
@@ -104,5 +106,6 @@ class TestJsonObjectPassesResponseFormat:
         )
 
         call_kwargs = mock_client.chat.call_args
+        assert "stream" not in call_kwargs.kwargs
         rf = call_kwargs.kwargs["response_format"]
         assert rf["type"] == "json_object"

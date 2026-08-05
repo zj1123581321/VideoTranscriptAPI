@@ -11,7 +11,7 @@ _logger = logging.getLogger(__name__)
 # 2026 reasoning_effort 合法值白名单
 # - "disabled": 显式关闭思考（dispatcher 按 provider 翻译）
 # - "minimal": GPT-5 / Gemini 3 的最低挡；DeepSeek 无此值
-# - "low"/"medium"/"high": 三家通用
+# - "low"/"medium"/"high": 通用强度值；DeepSeek 的 "medium" 会 clamp 到 "high"
 # - "max"/"xhigh": DeepSeek V4 特有
 _VALID_EFFORTS = frozenset(
     {"disabled", "minimal", "low", "medium", "high", "max", "xhigh"}
