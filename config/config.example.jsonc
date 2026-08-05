@@ -193,8 +193,18 @@
         // notes_model 未配置时自动回退 summary_model；推理强度同理回退 summary_reasoning_effort。
         // 详细笔记只由查看页按钮或 POST /api/generate_notes 触发，
         // 不属于 /api/transcribe 的公开 processing_options。
+        //
+        // 【笔记档位怎么选】建议 "disabled"：笔记按章并发生成，思考开销会被
+        //   notes_concurrency 放大 N 倍，而实测质量几乎无差异。
+        //   实测(2026-08-05, v4-flash + llm-compat 0.8.0, 同一播客 2 章 x 每档 3 次, 串行)：
+        //     null(=DeepSeek 默认 high) 中位 98.6s / completion 11476 / reasoning 7312，英文术语召回 0.55
+        //     "disabled"                中位  9.9s / completion   660 / reasoning     0，英文术语召回 0.54
+        //     "low"                     中位 20.1s / completion  1451 / reasoning   604，召回 0.44（最差且比 disabled 贵）
+        //   即全速思考换来约 1 个百分点召回，代价是 17 倍 token、10 倍耗时；逐条比对同章产出
+        //   信息点无缺失，"disabled" 的说话人归属反而更系统。
+        //   样本限于 1 个播客 2 章；若实际使用中发现笔记信息缺失，回退为 null 即可。
         "notes_model": "deepseek-v4-flash",
-        "notes_reasoning_effort": "high",
+        "notes_reasoning_effort": "disabled",
         "notes_concurrency": 10,          // 分章并发数上限；按实际章节数自动取较小值
 
         // ------------------------------------------------------
