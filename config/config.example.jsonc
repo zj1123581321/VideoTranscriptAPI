@@ -148,7 +148,7 @@
         // ------------------------------------------------------
         // reasoning_effort 合法值（由 llm-compat 按模型族自动翻译）：
         //   null          - 不传参，用模型默认（DeepSeek V4/Gemini 3 默认已启用思考）
-        //   "disabled"    - 显式关闭思考（DeepSeek V4 发 extra_body.thinking.type=disabled;
+        //   "disabled"    - 显式关闭思考（DeepSeek V4 发顶层 thinking.type=disabled;
         //                                 Gemini 2.5 发 reasoning_effort=none; GPT-5/Gemini-3 回退到 minimal;
         //                                 Gemini 3 Pro 关不掉，自动忽略并 warn）
         //   "minimal"     - GPT-5 / Gemini 3 最低思考档；DeepSeek 会 clamp 到 low
@@ -156,12 +156,13 @@
         //   "max"/"xhigh" - DeepSeek V4 特有；其他服务商会 clamp 到 high
         //   "none"        - 已弃用，启动时自动迁移到 "disabled" 并 warn
         //
-        // 【坑】经中转网关（one-api/new-api 之类）访问 DeepSeek 时，"disabled" 可能静默失效：
-        //   llm-compat 用裸 httpx 发 JSON，把它编码成嵌套的 extra_body.thinking.type，
-        //   而 extra_body 是 OpenAI SDK 的封装概念（SDK 才会展开到顶层），网关不认识就整块忽略。
+        // 【历史记录】经中转网关（one-api/new-api 之类）访问 DeepSeek 的关闭思考问题：
+        //   该问题源于 llm-compat <=0.7.0 的静默失效：旧版本把 thinking 编码成嵌套的
+        //   extra_body.thinking.type，网关不认识就会忽略整块；llm-compat v0.8.0 起已修复为
+        //   顶层 thinking，日志也从 thinking 读取，"disabled" 现在可以正常使用。
         //   2026-07-31 在 v4-flash 上实测(n=3)：null 中位 46.6s/out 6462，"disabled" 52.0s/out 7046
-        //   （两者分布重合＝没生效），"low" 24.4s/out 3251 且无极端值。
-        //   需要压低思考时优先用 "low"（走顶层 reasoning_effort，网关必然识别），别用 "disabled"。
+        //   （两者分布重合＝修复前未生效），"low" 24.4s/out 3251 且无极端值。
+        //   以上数据采集于修复前，仅作为历史记录，不代表 llm-compat v0.8.0 的行为。
         "calibrate_model": "gpt-4.1-mini",      // 校对使用的模型
         "calibrate_reasoning_effort": null,     // GPT-4.x 不支持 reasoning_effort，设任何值都会被 drop
 

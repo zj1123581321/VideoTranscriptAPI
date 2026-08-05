@@ -467,7 +467,7 @@ print(result.title, result.date)
 | OpenAI o-series | `low`/`medium`/`high` | （关不掉） | enabled |
 | Gemini 2.5 | `none`/`low`/`medium`/`high` | `reasoning_effort: "none"` | enabled |
 | Gemini 3.x (OpenAI-compat) | `minimal`/`low`/`medium`/`high` | `minimal`（Pro 关不掉） | `high` |
-| DeepSeek V4 | `low`/`medium`/`high`/`max`/`xhigh` | `extra_body.thinking.type=disabled` | `enabled@high` |
+| DeepSeek V4 | `low`/`high`/`max`/`xhigh` | `thinking.type=disabled` | `enabled@high` |
 
 收敛点：三家在 2026 都支持 `minimal`（低延迟场景）。分化点：DeepSeek 有独家 `max/xhigh` + 独特的 thinking 开关字段。
 
@@ -478,7 +478,7 @@ print(result.title, result.date)
 | 配置值 | 语义 | 请求行为 |
 |--------|------|---------|
 | `null` | 未设置，沿用 provider 默认 | payload 不加任何 thinking 字段 |
-| `"disabled"` | **显式关闭思考** | DeepSeek → `extra_body.thinking.type="disabled"`；Gemini 2.5 → `reasoning_effort="none"`；GPT-5/Gemini-3 → 回退到 `minimal`；Gemini 3 Pro → warn 并丢弃 |
+| `"disabled"` | **显式关闭思考** | DeepSeek → 顶层 `thinking.type="disabled"`；Gemini 2.5 → `reasoning_effort="none"`；GPT-5/Gemini-3 → 回退到 `minimal`；Gemini 3 Pro → warn 并丢弃 |
 | `"minimal"` | GPT-5/Gemini-3 最低档 | 相应 provider 透传；DeepSeek 没这值，clamp 到 `low` |
 | `"low"` / `"medium"` / `"high"` | 三家通用 | 原样透传（GPT-4.x 丢弃并 warn） |
 | `"max"` / `"xhigh"` | DeepSeek 独有 | DeepSeek 透传；其他 clamp 到 `"high"` + warn |
@@ -538,7 +538,7 @@ result = client.chat(model, messages, reasoning_effort=reasoning_effort)
 ```
 [LLM] calibrate: gpt-4.1-mini (openai_gpt4) | thinking=n/a(model_default)
 [LLM] summary:   deepseek-v4-flash (deepseek) | thinking=high(reasoning_effort)
-[LLM] validator: deepseek-v4-flash (deepseek) | thinking=disabled(extra_body.thinking)
+[LLM] validator: deepseek-v4-flash (deepseek) | thinking=disabled(thinking)
 [LLM] risk_summary: gemini-2.5-flash (gemini_25) | thinking=medium(reasoning_effort)
 ```
 
