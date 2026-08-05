@@ -152,9 +152,17 @@
         //                                 Gemini 2.5 发 reasoning_effort=none; GPT-5/Gemini-3 回退到 minimal;
         //                                 Gemini 3 Pro 关不掉，自动忽略并 warn）
         //   "minimal"     - GPT-5 / Gemini 3 最低思考档；DeepSeek 会 clamp 到 low
-        //   "low"/"medium"/"high" - 三家通用
+        //   "low"/"high"  - 三家通用；"medium" 在 DeepSeek 上会 clamp 到 high（官方未文档化该档）
         //   "max"/"xhigh" - DeepSeek V4 特有；其他服务商会 clamp 到 high
         //   "none"        - 已弃用，启动时自动迁移到 "disabled" 并 warn
+        //
+        // 【校对档位怎么选】校对是机械 ASR 纠错，建议 "disabled"：保真优先，只修错字/标点，
+        //   不改写、不翻译术语、不给 ASR 截断处补字。可读性由下游 summary/notes 负责——
+        //   校对稿是它们的输入，这一层编造会被下游放大。
+        //   2026-08-05 实测(v4-flash + llm-compat 0.8.0, 1500 字简体播客真实转录, n=5)：
+        //     "disabled" 中位 6.94s / completion 766 / reasoning 0，5 次自洽度 0.953
+        //     "low"      中位 14.16s / completion 1099 / reasoning 327，长尾单次 45.0s / reasoning 4594
+        //   "low" 另会偶发翻译英文术语（enterprise→企业级客户）、给截断处编造补字，两次结果不一致。
         //
         // 【历史记录】经中转网关（one-api/new-api 之类）访问 DeepSeek 的关闭思考问题：
         //   该问题源于 llm-compat <=0.7.0 的静默失效：旧版本把 thinking 编码成嵌套的
@@ -162,7 +170,8 @@
         //   顶层 thinking，日志也从 thinking 读取，"disabled" 现在可以正常使用。
         //   2026-07-31 在 v4-flash 上实测(n=3)：null 中位 46.6s/out 6462，"disabled" 52.0s/out 7046
         //   （两者分布重合＝修复前未生效），"low" 24.4s/out 3251 且无极端值。
-        //   以上数据采集于修复前，仅作为历史记录，不代表 llm-compat v0.8.0 的行为。
+        //   以上数据采集于修复前，仅作为历史记录，不代表 llm-compat v0.8.0 的行为；
+        //   当时得出的「不要用 disabled、改用 low」结论已随 v0.8.0 退役，勿再照搬。
         "calibrate_model": "gpt-4.1-mini",      // 校对使用的模型
         "calibrate_reasoning_effort": null,     // GPT-4.x 不支持 reasoning_effort，设任何值都会被 drop
 
