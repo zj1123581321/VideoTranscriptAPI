@@ -1212,7 +1212,7 @@
 
         document.addEventListener('DOMContentLoaded', function() {
             // 场景一：一键复制链接 URL（沿用原有的按钮文案短暂反馈样式）
-            document.querySelectorAll('.quick-copy-btn:not(.deep-read-prompt-btn)').forEach(function(btn) {
+            document.querySelectorAll('.quick-copy-btn:not(.deep-read-prompt-btn):not(.share-summary-btn)').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     var path = btn.getAttribute('data-path');
                     var fullUrl = window.location.origin + path;

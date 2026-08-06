@@ -331,22 +331,50 @@
 .speaker-pending,
 .speaker-override-suspect { background: #fef3c7; color: #92400e; }
 .speaker-override-confirmed { background: #d1fae5; color: #065f46; }
+
+/* Summary compression guidance is informational, not a quality failure. */
+.summary-condensation-hint {
+    margin: 0;
+    padding: 8px 30px;
+    border-bottom: 1px solid var(--border-primary);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+@media (max-width: 768px) {
+    .summary-condensation-hint { padding: 8px 20px; }
+}
+@media (max-width: 480px) {
+    .summary-condensation-hint { padding: 8px 15px; }
+}
 </style>
 {% endblock %}
 
 {% block content %}
     <!-- 统计信息（单行显示） -->
-    {% if stats and stats.original_length > 0 %}
+    {% set original_length = stats.get('original_length', 0) if stats else 0 %}
+    {% set calibrated_length = stats.get('calibrated_length', 0) if stats else 0 %}
+    {% set summary_length = stats.get('summary_length', 0) if stats else 0 %}
+    {% set notes_length = stats.get('notes_length', 0) if stats else 0 %}
+    {% set summary_percentage = (summary_length / original_length * 100)|round(1) if original_length > 0 and summary_length > 0 else 0 %}
+    {% set has_readable_notes = notes_html is defined and notes_html %}
+    {% set show_summary_stats = original_length > 0 and summary_length > 0 and summary_length != calibrated_length %}
+    {% if original_length > 0 %}
     <div class="stats-line">
         <span class="stats-icon">📊</span>
         <span class="stats-label">转录统计</span>
         <span class="stats-content">
-            原始转录 {{ "{:,}".format(stats.original_length) }} 字
-            {% if stats.calibrated_length > 0 %} | 校对文本 {{ "{:,}".format(stats.calibrated_length) }} 字{% endif %}
-            {% if stats.summary_length > 0 and stats.summary_length != stats.calibrated_length %} | 内容总结 {{ "{:,}".format(stats.summary_length) }} 字{% endif %}
-            {% if stats.get('notes_length', 0) > 0 %} | 详细笔记 {{ "{:,}".format(stats.get('notes_length', 0)) }} 字{% endif %}
+            原始转录 {{ "{:,}".format(original_length) }} 字
+            {% if calibrated_length > 0 %} | 校对文本 {{ "{:,}".format(calibrated_length) }} 字{% endif %}
+            {% if show_summary_stats %} | 内容总结 {{ "{:,}".format(summary_length) }} 字（占原文 {{ "%.1f"|format(summary_percentage) }}%）{% endif %}
+            {% if notes_length > 0 %} | 详细笔记 {{ "{:,}".format(notes_length) }} 字{% endif %}
         </span>
     </div>
+    {% if show_summary_stats and summary_percentage <= 20 %}
+    <div class="summary-condensation-hint" role="note">
+        内容高度浓缩，可能省略较多细节。{% if has_readable_notes %}建议阅读详细笔记或原文。{% else %}建议生成详细笔记或阅读原文。{% endif %}
+    </div>
+    {% endif %}
     {% endif %}
 
     <!-- 校准质量警告：以 stats.calibration_status（full/partial/none）为准，
@@ -412,6 +440,13 @@
             <span class="quick-copy-action">复制 URL</span>
             <span class="quick-copy-desc">带标题的 HTML，供 NotebookLM 等工具爬取</span>
         </button>
+        {% if summary_html %}
+        <button class="quick-copy-btn share-summary-btn" type="button" title="复制分享摘要">
+            <span class="quick-copy-label">分享摘要</span>
+            <span class="quick-copy-action">复制摘要</span>
+            <span class="quick-copy-desc">标题、原始地址与总结首段</span>
+        </button>
+        {% endif %}
         {% if calibrated_html %}
         {% for preset in deep_read_prompt_presets %}
         <button class="quick-copy-btn deep-read-prompt-btn"
@@ -1076,4 +1111,60 @@
     });
 })();
 </script>
+{% if view_token and summary_html %}
+<script>
+/* Share summary text uses the canonical view page and the first summary paragraph. */
+(function installSummaryShareButton() {
+    'use strict';
+
+    var summaryShareTitle = {{ (title or "视频转录")|tojson }};
+    var summaryShareOriginalUrl = {{ (url|default(""))|tojson }};
+    var summaryShareViewToken = {{ view_token|tojson }};
+
+    function readSummaryFirstParagraph() {
+        var summaryBlock = document.getElementById('summary-content-block');
+        if (!summaryBlock) return '';
+        var paragraph = summaryBlock.querySelector('p');
+        if (!paragraph) return '';
+        var paragraphText = paragraph.innerText || paragraph.textContent || '';
+        return paragraphText.trim();
+    }
+
+    function buildSummaryShareText() {
+        var shareLines = [summaryShareTitle || '视频转录'];
+        if (summaryShareOriginalUrl) {
+            shareLines.push('原始地址：' + summaryShareOriginalUrl);
+        }
+        shareLines.push('', '总结和校对：' + window.location.origin + '/view/' + encodeURIComponent(summaryShareViewToken));
+        var summaryParagraph = readSummaryFirstParagraph();
+        if (summaryParagraph) shareLines.push('', summaryParagraph);
+        return shareLines.join('\n');
+    }
+
+    function installSummaryShareClick() {
+        var shareButton = document.querySelector('.share-summary-btn');
+        if (!shareButton) return;
+        shareButton.addEventListener('click', function() {
+            if (shareButton.classList.contains('copied')) return;
+            var actionEl = shareButton.querySelector('.quick-copy-action');
+            var originalText = actionEl ? actionEl.textContent : '';
+            copyTextToClipboard(buildSummaryShareText(), function() {
+                shareButton.classList.add('copied');
+                if (actionEl) actionEl.textContent = '已复制';
+                window.setTimeout(function() {
+                    shareButton.classList.remove('copied');
+                    if (actionEl) actionEl.textContent = originalText;
+                }, 1500);
+            });
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', installSummaryShareClick);
+    } else {
+        installSummaryShareClick();
+    }
+})();
+</script>
+{% endif %}
 {% endblock %}
