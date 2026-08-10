@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   gate-shadow:
-    uses: zlxlabs/gate/.github/workflows/gate-shadow-v2.yml@7bd2bbd2e92c33d3e0381e38730beaff1f1d69e5
+    uses: zlxlabs/gate/.github/workflows/gate-shadow-v2.yml@33fbd932cf8cf89130dfc8f170320764267b4d8a
     with:
       tier: personal   # 与本仓 gate.yml caller 保持一致
       runner: self
