@@ -18,7 +18,7 @@ permissions:
   pull-requests: write
 jobs:
   gate:
-    uses: zlxlabs/gate/.github/workflows/gate-v2.yml@7bd2bbd2e92c33d3e0381e38730beaff1f1d69e5
+    uses: zlxlabs/gate/.github/workflows/gate-v2.yml@33fbd932cf8cf89130dfc8f170320764267b4d8a
     with:
       tier: personal
       runner: self
