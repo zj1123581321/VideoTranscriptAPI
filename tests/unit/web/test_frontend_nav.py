@@ -275,10 +275,10 @@ class TestQuickCopyMobileLayout:
             for section in reversed(source.split("@media (max-width: 480px)"))
             if ".quick-copy-bar" in section
         )
+        bar_rule = narrow_section.split(".quick-copy-bar", 1)[1].split("}", 1)[0]
         button_rule = narrow_section.split(".quick-copy-btn", 1)[1].split("}", 1)[0]
 
-        assert ".quick-copy-bar" in narrow_section
-        assert "flex-direction: column;" in narrow_section
+        assert "flex-direction: column;" in bar_rule
         assert "flex: 0 0 auto;" in button_rule
         assert "flex: 1;" not in button_rule
         assert "width: 100%;" in button_rule
