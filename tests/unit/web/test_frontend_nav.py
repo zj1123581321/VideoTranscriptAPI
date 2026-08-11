@@ -263,3 +263,23 @@ class TestHistoryPageResponsiveBreakpoints:
         narrow_section = html.split("@media (max-width: 480px)", 1)[1]
         assert ".filter-bar" in narrow_section
         assert "column" in narrow_section
+
+
+class TestQuickCopyMobileLayout:
+    """Narrow screens must keep every quick-copy card readable and tappable."""
+
+    def test_quick_copy_cards_stack_without_flex_compression(self):
+        source = (TEMPLATES_DIR / "base.html").read_text(encoding="utf-8")
+        narrow_section = next(
+            section
+            for section in reversed(source.split("@media (max-width: 480px)"))
+            if ".quick-copy-bar" in section
+        )
+        bar_rule = narrow_section.split(".quick-copy-bar", 1)[1].split("}", 1)[0]
+        button_rule = narrow_section.split(".quick-copy-btn", 1)[1].split("}", 1)[0]
+
+        assert "flex-direction: column;" in bar_rule
+        assert "flex: 0 0 auto;" in button_rule
+        assert "flex: 1;" not in button_rule
+        assert "width: 100%;" in button_rule
+        assert "box-sizing: border-box;" in button_rule
