@@ -34,50 +34,79 @@
                         aria-label="安装应用到桌面">📥 安装应用</button>
             </nav>
             <h1>🎬 视频转录服务</h1>
-            <p>支持多平台视频转录，智能说话人识别</p>
+            <p>粘贴链接，快速开始转录</p>
         </header>
 
         <main class="main-content">
             <form id="transcribe-form" class="form-container">
                 <!-- URL输入区域 -->
-                <div class="form-group">
+                <div class="form-group share-input-group">
                     <label for="share-content" class="form-label">
                         📋 粘贴分享内容或视频链接
                     </label>
-                    <textarea 
-                        id="share-content" 
+                    <textarea
+                        id="share-content"
                         class="form-textarea"
-                        placeholder="支持粘贴完整的分享文案，系统将自动提取其中的视频链接...&#10;&#10;例如：&#10;• YouTube/Bilibili/抖音等平台分享链接&#10;• 小红书/小宇宙等平台分享文案&#10;• 各种短链接服务"
-                        rows="4">
+                        placeholder="粘贴链接或完整分享文案"
+                        rows="3"
+                        autocapitalize="sentences"
+                        spellcheck="true"
+                        aria-describedby="input-feedback">
                     </textarea>
-                    
-                    <!-- URL预览区域 -->
-                    <div id="url-preview" class="url-preview">
-                        <div class="no-urls">请输入包含视频链接的内容</div>
-                    </div>
+                    <p id="input-feedback" class="input-feedback" role="status"
+                       aria-live="polite" hidden></p>
+
+                    <!-- URL识别结果：仅在找到链接时显示 -->
+                    <div id="url-preview" class="url-preview" aria-live="polite" hidden></div>
                 </div>
 
-                <!-- 说话人识别选项 -->
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="speaker-recognition" class="form-checkbox">
-                        <label for="speaker-recognition" class="checkbox-label">
-                            🎤 启用说话人识别功能
-                            <span class="checkbox-desc">自动区分不同说话人，适用于多人对话、访谈等场景</span>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- 高级设置 -->
-                <div class="form-group">
-                    <button type="button" id="advanced-toggle" class="advanced-toggle">
-                        <span class="toggle-left">
-                            ⚙️ 高级设置 <span class="toggle-icon">▼</span>
-                        </span>
-                        <span class="required-indicator">包含必填项</span>
+                <!-- 高频选项入口：摘要常驻，说明按需展开 -->
+                <div class="form-group transcription-options-group">
+                    <button type="button" id="transcription-options-toggle"
+                            class="transcription-options-toggle"
+                            aria-expanded="false" aria-controls="transcription-options">
+                        <span class="toggle-left">🎤 转录选项</span>
+                        <span id="transcription-options-summary" class="transcription-options-summary">未启用说话人识别</span>
+                        <span class="toggle-icon">▼</span>
                     </button>
-                    
-                    <div id="advanced-settings" class="advanced-settings">
+                    <div id="transcription-options" class="transcription-options-panel" hidden>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="speaker-recognition" class="form-checkbox">
+                            <label for="speaker-recognition" class="checkbox-label">
+                                启用说话人识别
+                                <span class="checkbox-desc">适用于多人对话、访谈等场景</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 无令牌时的明确阻塞提示 -->
+                <div id="auth-missing-prompt" class="auth-missing-prompt" role="status"
+                     hidden
+                     aria-live="polite">
+                    <span>尚未配置访问令牌</span>
+                    <button type="button" id="auth-settings-link" class="auth-settings-link"
+                            aria-controls="advanced-settings">去设置</button>
+                </div>
+
+                <!-- 主操作 -->
+                <div class="form-group submit-group">
+                    <button type="submit" id="submit-btn" class="submit-btn" disabled>
+                        <span class="btn-icon">🚀</span>
+                        <span class="btn-text">开始转录</span>
+                    </button>
+                </div>
+
+                <!-- 低频设置：Webhook 和访问令牌按需展开 -->
+                <div class="form-group advanced-group">
+                    <button type="button" id="advanced-toggle" class="advanced-toggle"
+                            aria-expanded="false" aria-controls="advanced-settings">
+                        <span class="toggle-left">⚙️ 更多设置</span>
+                        <span class="advanced-summary">访问令牌 · Webhook</span>
+                        <span class="toggle-icon">▼</span>
+                    </button>
+
+                    <div id="advanced-settings" class="advanced-settings" hidden>
                         <!-- 访问令牌 -->
                         <div class="form-group">
                             <label for="bearer-token" class="form-label required">
@@ -133,18 +162,10 @@
 
                     </div>
                 </div>
-
-                <!-- 提交按钮 -->
-                <div class="form-group">
-                    <button type="submit" id="submit-btn" class="submit-btn" disabled>
-                        <span class="btn-icon">🚀</span>
-                        <span class="btn-text">开始转录</span>
-                    </button>
-                </div>
             </form>
 
             <!-- 状态显示区域 -->
-            <div id="status-container" class="status-container" style="display: none;">
+            <div id="status-container" class="status-container" style="display: none;" aria-live="polite">
                 <div id="status-content" class="status-content">
                     <!-- 动态内容 -->
                 </div>

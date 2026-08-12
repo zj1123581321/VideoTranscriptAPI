@@ -123,9 +123,12 @@ body {
     text-decoration: none;
     font-size: 0.85rem;
     padding: 4px 12px;
+    min-height: 44px;
     border: 1px solid currentColor;
     border-radius: 6px;
     opacity: 0.75;
+    display: inline-flex;
+    align-items: center;
     transition: opacity 0.2s ease, background 0.2s ease;
 }
 
@@ -227,6 +230,21 @@ body {
     min-height: 60px;
 }
 
+.url-preview[hidden],
+.input-feedback[hidden],
+.auth-missing-prompt[hidden],
+.transcription-options-panel[hidden],
+.advanced-settings[hidden] {
+    display: none;
+}
+
+.input-feedback {
+    margin-top: 0.5rem;
+    color: var(--error-text);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
 .no-urls {
     color: var(--text-secondary);
     font-style: italic;
@@ -248,6 +266,7 @@ body {
     cursor: pointer;
     transition: all 0.2s ease;
     margin-bottom: 0.5rem;
+    min-height: 44px;
 }
 
 .url-option:hover {
@@ -267,6 +286,7 @@ body {
 
 .url-option label {
     flex: 1;
+    min-width: 0;
     cursor: pointer;
     display: flex;
     justify-content: space-between;
@@ -274,6 +294,7 @@ body {
 }
 
 .url-display {
+    min-width: 0;
     font-family: monospace;
     background-color: var(--bg-tertiary);
     padding: 0.25rem 0.5rem;
@@ -319,6 +340,62 @@ body {
     margin-top: 0.25rem;
 }
 
+.transcription-options-toggle,
+.auth-settings-link {
+    min-height: 44px;
+}
+
+.transcription-options-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    border: 0;
+    background: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.transcription-options-summary,
+.advanced-summary {
+    flex: 1;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-align: right;
+}
+
+.transcription-options-panel {
+    padding: 0.5rem 0 0.25rem;
+}
+
+.auth-missing-prompt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: -0.5rem 0 1rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--error-border);
+    border-radius: 8px;
+    color: var(--error-text);
+    background: var(--error-bg);
+    font-size: 0.9rem;
+}
+
+.auth-settings-link {
+    padding: 0.25rem 0.75rem;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+}
+
 /* 高级设置样式 */
 .advanced-toggle {
     background: none;
@@ -333,6 +410,7 @@ body {
     gap: 0.5rem;
     transition: color 0.2s ease;
     width: 100%;
+    min-height: 44px;
     justify-content: space-between;
 }
 
@@ -413,6 +491,7 @@ body {
 /* 提交按钮样式 */
 .submit-btn {
     width: 100%;
+    min-height: 44px;
     padding: 1rem 1.5rem;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
@@ -651,6 +730,10 @@ body {
     .container {
         padding: 0.75rem;
     }
+
+    .header {
+        margin-bottom: 0.75rem;
+    }
     
     .header h1 {
         font-size: 2rem;
@@ -741,21 +824,44 @@ body {
     }
     
     .header h1 {
-        font-size: 1.75rem;
+        font-size: 1.4rem;
         line-height: 1.2;
+        margin-bottom: 0.2rem;
     }
-    
+
     .header p {
-        font-size: 1rem;
+        font-size: 0.82rem;
+    }
+
+    .site-nav {
+        gap: 0.35rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .site-nav-link {
+        padding: 3px 8px;
+    }
+
+    .site-nav-link[href="/"] {
+        display: none;
     }
     
     .main-content {
-        padding: 1rem;
+        padding: 0.75rem;
         border-radius: 8px;
+    }
+
+    .form-group {
+        margin-bottom: 0.75rem;
+    }
+
+    .form-label {
+        margin-bottom: 0.25rem;
+        font-size: 0.95rem;
     }
     
     .form-textarea {
-        min-height: 80px;
+        min-height: 88px;
         font-size: 1rem;
     }
     
@@ -768,6 +874,17 @@ body {
         padding: 1.25rem 1rem;
         font-size: 1.1rem;
     }
+
+    .auth-missing-prompt {
+        margin-bottom: 0.75rem;
+    }
+
+    .transcription-options-summary,
+    .advanced-summary {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
     
     .input-btn {
         padding: 0.75rem;
@@ -776,6 +893,9 @@ body {
     
     /* 高级设置在手机上的优化 */
     .advanced-toggle {
+        flex-direction: row;
+        align-items: center;
+        gap: 0.5rem;
         padding: 1rem 0;
         text-align: left;
     }
