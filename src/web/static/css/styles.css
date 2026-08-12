@@ -286,6 +286,7 @@ body {
 
 .url-option label {
     flex: 1;
+    min-width: 0;
     cursor: pointer;
     display: flex;
     justify-content: space-between;
@@ -293,6 +294,7 @@ body {
 }
 
 .url-display {
+    min-width: 0;
     font-family: monospace;
     background-color: var(--bg-tertiary);
     padding: 0.25rem 0.5rem;
