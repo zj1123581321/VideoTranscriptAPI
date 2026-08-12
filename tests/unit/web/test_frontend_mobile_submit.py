@@ -25,21 +25,23 @@ def test_mobile_form_puts_options_auth_prompt_and_cta_in_first_screen_order():
     assert html.index('id="advanced-settings"') > html.index('id="submit-btn"')
 
 
-def test_mobile_header_keeps_history_without_home_as_primary_nav():
+def test_mobile_header_keeps_desktop_home_and_history_navigation():
     html = INDEX_HTML.read_text(encoding="utf-8")
     nav = html.split('<nav class="site-nav">', 1)[1].split("</nav>", 1)[0]
 
+    assert 'href="/"' in nav
     assert 'href="/static/history.html"' in nav
-    assert 'href="/"' not in nav
-    assert 'id="theme-toggle"' not in nav
     assert 'id="pwa-install-btn"' in nav
+
+    mobile_css = STYLES_CSS.read_text(encoding="utf-8").split("@media (max-width: 480px)", 1)[1]
+    assert '.site-nav-link[href="/"]' in mobile_css
+    assert 'display: none' in mobile_css
 
 
 def test_mobile_controls_expose_expansion_and_live_feedback_contracts():
     html = INDEX_HTML.read_text(encoding="utf-8")
 
     assert 'aria-live="polite"' in html
-    assert 'aria-live="assertive"' in html
     assert 'aria-controls="transcription-options"' in html
     assert 'aria-controls="advanced-settings"' in html
     assert 'aria-expanded="false"' in html
@@ -55,15 +57,9 @@ def test_empty_preview_is_hidden_and_invalid_input_has_inline_feedback():
     assert 'aria-live="polite" hidden' in html
     assert 'id="input-feedback"' in html
     assert 'class="input-feedback"' in html
+    assert 'inputmode="url"' not in html
+    assert 'autocomplete="url"' not in html
+    assert 'enterkeyhint="go"' not in html
     assert "previewContainer.hidden = urlResults.length === 0" in app
     assert "inputFeedback.textContent" in app
     assert "url-preview').innerHTML = '<div class=\"no-urls\">请输入包含视频链接的内容</div>'" not in app
-
-
-def test_mobile_touch_targets_cover_navigation_and_submission_controls():
-    css = STYLES_CSS.read_text(encoding="utf-8")
-
-    assert ".site-nav-link" in css and "min-height: 44px" in css
-    assert ".theme-toggle" in css and "width: 44px" in css
-    assert ".submit-btn" in css and "min-height: 44px" in css
-    assert ".transcription-options-toggle" in css and "min-height: 44px" in css

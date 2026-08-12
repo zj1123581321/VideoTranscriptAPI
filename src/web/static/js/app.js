@@ -1024,7 +1024,7 @@ async function submitTranscription(event) {
         console.error('提交任务失败:', error);
         const inputFeedback = document.getElementById('input-feedback');
         if (inputFeedback) {
-            inputFeedback.textContent = `提交失败：${error.message}`;
+            inputFeedback.textContent = '提交失败，请检查链接和访问令牌后重试。';
             inputFeedback.hidden = false;
         }
         UIManager.showStatus('error', '提交任务失败', error.message);

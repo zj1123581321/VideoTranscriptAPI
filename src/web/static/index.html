@@ -27,6 +27,7 @@
                 ☀️
             </button>
             <nav class="site-nav">
+                <a href="/" class="site-nav-link">🏠 主页</a>
                 <a href="/static/history.html" class="site-nav-link">📋 任务历史</a>
                 <button type="button" id="pwa-install-btn" class="site-nav-link"
                         style="display:none; min-height:44px; background:none; cursor:pointer; font:inherit;"
@@ -48,13 +49,12 @@
                         class="form-textarea"
                         placeholder="粘贴链接或完整分享文案"
                         rows="3"
-                        inputmode="url"
-                        autocomplete="url"
-                        enterkeyhint="go"
+                        autocapitalize="sentences"
+                        spellcheck="true"
                         aria-describedby="input-feedback">
                     </textarea>
                     <p id="input-feedback" class="input-feedback" role="status"
-                       aria-live="assertive" hidden></p>
+                       aria-live="polite" hidden></p>
 
                     <!-- URL识别结果：仅在找到链接时显示 -->
                     <div id="url-preview" class="url-preview" aria-live="polite" hidden></div>
@@ -82,6 +82,7 @@
 
                 <!-- 无令牌时的明确阻塞提示 -->
                 <div id="auth-missing-prompt" class="auth-missing-prompt" role="status"
+                     hidden
                      aria-live="polite">
                     <span>尚未配置访问令牌</span>
                     <button type="button" id="auth-settings-link" class="auth-settings-link"
