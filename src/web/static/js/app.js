@@ -704,6 +704,7 @@ class UIManager {
      */
     static updateSubmitButton() {
         const btn = document.getElementById('submit-btn');
+        if (!btn) return;
         const btnIcon = btn.querySelector('.btn-icon');
         const btnText = btn.querySelector('.btn-text');
 
@@ -717,7 +718,12 @@ class UIManager {
 
         const selectedURL = getSelectedURL();
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
-        
+        const authPrompt = document.getElementById('auth-missing-prompt');
+
+        if (authPrompt) {
+            authPrompt.hidden = Boolean(token);
+        }
+
         const canSubmit = selectedURL && token && !currentTask;
         
         btn.disabled = !canSubmit;
@@ -727,10 +733,7 @@ class UIManager {
             btnText.textContent = '处理中...';
         } else if (!selectedURL) {
             btnIcon.textContent = '📝';
-            btnText.textContent = '请输入包含视频链接的内容';
-        } else if (!token) {
-            btnIcon.textContent = '🔐';
-            btnText.textContent = '请在高级设置中填写访问令牌';
+            btnText.textContent = '开始转录';
         } else {
             btnIcon.textContent = '🚀';
             btnText.textContent = '开始转录';
@@ -742,17 +745,35 @@ class UIManager {
      */
     static toggleAdvancedSettings() {
         const settings = document.getElementById('advanced-settings');
-        const icon = document.querySelector('.toggle-icon');
-        
+        const toggle = document.getElementById('advanced-toggle');
+        const icon = toggle && toggle.querySelector('.toggle-icon');
+        if (!settings || !toggle) return;
+
         isAdvancedSettingsExpanded = !isAdvancedSettingsExpanded;
-        
+
         if (isAdvancedSettingsExpanded) {
             settings.classList.add('expanded');
-            icon.classList.add('rotated');
+            settings.hidden = false;
+            toggle.setAttribute('aria-expanded', 'true');
+            if (icon) icon.classList.add('rotated');
         } else {
             settings.classList.remove('expanded');
-            icon.classList.remove('rotated');
+            settings.hidden = true;
+            toggle.setAttribute('aria-expanded', 'false');
+            if (icon) icon.classList.remove('rotated');
         }
+    }
+
+    /** Toggle speaker recognition, a high-frequency option kept before the CTA. */
+    static toggleTranscriptionOptions() {
+        const options = document.getElementById('transcription-options');
+        const toggle = document.getElementById('transcription-options-toggle');
+        if (!options || !toggle) return;
+        const expanded = options.hidden;
+        options.hidden = !expanded;
+        toggle.setAttribute('aria-expanded', String(expanded));
+        const icon = toggle.querySelector('.toggle-icon');
+        if (icon) icon.classList.toggle('rotated', expanded);
     }
 
     /**
@@ -799,11 +820,17 @@ class UIManager {
 function handleTextInput(textarea) {
     const text = textarea.value;
     const urlResults = URLExtractor.extractAndRankURLs(text);
-    
+
     const previewContainer = document.getElementById('url-preview');
-    
+    const inputFeedback = document.getElementById('input-feedback');
+    previewContainer.hidden = urlResults.length === 0;
+
     if (urlResults.length === 0) {
-        previewContainer.innerHTML = '<div class="no-urls">未检测到URL</div>';
+        previewContainer.innerHTML = '';
+        if (inputFeedback) {
+            inputFeedback.textContent = text.trim() ? '未检测到可识别的视频链接，请检查分享文案。' : '';
+            inputFeedback.hidden = !text.trim();
+        }
         UIManager.updateSubmitButton();
         return;
     }
@@ -825,6 +852,10 @@ function handleTextInput(textarea) {
     html += '</div>';
     
     previewContainer.innerHTML = html;
+    if (inputFeedback) {
+        inputFeedback.textContent = '';
+        inputFeedback.hidden = true;
+    }
     
     // 绑定选择事件
     bindURLSelection();
@@ -893,6 +924,11 @@ async function submitTranscription(event) {
     const originalText = document.getElementById('share-content').value.trim();
 
     if (!selectedURL) {
+        const inputFeedback = document.getElementById('input-feedback');
+        if (inputFeedback) {
+            inputFeedback.textContent = '请先选择一个视频链接。';
+            inputFeedback.hidden = false;
+        }
         UIManager.showStatus('error', '请先选择一个视频链接', '请在上方文本框中输入包含视频链接的内容，系统会自动提取并显示可选的链接');
         setTimeout(UIManager.hideStatus, 5000);
         return;
@@ -900,18 +936,9 @@ async function submitTranscription(event) {
 
     const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
     if (!token) {
-        UIManager.showStatus('error', '请先设置访问令牌', '请在高级设置中填写你的访问令牌');
-        // 自动展开高级设置
-        if (!isAdvancedSettingsExpanded) {
-            UIManager.toggleAdvancedSettings();
-        }
-        // 聚焦到 token 输入框
-        setTimeout(() => {
-            const tokenInput = document.getElementById('bearer-token');
-            if (tokenInput) {
-                tokenInput.focus();
-            }
-        }, 100);
+        const authPrompt = document.getElementById('auth-missing-prompt');
+        if (authPrompt) authPrompt.hidden = false;
+        UIManager.showStatus('error', '请先设置访问令牌', '点击“去设置”展开访问令牌输入框');
         setTimeout(UIManager.hideStatus, 5000);
         return;
     }
@@ -967,7 +994,14 @@ async function submitTranscription(event) {
             
             // 清空表单
             document.getElementById('share-content').value = '';
-            document.getElementById('url-preview').innerHTML = '<div class="no-urls">请输入包含视频链接的内容</div>';
+            const previewContainer = document.getElementById('url-preview');
+            previewContainer.innerHTML = '';
+            previewContainer.hidden = true;
+            const inputFeedback = document.getElementById('input-feedback');
+            if (inputFeedback) {
+                inputFeedback.textContent = '';
+                inputFeedback.hidden = true;
+            }
             
             // 3秒后跳转到查看页面
             // PWA standalone 模式下取消自动跳转（Codex R2-1）：/view 的
@@ -988,6 +1022,11 @@ async function submitTranscription(event) {
         
     } catch (error) {
         console.error('提交任务失败:', error);
+        const inputFeedback = document.getElementById('input-feedback');
+        if (inputFeedback) {
+            inputFeedback.textContent = `提交失败：${error.message}`;
+            inputFeedback.hidden = false;
+        }
         UIManager.showStatus('error', '提交任务失败', error.message);
     } finally {
         currentTask = null;
@@ -1028,20 +1067,26 @@ function initializePage() {
     textarea.value = ''; // 确保初始为空
     textarea.addEventListener('input', () => handleTextInput(textarea));
     
-    // 确保URL预览区域初始状态正确
+    // 空输入时不占用首屏空间
     const previewContainer = document.getElementById('url-preview');
-    previewContainer.innerHTML = '<div class="no-urls">请输入包含视频链接的内容</div>';
-    
-    // 如果没有保存的 token，自动展开高级设置
-    if (!savedToken) {
-        UIManager.toggleAdvancedSettings();
-    }
+    previewContainer.innerHTML = '';
+    previewContainer.hidden = true;
     
     const form = document.getElementById('transcribe-form');
     form.addEventListener('submit', submitTranscription);
     
     const advancedToggle = document.getElementById('advanced-toggle');
     advancedToggle.addEventListener('click', UIManager.toggleAdvancedSettings);
+
+    const transcriptionOptionsToggle = document.getElementById('transcription-options-toggle');
+    transcriptionOptionsToggle.addEventListener('click', UIManager.toggleTranscriptionOptions);
+
+    const authSettingsLink = document.getElementById('auth-settings-link');
+    authSettingsLink.addEventListener('click', () => {
+        if (!isAdvancedSettingsExpanded) UIManager.toggleAdvancedSettings();
+        const tokenInput = document.getElementById('bearer-token');
+        if (tokenInput) tokenInput.focus();
+    });
 
     const tokenToggle = document.getElementById('toggle-token-visibility');
     tokenToggle.addEventListener('click', UIManager.toggleTokenVisibility);
@@ -1082,7 +1127,14 @@ function initializePage() {
 
     document.getElementById('speaker-recognition').addEventListener('change', (e) => {
         StorageManager.set(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION, e.target.checked);
+        const summary = document.getElementById('transcription-options-summary');
+        if (summary) summary.textContent = e.target.checked ? '已启用说话人识别' : '未启用说话人识别';
     });
+
+    const speakerSummary = document.getElementById('transcription-options-summary');
+    if (speakerSummary && savedSpeakerRecognition) {
+        speakerSummary.textContent = '已启用说话人识别';
+    }
     
     // 渲染任务历史
     TaskHistoryManager.renderHistory();
