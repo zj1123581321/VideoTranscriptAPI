@@ -19,7 +19,6 @@ from llm_compat import normalize_reasoning_effort as _lc_normalize
 from llm_compat.providers import (
     build_request_payload,
     describe_from_payload,
-    detect_provider,
 )
 
 # 注意：不能在模块顶层 `from .core.usage_context import ...`——
@@ -163,6 +162,7 @@ def set_default_config(config: Optional[Dict[str, Any]]) -> None:
         collector_api_key=llm_cfg.get("collector_api_key", ""),
         refusal_keywords_url=llm_cfg.get("refusal_keywords_url"),
         sensitive_detector=sensitive_detector,
+        on_all_refused="raise",
     )
     if sensitive_detector:
         logger.info(f"[LLM] SyncLLMClient initialized with SensitiveDetector ({len(sensitive_detector._words)} words)")
