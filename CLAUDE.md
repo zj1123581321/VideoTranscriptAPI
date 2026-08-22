@@ -1,5 +1,7 @@
 Always respond in 中文
 
+risk-tier: personal
+
 # 代码设计上的要求
 - 各部分功能尽量低耦合，高内聚。
 - 各个函数代码做好注释。
