@@ -133,6 +133,25 @@ def test_detect_refusal_contract(
 class TestSyncLLMClientRefusalPolicy:
     """Construction-time on_all_refused must stay raise (not v0.10.0 default)."""
 
+    @pytest.fixture(autouse=True)
+    def _restore_llm_module_globals(self):
+        """Restore module-level globals mutated by set_default_config().
+
+        set_default_config() writes _default_config and _sync_client. Without
+        this fixture the mock client built here leaks into any later test that
+        reads the module default instead of setting its own, making results
+        depend on collection order.
+        """
+        from video_transcript_api.llm import llm as llm_mod
+
+        saved_config = llm_mod._default_config
+        saved_client = llm_mod._sync_client
+        try:
+            yield
+        finally:
+            llm_mod._default_config = saved_config
+            llm_mod._sync_client = saved_client
+
     @patch("video_transcript_api.llm.llm.SyncLLMClient")
     def test_on_all_refused_raise_passed_at_construction(self, mock_client_cls) -> None:
         from video_transcript_api.llm.llm import set_default_config
