@@ -1575,6 +1575,15 @@ def process_transcription(
                                 f"load_segments for chapters handoff failed: {segs_exc}"
                             )
 
+            video_title, author, description = finalize_presentation_metadata(
+                downloader=None,
+                url=parse_url,
+                metadata_override=metadata_override,
+                title=video_title,
+                author=author,
+                description=description,
+            )
+
             handoff_payload = {
                 "task_id": task_id,
                 "url": url,
@@ -1597,15 +1606,6 @@ def process_transcription(
             }
             if timeline_segments_seed is not None:
                 handoff_payload["timeline_segments"] = timeline_segments_seed
-
-            video_title, author, description = finalize_presentation_metadata(
-                downloader=None,
-                url=parse_url,
-                metadata_override=metadata_override,
-                title=video_title,
-                author=author,
-                description=description,
-            )
 
             handoff_failure = _handoff_to_llm_stage(
                 task_id,
@@ -1755,7 +1755,7 @@ def process_transcription(
                 retry_downloader = (
                     downloader_for_retry
                     if downloader_for_retry is not None
-                    else download_downloader or metadata_downloader
+                    else metadata_downloader or download_downloader
                 )
                 video_title, author, description = finalize_presentation_metadata(
                     downloader=retry_downloader,
