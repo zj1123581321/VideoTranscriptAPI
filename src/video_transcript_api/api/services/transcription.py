@@ -347,46 +347,45 @@ def finalize_presentation_metadata(
     Returns:
         Tuple of finalized (title, author, description).
     """
-    resolved_title = title or ""
-    resolved_author = author or ""
-    resolved_description = description or ""
+    def _accepted_str(value: Any) -> str:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                return stripped
+        return ""
+
+    resolved_title = _accepted_str(title)
+    resolved_author = _accepted_str(author)
+    resolved_description = _accepted_str(description)
 
     if metadata_override:
-        filtered_override = {
-            k: v
-            for k, v in metadata_override.items()
-            if v is not None and (not isinstance(v, str) or v.strip())
-        }
-        override_title = filtered_override.get("title") or filtered_override.get(
-            "video_title"
+        override_title = _accepted_str(metadata_override.get("title")) or _accepted_str(
+            metadata_override.get("video_title")
         )
         if override_title:
             resolved_title = override_title
-        if filtered_override.get("author"):
-            resolved_author = filtered_override["author"]
-        if "description" in filtered_override:
-            resolved_description = filtered_override.get("description", "")
+        override_author = _accepted_str(metadata_override.get("author"))
+        if override_author:
+            resolved_author = override_author
+        if "description" in metadata_override:
+            resolved_description = _accepted_str(metadata_override.get("description"))
 
-    needs_retry = (
-        not (resolved_title or "").strip() or not (resolved_author or "").strip()
-    )
+    needs_retry = not resolved_title or not resolved_author
     if needs_retry and downloader is not None:
         try:
             metadata_obj = downloader.get_metadata(url)
-            if not (resolved_title or "").strip() and (metadata_obj.title or "").strip():
-                resolved_title = metadata_obj.title
-            if not (resolved_author or "").strip() and (metadata_obj.author or "").strip():
-                resolved_author = metadata_obj.author
-            if not (resolved_description or "").strip() and (
-                metadata_obj.description or ""
-            ).strip():
-                resolved_description = metadata_obj.description
+            if not resolved_title:
+                resolved_title = _accepted_str(metadata_obj.title)
+            if not resolved_author:
+                resolved_author = _accepted_str(metadata_obj.author)
+            if not resolved_description:
+                resolved_description = _accepted_str(metadata_obj.description)
         except Exception as exc:
             logger.warning(f"[presentation metadata] get_metadata retry failed: {exc}")
 
-    if not (resolved_title or "").strip():
+    if not resolved_title:
         resolved_title = extract_filename_from_url(url) or "Untitled"
-    if not (resolved_author or "").strip():
+    if not resolved_author:
         resolved_author = "Unknown"
 
     return resolved_title, resolved_author, resolved_description

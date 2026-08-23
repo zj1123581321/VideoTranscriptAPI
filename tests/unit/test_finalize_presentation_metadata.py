@@ -127,3 +127,32 @@ def test_finalize_swallows_get_metadata_exception():
     assert title == "1"
     assert author == "Unknown"
     downloader.get_metadata.assert_called_once_with(url)
+
+
+def test_finalize_ignores_non_string_override_values():
+    url = "https://www.xiaoyuzhoufm.com/episode/6a89b9b7008ed7314d3acdbe"
+    title, author, description = finalize_presentation_metadata(
+        downloader=None,
+        url=url,
+        metadata_override={"title": 123, "author": None},
+        title="",
+        author="",
+        description="",
+    )
+    assert title == "6a89b9b7008ed7314d3acdbe"
+    assert author == "Unknown"
+    assert description == ""
+
+
+def test_finalize_preserves_str_title_against_non_string_override():
+    title, author, description = finalize_presentation_metadata(
+        downloader=None,
+        url="https://example.com/episode/abc",
+        metadata_override={"title": 123, "author": 999},
+        title="Already Known Title",
+        author="Existing Author",
+        description="",
+    )
+    assert title == "Already Known Title"
+    assert author == "Existing Author"
+    assert description == ""
