@@ -318,6 +318,78 @@ def merge_metadata(parsed_metadata: Optional[dict], metadata_override: Optional[
     return final_metadata
 
 
+def finalize_presentation_metadata(
+    *,
+    downloader: Optional[Any],
+    url: str,
+    metadata_override: Optional[dict],
+    title: str,
+    author: str,
+    description: str,
+) -> tuple[str, str, str]:
+    """Persist-boundary resolver for presentation fields.
+
+    1. Apply non-empty metadata_override fields.
+    2. If title or author still blank and downloader is not None, try
+       downloader.get_metadata(url) and fill blanks only.
+    3. If title still blank: extract_filename_from_url(url) or "Untitled".
+    4. If author still blank: "Unknown".
+    get_metadata exceptions are logged and swallowed.
+
+    Args:
+        downloader: Downloader instance for metadata retry, or None to skip.
+        url: Platform URL passed to get_metadata on retry.
+        metadata_override: User-provided metadata overrides.
+        title: Current presentation title candidate.
+        author: Current presentation author candidate.
+        description: Current presentation description candidate.
+
+    Returns:
+        Tuple of finalized (title, author, description).
+    """
+    def _accepted_str(value: Any) -> str:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                return stripped
+        return ""
+
+    resolved_title = _accepted_str(title)
+    resolved_author = _accepted_str(author)
+    resolved_description = _accepted_str(description)
+
+    if metadata_override:
+        override_title = _accepted_str(metadata_override.get("title")) or _accepted_str(
+            metadata_override.get("video_title")
+        )
+        if override_title:
+            resolved_title = override_title
+        override_author = _accepted_str(metadata_override.get("author"))
+        if override_author:
+            resolved_author = override_author
+        if "description" in metadata_override:
+            resolved_description = _accepted_str(metadata_override.get("description"))
+
+    needs_retry = not resolved_title or not resolved_author
+    if needs_retry and downloader is not None:
+        try:
+            metadata_obj = downloader.get_metadata(url)
+            if not resolved_title:
+                resolved_title = _accepted_str(metadata_obj.title)
+            if not resolved_author:
+                resolved_author = _accepted_str(metadata_obj.author)
+            if not resolved_description:
+                resolved_description = _accepted_str(metadata_obj.description)
+        except Exception as exc:
+            logger.warning(f"[presentation metadata] get_metadata retry failed: {exc}")
+
+    if not resolved_title:
+        resolved_title = extract_filename_from_url(url) or "Untitled"
+    if not resolved_author:
+        resolved_author = "Unknown"
+
+    return resolved_title, resolved_author, resolved_description
+
 async def verify_token(authorization: str = Header(None), request: Request = None):
     """
     验证API令牌（支持多用户）
@@ -1502,6 +1574,15 @@ def process_transcription(
                                 f"load_segments for chapters handoff failed: {segs_exc}"
                             )
 
+            video_title, author, description = finalize_presentation_metadata(
+                downloader=None,
+                url=parse_url,
+                metadata_override=metadata_override,
+                title=video_title,
+                author=author,
+                description=description,
+            )
+
             handoff_payload = {
                 "task_id": task_id,
                 "url": url,
@@ -1628,12 +1709,19 @@ def process_transcription(
                 video_id = final_metadata.get('video_id', video_id)
                 logger.info(f"[元数据合并] 元数据解析成功，metadata_override 作为补充")
             else:
-                # 元数据获取失败，使用 metadata_override 或默认值
+                # Metadata probe failed: keep only non-empty metadata_override values.
                 final_metadata = metadata_override or {}
-                video_title = final_metadata.get('title') or extract_filename_from_url(url) or "Untitled"
-                author = final_metadata.get('author', 'Unknown')
-                description = final_metadata.get('description', '')
-                logger.info(f"[元数据合并] 元数据解析失败，使用 metadata_override 或默认值")
+                video_title = (
+                    final_metadata.get("title")
+                    or final_metadata.get("video_title")
+                    or ""
+                )
+                author = final_metadata.get("author") or ""
+                description = final_metadata.get("description") or ""
+                logger.info(
+                    "[元数据合并] 元数据解析失败，保留 metadata_override 非空字段，"
+                    "占位符延后至写边界定稿"
+                )
 
             media_id = video_id
             is_from_generic = (platform == 'generic')
@@ -1658,6 +1746,24 @@ def process_transcription(
                 download_downloader = metadata_downloader
             else:
                 download_downloader = create_downloader(url)
+
+            def _finalize_presentation_fields(
+                downloader_for_retry: Optional[Any] = None,
+            ) -> None:
+                nonlocal video_title, author, description
+                retry_downloader = (
+                    downloader_for_retry
+                    if downloader_for_retry is not None
+                    else metadata_downloader or download_downloader
+                )
+                video_title, author, description = finalize_presentation_metadata(
+                    downloader=retry_downloader,
+                    url=parse_url,
+                    metadata_override=metadata_override,
+                    title=video_title,
+                    author=author,
+                    description=description,
+                )
 
             # ========== YouTube API Server 快速路径 ==========
             # 如果提供了 download_url，则跳过 API Server，强制使用 download_url 下载
@@ -1726,6 +1832,7 @@ def process_transcription(
                             author=author,
                         )
 
+                        _finalize_presentation_fields()
                         # 保存到缓存
                         cache_result = cache_manager.save_cache(
                             platform=platform,
@@ -1821,6 +1928,7 @@ def process_transcription(
                                 transcript = funasr_result["formatted_text"]
                                 transcription_data = funasr_result["transcription_result"]
 
+                                _finalize_presentation_fields()
                                 cache_result = cache_manager.save_cache(
                                     platform=platform,
                                     url=url,
@@ -1853,6 +1961,7 @@ def process_transcription(
                                 # CapsWriter timeline：Transcriber 已从
                                 # *_funasr.json 读入 funasr_json_data，接通
                                 # extra_json_data 落盘为 transcript_capswriter.json
+                                _finalize_presentation_fields()
                                 cache_result = cache_manager.save_cache(
                                     platform=platform,
                                     url=url,
@@ -2026,6 +2135,7 @@ def process_transcription(
                     author=author,
                 )
 
+                _finalize_presentation_fields()
                 # 使用新的缓存系统保存平台字幕（有 segments 则写侧车 JSON）
                 cache_result = cache_manager.save_cache(
                     platform=platform,
@@ -2205,6 +2315,7 @@ def process_transcription(
                             transcript = funasr_result["formatted_text"]
                             transcription_data = funasr_result["transcription_result"]
 
+                            _finalize_presentation_fields()
                             # 使用新缓存系统保存
                             cache_result = cache_manager.save_cache(
                                 platform=platform,
@@ -2253,6 +2364,7 @@ def process_transcription(
 
                             # CapsWriter timeline：接通 funasr_json_data 落盘
                             # 为 transcript_capswriter.json（缺省时 None 诚实降级）
+                            _finalize_presentation_fields()
                             cache_result = cache_manager.save_cache(
                                 platform=platform,
                                 url=url,

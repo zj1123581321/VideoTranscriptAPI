@@ -485,6 +485,128 @@ def test_flow_download_funasr(monkeypatch, patch_runtime):
     assert saved["use_speaker_recognition"] is True
 
 
+class FlakyMetadataXiaoyuzhouDownloader:
+    """First get_metadata fails; later calls return cached real metadata."""
+
+    def __init__(self):
+        self._metadata_calls = 0
+        self._cached_metadata = None
+
+    def get_metadata(self, url):
+        self._metadata_calls += 1
+        if self._metadata_calls == 1:
+            import requests
+
+            raise requests.exceptions.ConnectTimeout("Connection timed out")
+        if self._cached_metadata is None:
+            self._cached_metadata = VideoMetadata(
+                video_id="6a89b9b7008ed7314d3acdbe",
+                platform="xiaoyuzhou",
+                title="Real Episode Title",
+                author="Real Author",
+                description="Real description",
+            )
+        return self._cached_metadata
+
+    def get_download_info(self, url):
+        self.get_metadata(url)
+        return DownloadInfo(
+            download_url="http://example.com/audio.mp3",
+            file_ext="mp3",
+            filename="audio.mp3",
+        )
+
+    def download_file(self, url, filename):
+        return "C:/tmp/test.mp3"
+
+
+def test_flow_metadata_retry_before_save_cache(monkeypatch, patch_runtime):
+    """First metadata probe times out; download stage warms cache; persist sees real title."""
+    cache_manager = DummyCacheManager(cache_data=None)
+    monkeypatch.setattr(transcription, "cache_manager", cache_manager)
+
+    url = "https://www.xiaoyuzhoufm.com/episode/6a89b9b7008ed7314d3acdbe"
+    downloader = FlakyMetadataXiaoyuzhouDownloader()
+    monkeypatch.setattr(transcription, "create_downloader", lambda _: downloader)
+
+    result = transcription.process_transcription(
+        task_id="task_metadata_retry",
+        url=url,
+        use_speaker_recognition=True,
+        wechat_webhook=None,
+        download_url=None,
+        metadata_override=None,
+    )
+
+    assert result["status"] == "success"
+    assert result["data"]["video_title"] == "Real Episode Title"
+    assert result["data"]["author"] == "Real Author"
+    assert cache_manager.saved
+    saved = cache_manager.saved[0]
+    assert saved["title"] == "Real Episode Title"
+    assert saved["author"] == "Real Author"
+    assert saved["title"] != "6a89b9b7008ed7314d3acdbe"
+    assert saved["transcript_type"] == "funasr"
+    assert saved["use_speaker_recognition"] is True
+
+
+class SpyingGenericDownloader:
+    """Generic downloader stub that would poison title if used for metadata retry."""
+
+    def __init__(self):
+        self.calls = []
+        self.metadata_calls = []
+
+    def get_metadata(self, url):
+        self.metadata_calls.append(url)
+        return VideoMetadata(
+            video_id="generic-id",
+            platform="generic",
+            title="",
+            author="",
+            description="",
+        )
+
+    def download_file(self, url, filename):
+        self.calls.append((url, filename))
+        return "C:/tmp/direct.mp3"
+
+
+def test_flow_metadata_retry_with_separate_download_url(monkeypatch, patch_runtime):
+    """Separate download_url must not let GenericDownloader win metadata retry."""
+    cache_manager = DummyCacheManager(cache_data=None)
+    monkeypatch.setattr(transcription, "cache_manager", cache_manager)
+
+    url = "https://www.xiaoyuzhoufm.com/episode/6a89b9b7008ed7314d3acdbe"
+    metadata_downloader = FlakyMetadataXiaoyuzhouDownloader()
+    monkeypatch.setattr(transcription, "create_downloader", lambda _: metadata_downloader)
+
+    generic_downloader = SpyingGenericDownloader()
+    import video_transcript_api.downloaders.generic as generic_module
+    monkeypatch.setattr(generic_module, "GenericDownloader", lambda: generic_downloader)
+
+    result = transcription.process_transcription(
+        task_id="task_metadata_retry_separate_url",
+        url=url,
+        use_speaker_recognition=True,
+        wechat_webhook=None,
+        download_url="http://example.com/audio.mp3",
+        metadata_override=None,
+    )
+
+    assert result["status"] == "success"
+    assert result["data"]["video_title"] == "Real Episode Title"
+    assert result["data"]["author"] == "Real Author"
+    assert generic_downloader.metadata_calls == []
+    assert cache_manager.saved
+    saved = cache_manager.saved[0]
+    assert saved["title"] == "Real Episode Title"
+    assert saved["author"] == "Real Author"
+    assert saved["title"] != "6a89b9b7008ed7314d3acdbe"
+    assert saved["transcript_type"] == "funasr"
+    assert saved["use_speaker_recognition"] is True
+
+
 def test_flow_separate_download_url(monkeypatch, patch_runtime):
     cache_manager = DummyCacheManager(cache_data=None)
     monkeypatch.setattr(transcription, "cache_manager", cache_manager)
