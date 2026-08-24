@@ -171,6 +171,16 @@ def record_chat_result_usage(*, model: str, usage: Any) -> None:
     _chat_usage_log.set(_chat_usage_log.get() + (snapshot,))
 
 
+def peek_chat_result_usage() -> Tuple[ChatUsageSnapshot, ...]:
+    """Read accumulated usage snapshots without clearing the bridge slot.
+
+    Used by ``LLMClient.call()`` to attach per-call usage to ``LLMResponse``
+    while preserving the existing ``pop_chat_result_usage()`` contract for
+    ``_record_usage()`` in the same call's ``finally`` block.
+    """
+    return _chat_usage_log.get()
+
+
 def pop_chat_result_usage() -> Tuple[ChatUsageSnapshot, ...]:
     """读取并清空本次 call_llm_api() 调用内累积的全部 usage 快照。
 

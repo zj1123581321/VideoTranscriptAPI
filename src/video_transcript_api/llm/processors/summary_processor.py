@@ -6,8 +6,12 @@ from typing import Dict, Optional
 from ...utils.logging import setup_logger
 from ...utils.llm_status import SummaryStatus
 from ..core.config import LLMConfig
-from ..core.llm_client import LLMClient
-from ..core.summary_budget import compute_summary_budget
+from ..core.llm_client import LLMClient, LLMResponse, LLMUsage
+from ..core.summary_budget import (
+    SummaryBudget,
+    compute_summary_budget,
+    resolve_summary_max_tokens,
+)
 from ..prompts import (
     SUMMARY_SYSTEM_PROMPT_SINGLE_SPEAKER,
     SUMMARY_SYSTEM_PROMPT_MULTI_SPEAKER,
@@ -19,6 +23,11 @@ logger = setup_logger(__name__)
 _SUMMARY_BUDGET_RETRY_SUFFIX = (
     "警告：你上一次的输出字数为 {actual_len} 字，超过了篇幅上限 {hard_cap} 字。"
     "请在保留全部信息点的前提下压缩篇幅，不得超过 {hard_cap} 字。"
+)
+
+_SUMMARY_TRUNCATION_RETRY_SUFFIX = (
+    "警告：你上一次的输出可能因 token 预算限制被截断（未完成）。"
+    "请在保留全部信息点的前提下重新生成完整总结，不得超过 {hard_cap} 字。"
 )
 
 
@@ -118,6 +127,7 @@ class SummaryProcessor:
 
             # 步骤 4: 篇幅预算（prompt / max_tokens / 后验校验共用）
             budget = compute_summary_budget(len(text), self.config.summary_budget)
+            sent_max_tokens = resolve_summary_max_tokens(budget, reasoning_effort)
 
             user_prompt = build_summary_user_prompt(
                 transcript=text,
@@ -129,38 +139,61 @@ class SummaryProcessor:
                 budget_hard_cap=budget.hard_cap,
             )
 
-            first_text = self._call_summary_llm(
+            first_response = self._call_summary_llm(
                 model=model,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 reasoning_effort=reasoning_effort,
-                max_tokens=budget.max_tokens,
+                max_tokens=sent_max_tokens,
             )
+            working_text = first_response.text
 
-            if not first_text or len(first_text) < 50:
+            if self._is_truncated(sent_max_tokens, first_response.usage):
+                retry_text = self._retry_after_truncation(
+                    model=model,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    reasoning_effort=reasoning_effort,
+                    sent_max_tokens=sent_max_tokens,
+                    budget=budget,
+                )
+                if retry_text is None:
+                    logger.warning(
+                        "summary_truncated_failed: first truncated and retry did not recover"
+                    )
+                    return SummaryResult(text=None, status=SummaryStatus.FAILED)
+                working_text = retry_text
+
+            if not working_text or len(working_text) < 50:
                 logger.warning(
-                    f"Summary too short or empty: {len(first_text) if first_text else 0} chars"
+                    f"Summary too short or empty: {len(working_text) if working_text else 0} chars"
                 )
                 return SummaryResult(text=None, status=SummaryStatus.FAILED)
 
-            if len(first_text) <= budget.hard_cap:
-                logger.info(f"Summary generated successfully (length: {len(first_text)})")
-                return SummaryResult(text=first_text, status=SummaryStatus.GENERATED)
+            if len(working_text) <= budget.hard_cap:
+                logger.info(f"Summary generated successfully (length: {len(working_text)})")
+                return SummaryResult(text=working_text, status=SummaryStatus.GENERATED)
 
             retry_suffix = _SUMMARY_BUDGET_RETRY_SUFFIX.format(
-                actual_len=len(first_text),
+                actual_len=len(working_text),
                 hard_cap=budget.hard_cap,
             )
             retry_prompt = f"{user_prompt}\n\n{retry_suffix}"
             retry_text: Optional[str] = None
             try:
-                retry_text = self._call_summary_llm(
+                retry_response = self._call_summary_llm(
                     model=model,
                     system_prompt=system_prompt,
                     user_prompt=retry_prompt,
                     reasoning_effort=reasoning_effort,
-                    max_tokens=budget.max_tokens,
+                    max_tokens=sent_max_tokens,
                 )
+                if self._is_truncated(sent_max_tokens, retry_response.usage):
+                    logger.warning(
+                        "summary_truncated_failed: compression retry truncated"
+                    )
+                    return SummaryResult(text=None, status=SummaryStatus.FAILED)
+                retry_text = retry_response.text
             except Exception as retry_exc:
                 logger.warning(
                     f"Summary compression retry failed, keeping first answer: {retry_exc}"
@@ -172,13 +205,13 @@ class SummaryProcessor:
                 )
                 return SummaryResult(text=retry_text, status=SummaryStatus.GENERATED)
 
-            candidates = [first_text]
+            candidates = [working_text]
             if retry_text and len(retry_text) >= 50:
                 candidates.append(retry_text)
             final_text = min(candidates, key=len)
 
             logger.warning(
-                f"summary_over_budget_accepted: first={len(first_text)} "
+                f"summary_over_budget_accepted: first={len(working_text)} "
                 f"retry={len(retry_text) if retry_text else 0} "
                 f"hard_cap={budget.hard_cap} accepted={len(final_text)}"
             )
@@ -188,6 +221,51 @@ class SummaryProcessor:
             logger.error(f"Summary generation failed: {e}", exc_info=True)
             return SummaryResult(text=None, status=SummaryStatus.FAILED)
 
+    @staticmethod
+    def _is_truncated(
+        sent_max_tokens: Optional[int],
+        usage: Optional[LLMUsage],
+    ) -> bool:
+        """Detect token-budget truncation before llm-compat exposes finish_reason."""
+        if sent_max_tokens is None:
+            return False
+        if usage is None or usage.usage_missing:
+            return False
+        if usage.completion_tokens is None:
+            return False
+        return usage.completion_tokens >= sent_max_tokens
+
+    def _retry_after_truncation(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        reasoning_effort: Optional[str],
+        sent_max_tokens: Optional[int],
+        budget: SummaryBudget,
+    ) -> Optional[str]:
+        """Retry once after truncation; truncated text is never returned."""
+        retry_suffix = _SUMMARY_TRUNCATION_RETRY_SUFFIX.format(hard_cap=budget.hard_cap)
+        retry_prompt = f"{user_prompt}\n\n{retry_suffix}"
+        try:
+            retry_response = self._call_summary_llm(
+                model=model,
+                system_prompt=system_prompt,
+                user_prompt=retry_prompt,
+                reasoning_effort=reasoning_effort,
+                max_tokens=sent_max_tokens,
+            )
+        except Exception as retry_exc:
+            logger.warning(f"Summary truncation retry failed: {retry_exc}")
+            return None
+
+        if self._is_truncated(sent_max_tokens, retry_response.usage):
+            return None
+        if not retry_response.text or len(retry_response.text) < 50:
+            return None
+        return retry_response.text
+
     def _call_summary_llm(
         self,
         *,
@@ -195,9 +273,9 @@ class SummaryProcessor:
         system_prompt: str,
         user_prompt: str,
         reasoning_effort: Optional[str],
-        max_tokens: int,
-    ) -> str:
-        response = self.llm_client.call(
+        max_tokens: Optional[int],
+    ) -> LLMResponse:
+        return self.llm_client.call(
             model=model,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -205,7 +283,6 @@ class SummaryProcessor:
             task_type="summary",
             max_tokens=max_tokens,
         )
-        return response.text
 
     def _select_system_prompt(self, speaker_count: int) -> str:
         """根据说话人数量选择 System Prompt

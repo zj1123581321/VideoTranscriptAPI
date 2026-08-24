@@ -16,7 +16,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from video_transcript_api.llm.core.llm_client import LLMClient, LLMResponse
+from video_transcript_api.llm.core.llm_client import LLMClient, LLMResponse, LLMUsage
 from video_transcript_api.llm.core.errors import (
     RetryableError,
     FatalError,
@@ -104,6 +104,38 @@ class TestLLMClientSuccess:
         client.call(model="test-model", system_prompt="s", user_prompt="u")
 
         assert mock_call.call_args.kwargs.get("force_json_mode") is None
+
+    @patch("video_transcript_api.llm.core.llm_client.peek_chat_result_usage")
+    @patch("video_transcript_api.llm.core.llm_client.call_llm_api")
+    def test_text_response_includes_usage_snapshot(
+        self, mock_call, mock_peek, client
+    ):
+        """LLMResponse.usage should mirror the bridge slot without clearing it."""
+        from video_transcript_api.llm.core.usage_context import ChatUsageSnapshot
+
+        mock_call.return_value = "calibrated text"
+        mock_peek.return_value = (
+            ChatUsageSnapshot(
+                model="test-model",
+                prompt_tokens=10,
+                completion_tokens=20,
+                total_tokens=30,
+                usage_missing=False,
+            ),
+        )
+
+        result = client.call(
+            model="test-model",
+            system_prompt="system",
+            user_prompt="user",
+        )
+
+        assert result.usage == LLMUsage(
+            prompt_tokens=10,
+            completion_tokens=20,
+            total_tokens=30,
+            usage_missing=False,
+        )
 
 
 # ============================================================

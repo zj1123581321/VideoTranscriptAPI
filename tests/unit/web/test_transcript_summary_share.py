@@ -26,6 +26,7 @@ def _base_context(**overrides) -> dict:
         "created_at_display": "2026-07-11 10:00",
         "platform": "youtube",
         "summary_html": "<p>First summary paragraph.</p><p>Second paragraph.</p>",
+        "summary_state": "generated",
         "calibrated_html": "<p>Calibrated body.</p>",
         "view_token": "test-view-token-123",
         "stats": {

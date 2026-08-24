@@ -5,6 +5,8 @@ import unittest
 from video_transcript_api.llm.core.summary_budget import (
     classify_original_length_band,
     compute_summary_budget,
+    resolve_summary_max_tokens,
+    should_send_max_tokens,
     SummaryBudgetConfig,
 )
 
@@ -66,6 +68,20 @@ class TestSummaryBudgetBands(unittest.TestCase):
     budget = compute_summary_budget(2000, cfg)
     self.assertEqual(budget.hard_cap, 4000)
     self.assertEqual(budget.max_tokens, 8000)
+
+
+class TestSummaryMaxTokensPolicy(unittest.TestCase):
+  def test_should_send_max_tokens_only_for_disabled(self):
+    self.assertTrue(should_send_max_tokens("disabled"))
+    self.assertFalse(should_send_max_tokens(None))
+    self.assertFalse(should_send_max_tokens("high"))
+    self.assertFalse(should_send_max_tokens("low"))
+
+  def test_resolve_summary_max_tokens(self):
+    budget = compute_summary_budget(4000)
+    self.assertIsNone(resolve_summary_max_tokens(budget, None))
+    self.assertIsNone(resolve_summary_max_tokens(budget, "high"))
+    self.assertEqual(resolve_summary_max_tokens(budget, "disabled"), 6750)
 
 
 if __name__ == "__main__":
