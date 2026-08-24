@@ -196,6 +196,38 @@ class TestSummaryProcessor(unittest.TestCase):
     joined = " ".join(str(call.args[0]) for call in warning_mock.call_args_list)
     self.assertIn("summary_over_budget_accepted", joined)
 
+  def test_over_hard_cap_compression_retry_truncated_falls_back_to_first(self):
+    cases = (
+      {
+        "name": "disabled_first_complete_retry_truncated",
+        "first_over_cap": 100,
+        "retry_over_cap": 50,
+        "first_completion_tokens_delta": -100,
+      },
+    )
+    hard_cap = min(2 * len(self.long_text), 4500)
+    max_tokens = int(hard_cap * 1.5)
+
+    for case in cases:
+      with self.subTest(case=case["name"]):
+        processor = _make_processor(reasoning_effort="disabled")
+        first = "f" * (hard_cap + case["first_over_cap"])
+        truncated_retry = "r" * (hard_cap + case["retry_over_cap"])
+        first_usage = _usage(max_tokens + case["first_completion_tokens_delta"])
+        processor.llm_client.call.side_effect = [
+          LLMResponse(text=first, usage=first_usage),
+          LLMResponse(text=truncated_retry, usage=_usage(max_tokens)),
+        ]
+
+        with patch.object(processor_module_logger, "warning") as warning_mock:
+          result = processor.process(text=self.long_text, title="Test Title")
+
+        self.assertEqual(result.status, SummaryStatus.GENERATED)
+        self.assertEqual(result.text, first)
+        joined = " ".join(str(call.args[0]) for call in warning_mock.call_args_list)
+        self.assertIn("summary_over_budget_accepted", joined)
+        self.assertNotIn("summary_truncated_failed", joined)
+
   def test_summary_too_short_returns_failed(self):
     self.mock_call.return_value = LLMResponse(text="Short")
 

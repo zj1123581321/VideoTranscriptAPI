@@ -190,10 +190,10 @@ class SummaryProcessor:
                 )
                 if self._is_truncated(sent_max_tokens, retry_response.usage):
                     logger.warning(
-                        "summary_truncated_failed: compression retry truncated"
+                        "Summary compression retry truncated, keeping first answer"
                     )
-                    return SummaryResult(text=None, status=SummaryStatus.FAILED)
-                retry_text = retry_response.text
+                else:
+                    retry_text = retry_response.text
             except Exception as retry_exc:
                 logger.warning(
                     f"Summary compression retry failed, keeping first answer: {retry_exc}"
