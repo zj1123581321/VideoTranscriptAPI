@@ -79,7 +79,7 @@ class TestSummaryDisabledState:
 
     def test_summary_skipped_short_state_unaffected(self):
         html = _render(summary_html=None, summary_state="skipped_short")
-        assert "原始文本过短" in html
+        assert "原文过短未生成总结" in html
         assert "该任务未启用内容总结" not in html
 
 

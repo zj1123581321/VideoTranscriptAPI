@@ -3,6 +3,8 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
+from .summary_budget import SummaryBudgetConfig
+
 
 @dataclass
 class LLMConfig:
@@ -128,6 +130,9 @@ class LLMConfig:
     notes_model: Optional[str] = None
     notes_reasoning_effort: Optional[str] = None
     notes_concurrency: int = 10
+
+    # Summary output budget (prompt + max_tokens + post-hoc cap share one curve).
+    summary_budget: SummaryBudgetConfig = field(default_factory=SummaryBudgetConfig)
 
     @classmethod
     def from_dict(cls, config_dict: dict) -> "LLMConfig":
@@ -321,6 +326,9 @@ class LLMConfig:
                 )
             ),
             notes_concurrency=llm_config.get("notes_concurrency", 10),
+            summary_budget=SummaryBudgetConfig.from_dict(
+                llm_config.get("summary_budget")
+            ),
         )
 
     def get_models(self) -> dict:

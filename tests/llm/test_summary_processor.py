@@ -2,155 +2,193 @@
 
 import unittest
 from unittest.mock import Mock, patch
+
+from video_transcript_api.llm.processors import summary_processor as summary_processor_module
 from video_transcript_api.llm.processors.summary_processor import SummaryProcessor
 from video_transcript_api.llm.core.config import LLMConfig
+from video_transcript_api.llm.core.llm_client import LLMResponse
 from video_transcript_api.utils.llm_status import SummaryStatus
+
+processor_module_logger = summary_processor_module.logger
+
+
+def _long_text() -> str:
+  return "This is a very long text segment. " * 60  # ~2160 chars
+
+
+def _make_processor() -> SummaryProcessor:
+  config = LLMConfig(
+    api_key="test_key",
+    base_url="http://test.api.com",
+    calibrate_model="test-model",
+    summary_model="test-summary-model",
+    min_summary_threshold=500,
+  )
+  return SummaryProcessor(llm_client=Mock(), config=config)
 
 
 class TestSummaryProcessor(unittest.TestCase):
-    """Test SummaryProcessor functionality"""
+  def setUp(self):
+    self.processor_module_logger = processor_module_logger
+    self.processor = _make_processor()
+    self.long_text = _long_text()
+    self.mock_call = self.processor.llm_client.call
 
-    def setUp(self):
-        """Set up test configuration"""
-        # Create minimal config
-        self.config = LLMConfig(
-            api_key="test_key",
-            base_url="http://test.api.com",
-            calibrate_model="test-model",
-            summary_model="test-summary-model",
-            min_summary_threshold=500,
-        )
+  def test_short_text_returns_none(self):
+    result = self.processor.process(
+      text="This is a very short text.",
+      title="Test Title",
+    )
+    self.assertIsNone(result.text)
+    self.assertEqual(result.status, SummaryStatus.SKIPPED_SHORT)
 
-        self.llm_client = Mock()
+  def test_single_speaker_prompt_selection(self):
+    single_prompt = self.processor._select_system_prompt(speaker_count=0)
+    multi_prompt = self.processor._select_system_prompt(speaker_count=2)
+    self.assertTrue(len(single_prompt) > 100)
+    self.assertNotEqual(single_prompt, multi_prompt)
 
-        self.processor = SummaryProcessor(
-            llm_client=self.llm_client,
-            config=self.config,
-        )
+  def test_within_hard_cap_single_call(self):
+    self.mock_call.return_value = LLMResponse(text="generated summary text. " * 20)
 
-    def test_short_text_returns_none(self):
-        """Test short text skips summary generation (status=SKIPPED_SHORT, not a failure)"""
-        result = self.processor.process(
-            text="This is a very short text.",  # < 500 chars
-            title="Test Title",
-        )
-        self.assertIsNone(result.text)
-        self.assertEqual(result.status, SummaryStatus.SKIPPED_SHORT)
+    result = self.processor.process(text=self.long_text, title="Test Title")
 
-    @patch('video_transcript_api.llm.core.llm_client.LLMClient.call')
-    def test_long_text_generates_summary(self, mock_call):
-        """Test long text generates summary"""
-        # Mock LLM response
-        mock_response = Mock()
-        mock_response.text = "This is the generated summary. " * 10  # > 50 chars
-        self.llm_client.call = Mock(return_value=mock_response)
+    self.assertEqual(result.status, SummaryStatus.GENERATED)
+    self.assertEqual(self.mock_call.call_count, 1)
+    self.assertIn("max_tokens", self.mock_call.call_args.kwargs)
 
-        result = self.processor.process(
-            text="This is a very long text... " * 100,  # > 500 chars
-            title="Test Title",
-        )
+  def test_over_hard_cap_retry_success(self):
+    hard_cap = min(2 * len(self.long_text), 4500)
+    self.mock_call.side_effect = [
+      LLMResponse(text="x" * (hard_cap + 100)),
+      LLMResponse(text="y" * (hard_cap - 50)),
+    ]
 
-        self.assertIsNotNone(result.text)
-        self.assertIn("summary", result.text.lower())
-        self.assertEqual(result.status, SummaryStatus.GENERATED)
+    with patch.object(self.processor_module_logger, "warning") as warning_mock:
+      result = self.processor.process(text=self.long_text, title="Test Title")
 
-    def test_single_speaker_prompt_selection(self):
-        """Test single speaker prompt selection"""
-        single_prompt = self.processor._select_system_prompt(speaker_count=0)
-        multi_prompt = self.processor._select_system_prompt(speaker_count=2)
+    self.assertEqual(result.status, SummaryStatus.GENERATED)
+    self.assertEqual(self.mock_call.call_count, 2)
+    self.assertEqual(len(result.text), hard_cap - 50)
+    joined = " ".join(str(call.args[0]) for call in warning_mock.call_args_list)
+    self.assertNotIn("summary_over_budget_accepted", joined)
 
-        # Verify prompt is not empty
-        self.assertTrue(len(single_prompt) > 100)
+  def test_over_hard_cap_retry_too_short_falls_back_to_first(self):
+    hard_cap = min(2 * len(self.long_text), 4500)
+    first = "d" * (hard_cap + 100)
+    self.mock_call.side_effect = [
+      LLMResponse(text=first),
+      LLMResponse(text="tiny"),
+    ]
 
-        # Verify single and multi prompts are different
-        self.assertNotEqual(single_prompt, multi_prompt)
+    with patch.object(self.processor_module_logger, "warning") as warning_mock:
+      result = self.processor.process(text=self.long_text, title="Test Title")
 
-    def test_multi_speaker_prompt_selection(self):
-        """Test multi-speaker prompt selection"""
-        single_prompt = self.processor._select_system_prompt(speaker_count=0)
-        multi_prompt = self.processor._select_system_prompt(speaker_count=2)
+    self.assertEqual(result.status, SummaryStatus.GENERATED)
+    self.assertEqual(result.text, first)
+    joined = " ".join(str(call.args[0]) for call in warning_mock.call_args_list)
+    self.assertIn("summary_over_budget_accepted", joined)
 
-        # Verify prompt is not empty
-        self.assertTrue(len(multi_prompt) > 100)
+  def test_over_hard_cap_accept_shortest_with_warning(self):
+    hard_cap = min(2 * len(self.long_text), 4500)
+    first = "a" * (hard_cap + 200)
+    retry = "b" * (hard_cap + 50)
+    self.mock_call.side_effect = [
+      LLMResponse(text=first),
+      LLMResponse(text=retry),
+    ]
 
-        # Verify single and multi prompts are different
-        self.assertNotEqual(single_prompt, multi_prompt)
+    with patch.object(self.processor_module_logger, "warning") as warning_mock:
+      result = self.processor.process(text=self.long_text, title="Test Title")
 
-    @patch('video_transcript_api.llm.core.llm_client.LLMClient.call')
-    def test_task_type_parameter(self, mock_call):
-        """Test task_type parameter is correctly passed"""
-        # Mock LLM response
-        mock_response = Mock()
-        mock_response.text = "This is the generated summary. " * 10
-        self.llm_client.call = Mock(return_value=mock_response)
+    self.assertEqual(result.status, SummaryStatus.GENERATED)
+    self.assertEqual(len(result.text), len(retry))
+    joined = " ".join(str(call.args[0]) for call in warning_mock.call_args_list)
+    self.assertIn("summary_over_budget_accepted", joined)
 
-        # Call processor
-        self.processor.process(
-            text="This is a very long text... " * 100,
-            title="Test Title",
-        )
+  def test_over_hard_cap_retry_failure_keeps_first(self):
+    hard_cap = min(2 * len(self.long_text), 4500)
+    first = "c" * (hard_cap + 300)
+    self.mock_call.side_effect = [
+      LLMResponse(text=first),
+      Exception("retry failed"),
+    ]
 
-        # Verify task_type parameter
-        self.llm_client.call.assert_called_once()
-        call_kwargs = self.llm_client.call.call_args[1]
-        self.assertEqual(call_kwargs.get("task_type"), "summary")
+    with patch.object(self.processor_module_logger, "warning") as warning_mock:
+      result = self.processor.process(text=self.long_text, title="Test Title")
 
-    @patch('video_transcript_api.llm.core.llm_client.LLMClient.call')
-    def test_summary_too_short_returns_none(self, mock_call):
-        """Test summary generation returns status=FAILED if result too short (not SKIPPED_SHORT)"""
-        # Mock LLM response with very short text
-        mock_response = Mock()
-        mock_response.text = "Short"  # < 50 chars
-        self.llm_client.call = Mock(return_value=mock_response)
+    self.assertEqual(result.status, SummaryStatus.GENERATED)
+    self.assertEqual(result.text, first)
+    joined = " ".join(str(call.args[0]) for call in warning_mock.call_args_list)
+    self.assertIn("summary_over_budget_accepted", joined)
 
-        result = self.processor.process(
-            text="This is a very long text... " * 100,
-            title="Test Title",
-        )
+  def test_summary_too_short_returns_failed(self):
+    self.mock_call.return_value = LLMResponse(text="Short")
 
-        self.assertIsNone(result.text)
-        self.assertEqual(result.status, SummaryStatus.FAILED)
+    result = self.processor.process(text=self.long_text, title="Test Title")
 
-    @patch('video_transcript_api.llm.core.llm_client.LLMClient.call')
-    def test_exception_handling(self, mock_call):
-        """Test exception handling returns status=FAILED gracefully (no raise)"""
-        # Mock LLM call to raise exception
-        self.llm_client.call = Mock(side_effect=Exception("Test error"))
+    self.assertIsNone(result.text)
+    self.assertEqual(result.status, SummaryStatus.FAILED)
 
-        result = self.processor.process(
-            text="This is a very long text... " * 100,
-            title="Test Title",
-        )
+  def test_exception_handling(self):
+    self.mock_call.side_effect = Exception("Test error")
 
-        # Should return a FAILED SummaryResult instead of raising exception
-        self.assertIsNone(result.text)
-        self.assertEqual(result.status, SummaryStatus.FAILED)
+    result = self.processor.process(text=self.long_text, title="Test Title")
 
-    @patch('video_transcript_api.llm.core.llm_client.LLMClient.call')
-    def test_selected_models_parameter(self, mock_call):
-        """Test selected_models parameter overrides config"""
-        # Mock LLM response
-        mock_response = Mock()
-        mock_response.text = "This is the generated summary. " * 10
-        self.llm_client.call = Mock(return_value=mock_response)
+    self.assertIsNone(result.text)
+    self.assertEqual(result.status, SummaryStatus.FAILED)
 
-        # Call with selected_models
-        selected_models = {
-            "summary_model": "risk-model",
-            "summary_reasoning_effort": "high",
-        }
+  def test_task_type_and_model_override(self):
+    self.mock_call.return_value = LLMResponse(text="generated summary text. " * 20)
+    selected_models = {
+      "summary_model": "risk-model",
+      "summary_reasoning_effort": "high",
+    }
 
-        self.processor.process(
-            text="This is a very long text... " * 100,
-            title="Test Title",
-            selected_models=selected_models,
-        )
+    self.processor.process(
+      text=self.long_text,
+      title="Test Title",
+      selected_models=selected_models,
+    )
 
-        # Verify model parameter
-        call_kwargs = self.llm_client.call.call_args[1]
-        self.assertEqual(call_kwargs.get("model"), "risk-model")
-        self.assertEqual(call_kwargs.get("reasoning_effort"), "high")
+    kwargs = self.mock_call.call_args.kwargs
+    self.assertEqual(kwargs.get("task_type"), "summary")
+    self.assertEqual(kwargs.get("model"), "risk-model")
+    self.assertEqual(kwargs.get("reasoning_effort"), "high")
+
+
+class TestSummaryPromptContent(unittest.TestCase):
+  def test_prompts_removed_expansion_language(self):
+    from video_transcript_api.llm.prompts import (
+      SUMMARY_SYSTEM_PROMPT_MULTI_SPEAKER,
+      SUMMARY_SYSTEM_PROMPT_SINGLE_SPEAKER,
+    )
+
+    for prompt in (
+      SUMMARY_SYSTEM_PROMPT_SINGLE_SPEAKER,
+      SUMMARY_SYSTEM_PROMPT_MULTI_SPEAKER,
+    ):
+      self.assertNotIn("不少于500字", prompt)
+      self.assertNotIn("150字以上", prompt)
+      self.assertNotIn("永远不要高度浓缩", prompt)
+      self.assertNotIn("框架与心智模型", prompt)
+      self.assertIn("概述", prompt)
+      self.assertIn("主题详述", prompt)
+      self.assertIn("核心观点与洞察", prompt)
+      self.assertIn("逻辑分析", prompt)
+      self.assertIn("默认不生成", prompt)
+
+  def test_user_prompt_injects_budget_line(self):
+    from video_transcript_api.llm.prompts import build_summary_user_prompt
+
+    prompt = build_summary_user_prompt(
+      transcript="body",
+      budget_target_min=500,
+      budget_target_max=3000,
+      budget_hard_cap=4500,
+    )
+    self.assertTrue(prompt.startswith("**篇幅预算**：总长 500–3000 字，不得超过 4500 字。"))
 
 
 if __name__ == "__main__":
-    unittest.main()
+  unittest.main()
