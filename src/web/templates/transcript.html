@@ -369,7 +369,7 @@
             {% if notes_length > 0 %} | 详细笔记 {{ "{:,}".format(notes_length) }} 字{% endif %}
         </span>
     </div>
-    {% if show_summary_stats and summary_percentage <= 20 %}
+    {% if show_summary_stats and summary_percentage <= 20 and summary_state == 'generated' %}
     <div class="summary-condensation-hint" role="note">
         内容高度浓缩，可能省略较多细节。{% if has_readable_notes %}建议阅读详细笔记或原文。{% else %}建议生成详细笔记或阅读原文。{% endif %}
     </div>

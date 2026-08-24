@@ -89,6 +89,26 @@ def compute_summary_budget(
     )
 
 
+def should_send_max_tokens(reasoning_effort: Optional[str]) -> bool:
+    """Whether to send max_tokens on summary LLM calls.
+
+    Only non-reasoning models (reasoning_effort == \"disabled\") receive an
+    explicit token ceiling. Reasoning models consume hidden reasoning tokens
+    against the same completion budget, so max_tokens must not be sent.
+    """
+    return reasoning_effort == "disabled"
+
+
+def resolve_summary_max_tokens(
+    budget: SummaryBudget,
+    reasoning_effort: Optional[str],
+) -> Optional[int]:
+    """Return max_tokens for a summary call, or None for reasoning models."""
+    if should_send_max_tokens(reasoning_effort):
+        return budget.max_tokens
+    return None
+
+
 def classify_original_length_band(original_length: int) -> str:
     """Return S/M/L band label for monitoring (same L thresholds as compute_summary_budget)."""
     length = max(0, int(original_length))

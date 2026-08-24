@@ -216,8 +216,9 @@
         "min_calibrate_ratio": 0.8,      // 校对后文本长度/原文长度的最小比例，低于则视为异常
 
         // ------------------------------------------------------
-        // 总结篇幅预算（prompt / max_tokens / 后验硬顶共用同一曲线）
-        // ------------------------------------------------------
+        // 总结篇幅预算（prompt / 后验硬顶共用同一曲线）
+        // max_tokens 仅对 reasoning_effort == "disabled" 的非思考模型下发
+        // （hard_cap × max_tokens_multiplier）；思考模型不下发 max_tokens。
         "summary_budget": {
             "s_target_min": 500,
             "s_target_max": 3000,

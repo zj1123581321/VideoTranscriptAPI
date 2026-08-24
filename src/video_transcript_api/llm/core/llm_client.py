@@ -5,7 +5,7 @@
 """
 
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
 
 from ...utils.logging import setup_logger
@@ -18,9 +18,44 @@ from .errors import (
     TimeoutError as LLMTimeoutError,
     TruncationError,
 )
-from .usage_context import get_context, pop_chat_result_usage
+from .usage_context import (
+    ChatUsageSnapshot,
+    get_context,
+    peek_chat_result_usage,
+    pop_chat_result_usage,
+)
 
 logger = setup_logger(__name__)
+
+
+@dataclass
+class LLMUsage:
+    """Token usage snapshot for a single LLMClient.call() invocation."""
+
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    usage_missing: bool = True
+
+
+def _usage_from_snapshots(
+    snapshots: Tuple[ChatUsageSnapshot, ...],
+) -> Optional[LLMUsage]:
+    """Build response usage from bridge snapshots without clearing the slot."""
+    if not snapshots:
+        return None
+
+    known = [snapshot for snapshot in snapshots if not snapshot.usage_missing]
+    if not known:
+        return LLMUsage(usage_missing=True)
+
+    last = known[-1]
+    return LLMUsage(
+        prompt_tokens=sum(snapshot.prompt_tokens or 0 for snapshot in known),
+        completion_tokens=last.completion_tokens,
+        total_tokens=sum(snapshot.total_tokens or 0 for snapshot in known),
+        usage_missing=len(known) < len(snapshots),
+    )
 
 
 @dataclass
@@ -28,6 +63,7 @@ class LLMResponse:
     """LLM 响应数据类"""
     text: str
     structured_output: Optional[Dict] = None
+    usage: Optional[LLMUsage] = None
 
 
 class LLMClient:
@@ -97,15 +133,18 @@ class LLMClient:
                 max_tokens=max_tokens,
             )
 
+            usage = _usage_from_snapshots(peek_chat_result_usage())
+
             if isinstance(result, StructuredResult):
                 if not result.success:
                     raise LLMCallError(f"Structured output failed: {result.error}")
                 return LLMResponse(
                     text="",
                     structured_output=result.data or {},
+                    usage=usage,
                 )
             else:
-                return LLMResponse(text=result)
+                return LLMResponse(text=result, usage=usage)
 
         except LLMCallError:
             raise
