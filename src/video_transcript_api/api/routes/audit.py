@@ -187,7 +187,7 @@ async def get_summary_ratio_stats(
         storage = app_config.get("storage", {})
         audit_db_path = storage.get("audit_db")
         cache_manager = get_cache_manager()
-        cache_db_path = str(Path(cache_manager.cache_dir) / "cache.db")
+        cache_db_path = str(cache_manager.db_path)
         cache_root = Path(cache_manager.cache_dir)
         budget_config = SummaryBudgetConfig.from_dict(
             (app_config.get("llm") or {}).get("summary_budget")

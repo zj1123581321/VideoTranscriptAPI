@@ -64,11 +64,30 @@ class TestSummaryProcessor(unittest.TestCase):
       LLMResponse(text="y" * (hard_cap - 50)),
     ]
 
-    result = self.processor.process(text=self.long_text, title="Test Title")
+    with patch.object(self.processor_module_logger, "warning") as warning_mock:
+      result = self.processor.process(text=self.long_text, title="Test Title")
 
     self.assertEqual(result.status, SummaryStatus.GENERATED)
     self.assertEqual(self.mock_call.call_count, 2)
     self.assertEqual(len(result.text), hard_cap - 50)
+    joined = " ".join(str(call.args[0]) for call in warning_mock.call_args_list)
+    self.assertNotIn("summary_over_budget_accepted", joined)
+
+  def test_over_hard_cap_retry_too_short_falls_back_to_first(self):
+    hard_cap = min(2 * len(self.long_text), 4500)
+    first = "d" * (hard_cap + 100)
+    self.mock_call.side_effect = [
+      LLMResponse(text=first),
+      LLMResponse(text="tiny"),
+    ]
+
+    with patch.object(self.processor_module_logger, "warning") as warning_mock:
+      result = self.processor.process(text=self.long_text, title="Test Title")
+
+    self.assertEqual(result.status, SummaryStatus.GENERATED)
+    self.assertEqual(result.text, first)
+    joined = " ".join(str(call.args[0]) for call in warning_mock.call_args_list)
+    self.assertIn("summary_over_budget_accepted", joined)
 
   def test_over_hard_cap_accept_shortest_with_warning(self):
     hard_cap = min(2 * len(self.long_text), 4500)

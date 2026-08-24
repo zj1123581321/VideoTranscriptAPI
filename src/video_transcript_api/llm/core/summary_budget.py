@@ -77,6 +77,9 @@ def compute_summary_budget(
         target_max = cfg.s_target_max
         hard_cap = min(2 * length, cfg.s_hard_cap_max)
 
+    # Prompt 注入的 target_max 不得超过 hard_cap（S 带 L∈[800,1500) 时 2L < s_target_max）。
+    target_max = min(target_max, hard_cap)
+
     max_tokens = int(hard_cap * cfg.max_tokens_multiplier)
     return SummaryBudget(
         target_min=target_min,

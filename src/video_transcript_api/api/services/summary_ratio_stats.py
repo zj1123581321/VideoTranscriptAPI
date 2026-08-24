@@ -69,6 +69,48 @@ def _read_summary_length(cache_dir: Path) -> Optional[int]:
         return None
 
 
+def _resolve_cache_dir(
+    cache_conn: sqlite3.Connection,
+    cache_root: Path,
+    *,
+    cache_id: Optional[int],
+    platform: str,
+    media_id: str,
+    use_speaker_recognition: bool,
+) -> Optional[Path]:
+    """Resolve artifact directory for the task's actual cache variant."""
+    cache_root_resolved = cache_root.resolve()
+    cache_row = None
+
+    if cache_id is not None:
+        cache_row = cache_conn.execute(
+            "SELECT files_loc FROM video_cache WHERE id = ?",
+            (cache_id,),
+        ).fetchone()
+
+    if not cache_row:
+        cache_row = cache_conn.execute(
+            """
+            SELECT files_loc FROM video_cache
+            WHERE platform = ? AND media_id = ? AND use_speaker_recognition = ?
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """,
+            (platform, media_id, 1 if use_speaker_recognition else 0),
+        ).fetchone()
+
+    if not cache_row:
+        return None
+
+    cache_dir = (cache_root / Path(cache_row["files_loc"])).resolve()
+    if not cache_dir.is_relative_to(cache_root_resolved):
+        logger.warning(
+            f"files_loc escapes cache_root, skipping: {cache_row['files_loc']}"
+        )
+        return None
+    return cache_dir
+
+
 def _aggregate_band(ratios: List[float], over_100: int, over_hardcap: int) -> Dict[str, Any]:
     return {
         "n": len(ratios),
@@ -119,7 +161,7 @@ def compute_summary_ratio_stats(
             platform = row["platform"]
             task_row = cache_conn.execute(
                 """
-                SELECT platform, media_id, use_speaker_recognition
+                SELECT platform, media_id, use_speaker_recognition, cache_id
                 FROM task_status
                 WHERE task_id = ?
                 """,
@@ -136,31 +178,18 @@ def compute_summary_ratio_stats(
                 continue
 
             use_speaker = bool(task_row["use_speaker_recognition"])
-            cache_row = cache_conn.execute(
-                """
-                SELECT files_loc FROM video_cache
-                WHERE platform = ? AND media_id = ?
-                ORDER BY use_speaker_recognition DESC, updated_at DESC
-                LIMIT 1
-                """,
-                (resolved_platform, media_id),
-            ).fetchone()
-            if use_speaker:
-                cache_row = cache_conn.execute(
-                    """
-                    SELECT files_loc FROM video_cache
-                    WHERE platform = ? AND media_id = ? AND use_speaker_recognition = 1
-                    ORDER BY updated_at DESC
-                    LIMIT 1
-                    """,
-                    (resolved_platform, media_id),
-                ).fetchone() or cache_row
-
-            if not cache_row:
+            cache_dir = _resolve_cache_dir(
+                cache_conn,
+                cache_root,
+                cache_id=task_row["cache_id"],
+                platform=resolved_platform,
+                media_id=media_id,
+                use_speaker_recognition=use_speaker,
+            )
+            if not cache_dir:
                 skipped += 1
                 continue
 
-            cache_dir = cache_root / Path(cache_row["files_loc"])
             original_length = _read_original_length(cache_dir)
             summary_length = _read_summary_length(cache_dir)
             if original_length is None or summary_length is None or original_length <= 0:

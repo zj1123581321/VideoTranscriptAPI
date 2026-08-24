@@ -34,12 +34,16 @@ class TestSummaryBudgetBands(unittest.TestCase):
   def test_boundary_799_vs_800(self):
     low = compute_summary_budget(799)
     high = compute_summary_budget(800)
-    self.assertEqual(low.hard_cap, min(2 * 799, 4500))
-    self.assertEqual(high.hard_cap, min(2 * 800, 4500))
     self.assertEqual(low.hard_cap, 1598)
     self.assertEqual(high.hard_cap, 1600)
     self.assertEqual(classify_original_length_band(799), "below_S")
     self.assertEqual(classify_original_length_band(800), "S")
+
+  def test_s_band_low_length_clamps_target_max_to_hard_cap(self):
+    budget = compute_summary_budget(1000)
+    self.assertEqual(budget.hard_cap, 2000)
+    self.assertEqual(budget.target_max, 2000)
+    self.assertEqual(budget.target_min, 500)
 
   def test_boundary_7999_vs_8000(self):
     s_band = compute_summary_budget(7999)

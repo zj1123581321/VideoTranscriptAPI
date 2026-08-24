@@ -365,10 +365,7 @@
         <span class="stats-label">转录统计</span>
         <span class="stats-content">
             原始转录 {{ "{:,}".format(original_length) }} 字
-            {% if calibrated_length > 0 %} | 校对文本 {{ "{:,}".format(calibrated_length) }} 字{% endif %}
-            {% if summary_state == 'skipped_short' and summary_length > 0 %}
-            | 原文过短未生成总结（以下为校对后全文）
-            {% elif show_summary_stats %} | 内容总结 {{ "{:,}".format(summary_length) }} 字（占原文 {{ "%.1f"|format(summary_percentage) }}%）{% endif %}
+            {% if calibrated_length > 0 %} | 校对文本 {{ "{:,}".format(calibrated_length) }} 字{% endif %}{% if summary_state == 'skipped_short' and summary_length > 0 %} | 原文过短未生成总结（以下为校对后全文）{% elif show_summary_stats %} | 内容总结 {{ "{:,}".format(summary_length) }} 字（占原文 {{ "%.1f"|format(summary_percentage) }}%）{% endif %}
             {% if notes_length > 0 %} | 详细笔记 {{ "{:,}".format(notes_length) }} 字{% endif %}
         </span>
     </div>
