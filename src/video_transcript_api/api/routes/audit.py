@@ -185,7 +185,7 @@ async def get_summary_ratio_stats(
     try:
         app_config = get_config()
         storage = app_config.get("storage", {})
-        audit_db_path = storage.get("audit_db")
+        audit_db_path = storage.get("audit_db") or get_audit_logger().db_path
         cache_manager = get_cache_manager()
         cache_db_path = str(cache_manager.db_path)
         cache_root = Path(cache_manager.cache_dir)

@@ -2,8 +2,11 @@
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from video_transcript_api.api.services.summary_ratio_stats import compute_summary_ratio_stats
 from video_transcript_api.cache.cache_manager import CacheManager
@@ -121,3 +124,41 @@ def test_over_hardcap_counted(tmp_path):
     days=30,
   )
   assert result["bands"]["S"]["over_hardcap"] == 1
+
+
+def test_summary_ratio_endpoint_ok_when_audit_db_config_missing(tmp_path):
+  """Config may omit storage.audit_db; the route must use get_audit_logger().db_path."""
+  cache_root = tmp_path / "cache"
+  cache_root.mkdir()
+  cm = CacheManager(cache_dir=str(cache_root))
+  al = AuditLogger(str(tmp_path / "audit.db"))
+
+  async def _fake_verify_token():
+    return {
+      "user_id": "test-user",
+      "api_key": "sk-test",
+      "wechat_webhook": None,
+      "is_legacy": True,
+    }
+
+  from video_transcript_api.api.services.transcription import verify_token
+  from video_transcript_api.api.routes import audit
+
+  app = FastAPI()
+  app.include_router(audit.router)
+  app.dependency_overrides[verify_token] = _fake_verify_token
+
+  try:
+    with patch.object(audit, "get_config", return_value={"storage": {}}), \
+         patch.object(audit, "get_audit_logger", return_value=al), \
+         patch.object(audit, "get_cache_manager", return_value=cm):
+      client = TestClient(app)
+      resp = client.get("/api/audit/summary-ratio")
+  finally:
+    al.close()
+    cm.close()
+
+  assert resp.status_code == 200
+  body = resp.json()
+  assert body["code"] == 200
+  assert "bands" in body["data"]
