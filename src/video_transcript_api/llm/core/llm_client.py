@@ -52,6 +52,7 @@ class LLMClient:
         reasoning_effort: Optional[str] = None,
         task_type: str = "unknown",
         force_json_mode: Optional[str] = None,
+        max_tokens: Optional[int] = None,
     ) -> LLMResponse:
         """调用 LLM API
 
@@ -93,6 +94,7 @@ class LLMClient:
                 system_prompt=system_prompt,
                 config=self.config,
                 force_json_mode=force_json_mode,
+                max_tokens=max_tokens,
             )
 
             if isinstance(result, StructuredResult):

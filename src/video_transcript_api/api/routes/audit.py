@@ -6,6 +6,7 @@
 
 import asyncio
 import sqlite3
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,12 +14,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from ..context import (
     get_audit_logger,
     get_cache_manager,
+    get_config,
     get_logger,
     get_usage_recorder,
     get_user_manager,
     lazy_resource,
 )
+from ..services.summary_ratio_stats import compute_summary_ratio_stats
 from ..services.transcription import TranscribeResponse, verify_token
+from ...llm.core.summary_budget import SummaryBudgetConfig
 from ..services.view_token_resolver import ViewTokenResolver
 from ...utils.llm_status import SummaryStatus
 
@@ -164,6 +168,47 @@ async def get_audit_stats(days: int = 30, user_info: dict = Depends(verify_token
     except Exception as exc:
         logger.exception("获取审计统计异常: %s", exc)
         raise HTTPException(status_code=500, detail=f"获取统计信息失败: {exc}")
+
+
+@router.get("/summary-ratio")
+async def get_summary_ratio_stats(
+    days: int = Query(30, ge=1, le=365, description="统计时间窗口（天）"),
+    user_info: dict = Depends(verify_token),
+):
+    """按 S/M/L 分带返回总结相对原文的长度比例监控指标。"""
+    can_view_global = (
+        not user_manager.is_multi_user_mode() or user_info.get("is_legacy", False)
+    )
+    if not can_view_global:
+        raise HTTPException(status_code=403, detail="无权访问全局总结比例统计")
+
+    try:
+        app_config = get_config()
+        storage = app_config.get("storage", {})
+        audit_db_path = storage.get("audit_db")
+        cache_manager = get_cache_manager()
+        cache_db_path = str(Path(cache_manager.cache_dir) / "cache.db")
+        cache_root = Path(cache_manager.cache_dir)
+        budget_config = SummaryBudgetConfig.from_dict(
+            (app_config.get("llm") or {}).get("summary_budget")
+        )
+
+        data = await asyncio.to_thread(
+            compute_summary_ratio_stats,
+            audit_db_path=audit_db_path,
+            cache_db_path=cache_db_path,
+            cache_root=cache_root,
+            days=days,
+            budget_config=budget_config,
+        )
+        return TranscribeResponse(
+            code=200,
+            message="获取总结比例统计成功",
+            data=data,
+        )
+    except Exception as exc:
+        logger.exception("获取总结比例统计异常: %s", exc)
+        raise HTTPException(status_code=500, detail=f"获取总结比例统计失败: {exc}")
 
 
 @router.get("/calls")

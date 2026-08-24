@@ -415,6 +415,7 @@ def _call_with_text_output(
     reasoning_effort: Optional[str],
     task_type: str,
     config: Optional[Dict[str, Any]] = None,
+    max_tokens: Optional[int] = None,
 ) -> str:
     """纯文本输出调用（通过 llm-compat SyncLLMClient）
 
@@ -450,7 +451,10 @@ def _call_with_text_output(
             )
 
         start_time = time.time()
-        result = client.chat(model, messages, reasoning_effort=effort)
+        chat_kwargs: Dict[str, Any] = {}
+        if max_tokens is not None:
+            chat_kwargs["max_tokens"] = max_tokens
+        result = client.chat(model, messages, reasoning_effort=effort, **chat_kwargs)
         # 记录 usage 快照供 llm_client.call() 落审计库（token 用量审计，参见 usage_context.py）
         _record_chat_usage(model, result)
         content = str(result)
@@ -643,6 +647,7 @@ def call_llm_api(
     config: Optional[Dict[str, Any]] = None,
     system_prompt: str = "You are a helpful assistant.",
     force_json_mode: Optional[str] = None,
+    max_tokens: Optional[int] = None,
 ) -> str: ...
 
 
@@ -657,6 +662,7 @@ def call_llm_api(
     config: Optional[Dict[str, Any]] = None,
     system_prompt: str = "You are a helpful assistant.",
     force_json_mode: Optional[str] = None,
+    max_tokens: Optional[int] = None,
 ) -> StructuredResult: ...
 
 
@@ -675,6 +681,7 @@ def call_llm_api(
     base_url: Optional[str] = None,
     max_retries: Optional[int] = None,
     retry_delay: Optional[int] = None,
+    max_tokens: Optional[int] = None,
 ) -> Union[str, StructuredResult]:
     """调用 LLM API（通过 llm-compat SyncLLMClient）
 
@@ -698,6 +705,7 @@ def call_llm_api(
             reasoning_effort=reasoning_effort,
             task_type=task_type,
             config=config if config is not None else _default_config,
+            max_tokens=max_tokens,
         )
 
     effective_config = config if config is not None else _default_config

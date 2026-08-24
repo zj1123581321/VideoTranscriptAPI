@@ -1,4 +1,4 @@
-"""内容总结处理器"""
+"""Content summary processor with budget-aware generation and compression retry."""
 
 from dataclasses import dataclass
 from typing import Dict, Optional
@@ -7,6 +7,7 @@ from ...utils.logging import setup_logger
 from ...utils.llm_status import SummaryStatus
 from ..core.config import LLMConfig
 from ..core.llm_client import LLMClient
+from ..core.summary_budget import compute_summary_budget
 from ..prompts import (
     SUMMARY_SYSTEM_PROMPT_SINGLE_SPEAKER,
     SUMMARY_SYSTEM_PROMPT_MULTI_SPEAKER,
@@ -14,6 +15,11 @@ from ..prompts import (
 )
 
 logger = setup_logger(__name__)
+
+_SUMMARY_BUDGET_RETRY_SUFFIX = (
+    "警告：你上一次的输出字数为 {actual_len} 字，超过了篇幅上限 {hard_cap} 字。"
+    "请在保留全部信息点的前提下压缩篇幅，不得超过 {hard_cap} 字。"
+)
 
 
 @dataclass(frozen=True)
@@ -91,7 +97,9 @@ class SummaryProcessor:
             )
             return SummaryResult(text=None, status=SummaryStatus.SKIPPED_SHORT)
 
-        logger.info(f"Generating summary for text (length: {len(text)}, speaker_count: {speaker_count})")
+        logger.info(
+            f"Generating summary for text (length: {len(text)}, speaker_count: {speaker_count})"
+        )
 
         try:
             # 步骤 2: 选择模型
@@ -99,7 +107,7 @@ class SummaryProcessor:
                 model = selected_models.get("summary_model", self.config.summary_model)
                 reasoning_effort = selected_models.get(
                     "summary_reasoning_effort",
-                    self.config.summary_reasoning_effort
+                    self.config.summary_reasoning_effort,
                 )
             else:
                 model = self.config.summary_model
@@ -108,38 +116,96 @@ class SummaryProcessor:
             # 步骤 3: 选择 System Prompt
             system_prompt = self._select_system_prompt(speaker_count)
 
-            # 步骤 4: 构建 User Prompt
+            # 步骤 4: 篇幅预算（prompt / max_tokens / 后验校验共用）
+            budget = compute_summary_budget(len(text), self.config.summary_budget)
+
             user_prompt = build_summary_user_prompt(
                 transcript=text,
                 video_title=title,
                 author=author,
                 description=description,
+                budget_target_min=budget.target_min,
+                budget_target_max=budget.target_max,
+                budget_hard_cap=budget.hard_cap,
             )
 
-            # 步骤 5: 调用 LLM
-            response = self.llm_client.call(
+            first_text = self._call_summary_llm(
                 model=model,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 reasoning_effort=reasoning_effort,
-                task_type="summary",  # 标识为总结任务（用于日志追踪和监控）
+                max_tokens=budget.max_tokens,
             )
 
-            summary_text = response.text
-
-            # 步骤 6: 验证结果
-            if not summary_text or len(summary_text) < 50:
+            if not first_text or len(first_text) < 50:
                 logger.warning(
-                    f"Summary too short or empty: {len(summary_text) if summary_text else 0} chars"
+                    f"Summary too short or empty: {len(first_text) if first_text else 0} chars"
                 )
                 return SummaryResult(text=None, status=SummaryStatus.FAILED)
 
-            logger.info(f"Summary generated successfully (length: {len(summary_text)})")
-            return SummaryResult(text=summary_text, status=SummaryStatus.GENERATED)
+            if len(first_text) <= budget.hard_cap:
+                logger.info(f"Summary generated successfully (length: {len(first_text)})")
+                return SummaryResult(text=first_text, status=SummaryStatus.GENERATED)
+
+            retry_suffix = _SUMMARY_BUDGET_RETRY_SUFFIX.format(
+                actual_len=len(first_text),
+                hard_cap=budget.hard_cap,
+            )
+            retry_prompt = f"{user_prompt}\n\n{retry_suffix}"
+            retry_text: Optional[str] = None
+            try:
+                retry_text = self._call_summary_llm(
+                    model=model,
+                    system_prompt=system_prompt,
+                    user_prompt=retry_prompt,
+                    reasoning_effort=reasoning_effort,
+                    max_tokens=budget.max_tokens,
+                )
+            except Exception as retry_exc:
+                logger.warning(
+                    f"Summary compression retry failed, keeping first answer: {retry_exc}"
+                )
+
+            if retry_text and len(retry_text) >= 50 and len(retry_text) <= budget.hard_cap:
+                logger.info(
+                    f"Summary generated after compression retry (length: {len(retry_text)})"
+                )
+                return SummaryResult(text=retry_text, status=SummaryStatus.GENERATED)
+
+            candidates = [first_text]
+            if retry_text and len(retry_text) >= 50:
+                candidates.append(retry_text)
+            final_text = min(candidates, key=len)
+
+            logger.warning(
+                f"summary_over_budget_accepted: first={len(first_text)} "
+                f"retry={len(retry_text) if retry_text else 0} "
+                f"hard_cap={budget.hard_cap} accepted={len(final_text)}"
+            )
+            return SummaryResult(text=final_text, status=SummaryStatus.GENERATED)
 
         except Exception as e:
             logger.error(f"Summary generation failed: {e}", exc_info=True)
             return SummaryResult(text=None, status=SummaryStatus.FAILED)
+
+    def _call_summary_llm(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        reasoning_effort: Optional[str],
+        max_tokens: int,
+    ) -> str:
+        response = self.llm_client.call(
+            model=model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            reasoning_effort=reasoning_effort,
+            task_type="summary",
+            max_tokens=max_tokens,
+        )
+        return response.text
 
     def _select_system_prompt(self, speaker_count: int) -> str:
         """根据说话人数量选择 System Prompt
