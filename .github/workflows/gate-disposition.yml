@@ -1,0 +1,34 @@
+# Business-repo caller for gate-v2-disposition.yml.
+# Copy to .github/workflows/gate-disposition.yml. Replace BOTH the uses
+# @267eff0688c4ea5ad1253fae62e89e509b51322a and with.gate_ref with the same 40-hex of zlxlabs/gate.
+name: gate-disposition
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number: { description: "pull request number", required: true, type: string }
+      primary_run_id: { description: "canonical primary run id", required: true, type: string }
+      primary_run_attempt: { description: "canonical primary run attempt", required: true, type: string }
+      finding_id: { description: "exact current-audit finding id", required: true, type: string }
+      reason: { description: "reason for the false-positive disposition", required: true, type: string }
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  disposition:
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    secrets: inherit
+    uses: zlxlabs/gate/.github/workflows/gate-v2-disposition.yml@267eff0688c4ea5ad1253fae62e89e509b51322a
+    with:
+      pr_number: ${{ inputs.pr_number }}
+      primary_run_id: ${{ inputs.primary_run_id }}
+      primary_run_attempt: ${{ inputs.primary_run_attempt }}
+      finding_id: ${{ inputs.finding_id }}
+      reason: ${{ inputs.reason }}
+      gate_ref: 267eff0688c4ea5ad1253fae62e89e509b51322a
