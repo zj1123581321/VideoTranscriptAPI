@@ -14,7 +14,7 @@
 
 ## 核心特性
 
-- **多平台支持**：YouTube、Bilibili、抖音、小红书、小宇宙播客、Apple Podcast，工厂模式自动匹配下载器
+- **多平台支持**：YouTube、Bilibili、抖音、小红书、微信视频号（经 MediaResolverAPI）、小宇宙播客、Apple Podcast，工厂模式自动匹配下载器
 - **双引擎转录**：CapsWriter-Offline（通用转录）+ FunASR（说话人识别）
 - **智能文本处理**：LLM 自动校对 ASR 错误、专有名词纠错、按说话人采样+置信度降级的说话人推断、内容总结
 - **处理深度可控**：`processing_options` 开关按任务控制是否校对/总结，分层缓存产物只增不减，重复请求自动复用已有层
@@ -28,7 +28,7 @@
 - [funasr_spk_server：funasr server 对应暴露 api，支持音视频转写，分角色，自动合并相同人物的话。](https://github.com/zj1123581321/funasr_spk_server)
 - [CapsWriter-Offline：CapsWriter 的离线版，一个好用的 PC 端的语音输入工具，支持热词、LLM处理。](https://github.com/HaujetZhao/CapsWriter-Offline)
 - [youtube_download_api：YouTube 视频下载服务，作为 yt-dlp 的可选替代后端。](https://github.com/zj1123581321/youtube_download_api)（可选）
-- MediaResolverAPI：短视频 URL → 无水印直链 + 元数据的集中解析服务，可选地接管抖音/小红书解析（可选，见[使用指南](docs/guides/media_resolver.md)）。
+- MediaResolverAPI：短视频/视频号 URL → 无水印直链 + 元数据的集中解析服务，可选地接管抖音/小红书/视频号解析（可选，见[使用指南](docs/guides/media_resolver.md)）。
 - OpenAI 兼容的 API，比如 Deepseek，量大管饱。
 
 ---
@@ -55,7 +55,7 @@ uv sync
 # 配置服务
 cp config/config.example.jsonc config/config.jsonc
 # 编辑 config.jsonc，填写 api.auth_token、tikhub.api_key 等
-# 可选：抖音/小红书改走 MediaResolverAPI 集中解析，设
+# 可选：抖音/小红书/视频号改走 MediaResolverAPI 集中解析，设
 #   downloaders.use_media_resolver=true 并配置 media_resolver 段
 #   （使用指南：docs/guides/media_resolver.md）
 

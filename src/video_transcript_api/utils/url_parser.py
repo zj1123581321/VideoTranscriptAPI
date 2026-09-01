@@ -22,7 +22,7 @@ class ParsedURL:
     解析后的 URL 信息
 
     Attributes:
-        platform: 平台名称 (youtube/bilibili/douyin/xiaohongshu/xiaoyuzhou/apple_podcast/generic)
+        platform: 平台名称 (youtube/bilibili/douyin/xiaohongshu/xiaoyuzhou/apple_podcast/wechat_channels/generic)
         video_id: 视频ID (唯一标识)
         normalized_url: 规范化的URL（长链接格式）
         is_short_url: 是否为短链接
@@ -80,6 +80,9 @@ class URLParser:
         'xiaohongshu': [
             r'xiaohongshu\.com/(?:explore|discovery/item|items)/(\w+)',  # 主域名
             r'xhslink\.com/(\w+)',  # 短链接（需要解析）
+        ],
+        'wechat_channels': [
+            r'weixin\.qq\.com/sph/([A-Za-z0-9_-]+)',  # 微信视频号
         ],
     }
 
@@ -286,6 +289,8 @@ class URLParser:
             return 'apple_podcast'
         elif 'xiaohongshu.com' in url_lower or 'xhslink.com' in url_lower:
             return 'xiaohongshu'
+        elif 'weixin.qq.com' in url_lower:
+            return 'wechat_channels'
 
         return 'generic'
 

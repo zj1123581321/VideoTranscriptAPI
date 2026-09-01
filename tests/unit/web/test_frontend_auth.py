@@ -217,7 +217,7 @@ def test_transcript_missing_shared_scripts_fails_closed_and_uses_safe_status_upd
 
 def test_service_worker_versions_and_precaches_shared_auth_scripts():
     source = SW_JS.read_text(encoding="utf-8")
-    assert "const CACHE_NAME = 'vta-static-v4';" in source
+    assert "const CACHE_NAME = 'vta-static-v5';" in source
     assert "'/static/js/auth-storage.js'" in source
     assert "'/static/js/transcript-protected-action.js'" in source
     assert "self.addEventListener('install'" in source

@@ -3,6 +3,7 @@
 Console output English only.
 """
 
+from unittest.mock import Mock
 import pytest
 
 from video_transcript_api.downloaders.base import BaseDownloader
@@ -26,8 +27,10 @@ class FakeClient:
         return item
 
 
-def make_downloader(responses):
+def make_downloader(responses, base_url="http://resolver.local:8000", api_key="secret-key"):
     dl = MediaResolverDownloader()
+    dl._resolver_netloc = "resolver.local:8000"
+    dl._resolver_api_key = api_key
     dl.client = FakeClient(responses)
     return dl
 
@@ -43,6 +46,17 @@ DOUYIN_DATA = {
     "provider": "tikhub",
 }
 
+WECHAT_DATA = {
+    "platform": "wechat_channels",
+    "video_id": "AOzokRxWHz",
+    "title": "视频号测试",
+    "author_name": "bob",
+    "description": "desc",
+    "duration": 45.0,
+    "video_url": "http://resolver.local:8000/api/stream/wechat_channels/AOzokRxWHz",
+    "provider": "tikhub",
+}
+
 
 # --------------------------------------------------------------------------- #
 # routing
@@ -54,6 +68,7 @@ class TestCanHandle:
         "https://v.douyin.com/abc/",
         "https://www.xiaohongshu.com/explore/abc",
         "https://xhslink.com/abc",
+        "https://weixin.qq.com/sph/AOzokRxWHz",
     ])
     def test_supported(self, url):
         assert make_downloader([DOUYIN_DATA]).can_handle(url) is True
@@ -217,3 +232,100 @@ class TestDownloadReResolve:
             dl.download_file("https://cdn.example.com/unknown.mp4", "x.mp4")
         # no resolve happened (url not in reverse map)
         assert len(dl.client.calls) == 0
+
+
+# --------------------------------------------------------------------------- #
+# extract_video_id
+# --------------------------------------------------------------------------- #
+
+class TestExtractVideoId:
+    def test_extract_video_id_wechat_channels(self):
+        dl = make_downloader([])
+        assert dl.extract_video_id("https://weixin.qq.com/sph/AOzokRxWHz") == "AOzokRxWHz"
+
+
+# --------------------------------------------------------------------------- #
+# conditional download headers (X-API-Key only for resolver domain)
+# --------------------------------------------------------------------------- #
+
+class TestConditionalDownloadHeaders:
+    def test_resolver_domain_includes_api_key_header(self, monkeypatch):
+        monkeypatch.setattr(BaseDownloader, "_validate_media_file", lambda self, path: True)
+        dl = make_downloader([WECHAT_DATA], api_key="my-secret-key")
+        di = dl.get_download_info("https://weixin.qq.com/sph/AOzokRxWHz")
+
+        captured_headers = []
+
+        def fake_get(url, headers=None, stream=True, timeout=60):
+            captured_headers.append((url, headers))
+            mock_resp = Mock()
+            mock_resp.raise_for_status.return_value = None
+            mock_resp.headers = {"Content-Length": "100"}
+            mock_resp.iter_content.return_value = [b"fake_mp4_bytes"]
+            return mock_resp
+
+        import requests
+        monkeypatch.setattr(requests, "get", fake_get)
+        out = dl.download_file(di.download_url, di.filename)
+        assert out is not None
+        assert len(captured_headers) == 1
+        url, headers = captured_headers[0]
+        assert url == "http://resolver.local:8000/api/stream/wechat_channels/AOzokRxWHz"
+        assert headers == {"X-API-Key": "my-secret-key"}
+
+    def test_cdn_domain_does_not_include_api_key_header(self, monkeypatch):
+        monkeypatch.setattr(BaseDownloader, "_validate_media_file", lambda self, path: True)
+        dl = make_downloader([DOUYIN_DATA], api_key="my-secret-key")
+        di = dl.get_download_info("https://www.douyin.com/video/7123")
+
+        captured_headers = []
+
+        def fake_get(url, headers=None, stream=True, timeout=60):
+            captured_headers.append((url, headers))
+            mock_resp = Mock()
+            mock_resp.raise_for_status.return_value = None
+            mock_resp.headers = {"Content-Length": "100"}
+            mock_resp.iter_content.return_value = [b"fake_mp4_bytes"]
+            return mock_resp
+
+        import requests
+        monkeypatch.setattr(requests, "get", fake_get)
+        out = dl.download_file(di.download_url, di.filename)
+        assert out is not None
+        assert len(captured_headers) == 1
+        url, headers = captured_headers[0]
+        assert url == "https://cdn.example.com/v/7123.mp4"
+        assert headers is None or "X-API-Key" not in headers
+
+    def test_reresolve_applies_correct_headers_on_retry(self, monkeypatch):
+        monkeypatch.setattr(BaseDownloader, "_validate_media_file", lambda self, path: True)
+        fresh_stream = dict(
+            WECHAT_DATA,
+            video_url="http://resolver.local:8000/api/stream/wechat_channels/AOzokRxWHz?retry=1",
+        )
+        dl = make_downloader([WECHAT_DATA, fresh_stream], api_key="my-secret-key")
+        di = dl.get_download_info("https://weixin.qq.com/sph/AOzokRxWHz")
+
+        captured_headers = []
+        attempt = {"count": 0}
+
+        def fake_get(url, headers=None, stream=True, timeout=60):
+            attempt["count"] += 1
+            captured_headers.append((url, headers))
+            if attempt["count"] == 1:
+                import requests
+                raise requests.exceptions.HTTPError("403 Forbidden")
+            mock_resp = Mock()
+            mock_resp.raise_for_status.return_value = None
+            mock_resp.headers = {"Content-Length": "100"}
+            mock_resp.iter_content.return_value = [b"fake_mp4_bytes"]
+            return mock_resp
+
+        import requests
+        monkeypatch.setattr(requests, "get", fake_get)
+        out = dl.download_file(di.download_url, di.filename, max_retries=1)
+        assert out is not None
+        assert len(captured_headers) >= 2
+        fresh_call_headers = [h for u, h in captured_headers if "retry=1" in u]
+        assert fresh_call_headers
+        assert fresh_call_headers[0] == {"X-API-Key": "my-secret-key"}

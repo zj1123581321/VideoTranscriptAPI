@@ -1,7 +1,7 @@
 {
   "name": "VideoTranscriptAPI 视频转录",
   "short_name": "视频转录",
-  "description": "提交视频转录任务，支持 YouTube、Bilibili、抖音、小红书、小宇宙等多平台",
+  "description": "提交视频转录任务，支持 YouTube、Bilibili、抖音、小红书、微信视频号、小宇宙等多平台",
   "id": "/add_task_by_web",
   "start_url": "/add_task_by_web",
   "scope": "/",
