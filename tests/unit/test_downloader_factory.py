@@ -170,6 +170,7 @@ class TestMediaResolverRouting:
         "https://v.douyin.com/abc/",
         "https://www.xiaohongshu.com/explore/abc",
         "https://xhslink.com/abc",
+        "https://weixin.qq.com/sph/AOzokRxWHz",
     ])
     def test_flag_on_routes_to_resolver(self, resolver_on, url):
         downloader = create_downloader(url)
@@ -180,6 +181,7 @@ class TestMediaResolverRouting:
     @pytest.mark.parametrize("url,expected", [
         ("https://www.douyin.com/video/7123", DouyinDownloader),
         ("https://www.xiaohongshu.com/explore/abc", XiaohongshuDownloader),
+        ("https://weixin.qq.com/sph/AOzokRxWHz", GenericDownloader),
     ])
     def test_flag_off_routes_to_legacy(self, resolver_off, url, expected):
         downloader = create_downloader(url)

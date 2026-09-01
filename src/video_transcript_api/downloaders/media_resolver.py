@@ -1,10 +1,11 @@
-"""MediaResolverDownloader：把抖音/小红书解析外包给 MediaResolverAPI。
+"""MediaResolverDownloader：把抖音/小红书/视频号解析外包给 MediaResolverAPI。
 
-v1 收窄范围：只接管抖音 + 小红书（不抽基类、不加平台）。本下载器：
+接管平台：抖音 + 小红书 + 微信视频号。本下载器：
 - 用**归一化 url** 作缓存 key（绕开"先有 video_id 才能查"的鸡蛋悖论），
   一次 resolve 同时喂 `_fetch_metadata` 与 `_fetch_download_info`（FORK1-A）。
-- resolver 只返回 video_url 视频直链，下载仍走基类 `download_file()`。
+- resolver 返回 video_url 视频直链（视频号为流式代理端点），下载仍走基类 `download_file()`。
 - 对 resolver 返回的直链下载前做 SSRF 校验（P0-2）。
+- 下载 resolver 流式端点时携带 X-API-Key 头，第三方 CDN 直链不携带该头。
 - 下载遇 403/失效 → force_refresh 重解析再下一次（P0-3 / FORK4-A），仍失败抛错。
 - 无字幕：`get_subtitle` 返回 None。
 
@@ -25,24 +26,29 @@ from ..utils.url_validator import validate_url_safe, URLValidationError
 
 logger = setup_logger("media_resolver_downloader")
 
-# v1 接管的平台域名（抖音 + 小红书）
+# 接管的平台域名（抖音 + 小红书 + 微信视频号）
 _SUPPORTED_DOMAINS = (
     "douyin.com",
     "v.douyin.com",
     "xiaohongshu.com",
     "xhslink.com",
+    "weixin.qq.com",
 )
 
 
 class MediaResolverDownloader(BaseDownloader):
-    """通过 MediaResolverAPI 解析抖音/小红书的下载器。"""
+    """通过 MediaResolverAPI 解析抖音/小红书/微信视频号的下载器。"""
 
     def __init__(self):
         super().__init__()
         mr = self.config.get("media_resolver", {}) or {}
+        base_url = mr.get("base_url", "")
+        api_key = mr.get("api_key", "")
+        self._resolver_netloc = (urlparse(base_url).netloc or "").lower()
+        self._resolver_api_key = api_key
         self.client = MediaResolverClient(
-            base_url=mr.get("base_url", ""),
-            api_key=mr.get("api_key", ""),
+            base_url=base_url,
+            api_key=api_key,
             timeout=mr.get("timeout", 30),
             max_retries=mr.get("max_retries", 2),
         )
@@ -55,7 +61,7 @@ class MediaResolverDownloader(BaseDownloader):
     # 路由
     # ------------------------------------------------------------------ #
     def can_handle(self, url: str) -> bool:
-        """v1 仅接管抖音/小红书。"""
+        """接管抖音/小红书/微信视频号。"""
         if not url:
             return False
         return any(domain in url for domain in _SUPPORTED_DOMAINS)
@@ -71,9 +77,9 @@ class MediaResolverDownloader(BaseDownloader):
             return str(data["video_id"])
         import re
 
-        m = re.search(r"(?:video|note|explore|item)/([A-Za-z0-9]+)", url) or re.search(
-            r"/(\d{6,})", url
-        )
+        m = re.search(
+            r"(?:video|note|explore|item|sph)/([A-Za-z0-9_-]+)", url
+        ) or re.search(r"/(\d{6,})", url)
         return m.group(1) if m else self._normalize_url(url)
 
     # ------------------------------------------------------------------ #
@@ -207,6 +213,21 @@ class MediaResolverDownloader(BaseDownloader):
     # ------------------------------------------------------------------ #
     # 下载：403/失效 → force_refresh 重解析再下一次（P0-3 / FORK4-A）
     # ------------------------------------------------------------------ #
+    def _prepare_download_headers(self, download_url: str) -> None:
+        """根据下载 URL netloc 条件设置 download_headers。
+
+        当下载 URL 的 netloc 与 resolver 的 base_url netloc 相等且 api_key 非空时，
+        携带 X-API-Key 头（如视频号流式代理端点）；否则置空（避免向第三方 CDN 泄露密钥）。
+        """
+        try:
+            target_netloc = (urlparse(download_url).netloc or "").lower()
+            if self._resolver_netloc and target_netloc == self._resolver_netloc and self._resolver_api_key:
+                self.download_headers = {"X-API-Key": self._resolver_api_key}
+                return
+        except Exception:
+            pass
+        self.download_headers = {}
+
     def download_file(self, url, filename, max_retries: int = 3):
         """覆写下载：常规下载失败后，对 resolver 直链做一次 force_refresh 重解析重下。
 
@@ -214,6 +235,7 @@ class MediaResolverDownloader(BaseDownloader):
         反查该 video_url 对应的页面 url，force_refresh 重解析得到新直链再下一次；
         仍失败则抛 DownloadFailedError（爆炸半径仅限本类）。
         """
+        self._prepare_download_headers(url)
         local_file = super().download_file(url, filename, max_retries=max_retries)
         if local_file:
             return local_file
@@ -244,6 +266,7 @@ class MediaResolverDownloader(BaseDownloader):
         except URLValidationError as e:
             raise DownloadFailedError(f"重解析直链不安全: {e}")
 
+        self._prepare_download_headers(fresh_url)
         local_file = super().download_file(fresh_url, filename, max_retries=max_retries)
         if local_file:
             return local_file
