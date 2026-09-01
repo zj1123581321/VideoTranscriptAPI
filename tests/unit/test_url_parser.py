@@ -132,6 +132,16 @@ class TestURLParserBasic:
         assert result.platform == "apple_podcast"
         assert result.video_id == "1434243584"
 
+    def test_wechat_channels_url(self):
+        """Test WeChat Channels URL"""
+        parser = URLParser()
+        result = parser.parse("https://weixin.qq.com/sph/AOzokRxWHz")
+
+        assert result.platform == "wechat_channels"
+        assert result.video_id == "AOzokRxWHz"
+        assert not result.is_short_url
+        assert result.original_url == "https://weixin.qq.com/sph/AOzokRxWHz"
+
     def test_generic_url(self):
         """Test generic URL (no platform matched)"""
         parser = URLParser()
@@ -228,6 +238,9 @@ class TestURLParserConvenienceFunctions:
 
         platform = extract_platform("https://www.bilibili.com/video/BV1test")
         assert platform == "bilibili"
+
+        platform = extract_platform("https://weixin.qq.com/sph/AOzokRxWHz")
+        assert platform == "wechat_channels"
 
         platform = extract_platform("https://example.com/video/123")
         assert platform == "generic"
