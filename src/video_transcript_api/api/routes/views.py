@@ -608,6 +608,7 @@ def generate_download_filename(title: str, platform: str, content_type: str) -> 
         "xiaohongshu": "小红书",
         "xiaoyuzhou": "小宇宙",
         "apple_podcast": "Apple播客",
+        "wechat_channels": "视频号",
         "generic": "自定义",
     }
 

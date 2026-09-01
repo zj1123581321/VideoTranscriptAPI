@@ -358,6 +358,8 @@ async def transcribe_video(
                             title = "小红书内容转录"
                         elif "douyin.com" in display_url:
                             title = "抖音视频转录"
+                        elif "weixin.qq.com" in display_url:
+                            title = "视频号视频转录"
 
                     notification_router = get_notification_router()
                     notification_router.send_view_link(
