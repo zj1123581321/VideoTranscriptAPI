@@ -276,7 +276,8 @@ class URLExtractor {
         const videoDomains = [
             'youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv',
             'xiaohongshu.com', 'xhslink.com', 'douyin.com', 'v.douyin.com',
-            'xiaoyuzhoufm.com', 'tiktok.com', 'vm.tiktok.com'
+            'xiaoyuzhoufm.com', 'tiktok.com', 'vm.tiktok.com',
+            'weixin.qq.com'
         ];
 
         if (videoDomains.some(domain => url.includes(domain))) {
@@ -495,6 +496,8 @@ class TaskHistoryManager {
                 return '抖音视频';
             } else if (hostname.includes('xiaoyuzhoufm.com')) {
                 return '小宇宙播客';
+            } else if (hostname.includes('weixin.qq.com')) {
+                return '视频号视频';
             } else {
                 return '视频内容';
             }
