@@ -1,15 +1,16 @@
-# MediaResolverAPI 集成指南（抖音 / 小红书解析）
+# MediaResolverAPI 集成指南（抖音 / 小红书 / 微信视频号解析）
 
-> 适用版本：v1（接管 **抖音 + 小红书**）。其它平台（B 站 / YouTube / 小宇宙）不受影响，仍走原生下载器。
+> 适用版本：v1（接管 **抖音 + 小红书 + 微信视频号**）。其它平台（B 站 / YouTube / 小宇宙）不受影响，仍走原生下载器。
 
 ## 这是什么
 
 [MediaResolverAPI](https://github.com/) 是一个独立的「短视频 URL → 无水印直链 + 元数据」解析服务，
-内置 TikHub 多端点降级 + Cobalt 兜底。本项目可选地把**抖音 / 小红书的解析**外包给它，从而：
+内置 TikHub 多端点降级 + Cobalt 兜底。本项目可选地把**抖音 / 小红书 / 微信视频号的解析**外包给它，从而：
 
 - 把易碎的 TikHub 解析逻辑集中到专用服务，本仓库退化为「下载 + 转录 + LLM」；
 - 抖音改为下载**完整 mp4 再由 CapsWriter 提取音轨**（而非旧版直接抓 `music.play_url` 的 mp3）——
-  对套用热门 BGM 模板的口播视频，提取的是**视频自带人声**而非背景乐，转录更准。
+  对套用热门 BGM 模板的口播视频，提取的是**视频自带人声**而非背景乐，转录更准；
+- 支持微信视频号（`https://weixin.qq.com/sph/<sph_code>`）链接转录，通过 MediaResolverAPI 的流式代理端点边解密边拉取。
 
 > ⚠️ **行为变更**：开启后抖音下载体积由 mp3 增大为 mp4。长视频可能撞 `storage.max_download_size_mb`
 > 上限，或 CapsWriter 一次性入内存的限制。短视频无影响。
@@ -19,16 +20,22 @@
 | 你的情况 | 建议 |
 |---------|------|
 | 抖音/小红书解析经常失败、想集中维护解析逻辑 | ✅ 启用 |
+| 需要转录微信视频号链接 | ✅ 启用（视频号必须依赖 MediaResolverAPI） |
 | 已部署 MediaResolverAPI 服务并有 API Key | ✅ 启用 |
 | 只转录 B 站/YouTube/小宇宙 | 无需启用（默认 off，不影响） |
-| 没有 MediaResolverAPI 服务 | 保持 off，继续用内置 TikHub 直连 |
+| 没有 MediaResolverAPI 服务 | 保持 off，继续用内置 TikHub 直连（视频号不可用） |
 
 默认 **关闭**。开关打开前请确认 MediaResolverAPI 服务可达。
 
 ## 前置条件
 
 1. 一个可访问的 MediaResolverAPI 服务（自建或他人提供），拿到 `base_url` 与 `X-API-Key`。
-2. 服务健康检查：
+2. 微信视频号转录前提：
+   - 必须设置 `downloaders.use_media_resolver: true`（无原生下载器兜底）；
+   - 若配置了 `security.download_url_allowlist` 安全下载白名单，MediaResolverAPI 服务域名/IP 须在允许列表中；
+   - 视频号 `video_url` 指向 resolver 自己的流式代理端点（`/api/stream/wechat_channels/{sph_code}`），下载时下载器会自动携带 `X-API-Key` 鉴权头（第三方 CDN 直链则不会携带）；
+   - resolver 流式端点受上游并发限制，若单进程并发超限会返回 429（Too Many Requests）。
+3. 服务健康检查：
 
    ```bash
    curl http://<your-host>:<port>/health
@@ -58,21 +65,21 @@
 
 > **Docker 注意**：容器内访问宿主机服务用 `host.docker.internal`，不要写 `localhost` / `127.0.0.1`。
 
-配置改完无需改代码——`factory` 会在 `use_media_resolver=true` 时自动把抖音/小红书路由到
+配置改完无需改代码——`factory` 会在 `use_media_resolver=true` 时自动把抖音/小红书/视频号路由到
 `MediaResolverDownloader`，并跳过旧的 `DouyinDownloader` / `XiaohongshuDownloader`。
 
 ## 使用
 
-开关打开后，正常提交抖音/小红书链接即可，无需任何额外参数：
+开关打开后，正常提交抖音/小红书/视频号链接即可，无需任何额外参数：
 
 ```bash
 curl -X POST http://localhost:8000/api/transcribe \
   -H "Authorization: Bearer <your-auth-token>" \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://v.douyin.com/xxxxxxx/"}'
+  -d '{"url": "https://weixin.qq.com/sph/AOzokRxWHz"}'
 ```
 
-支持的链接形态：`douyin.com` / `v.douyin.com` 短链 / `xiaohongshu.com` / `xhslink.com` 短链。
+支持的链接形态：`douyin.com` / `v.douyin.com` 短链 / `xiaohongshu.com` / `xhslink.com` 短链 / `weixin.qq.com/sph/<sph_code>` 视频号链接。
 
 ## 错误与提示对照
 
@@ -86,6 +93,7 @@ curl -X POST http://localhost:8000/api/transcribe \
 | 图文/已删除/私密等无视频内容 | 该内容无可转录视频 | 否 |
 | 全部解析源失败 | 解析失败，稍后再试 | 否 |
 | 服务端错误（HTTP 5xx） | 解析服务异常 | 是 |
+| 流式端点并发超限（HTTP 429） | 解析服务繁忙，稍后再试 | 是 |
 
 > 注：当前 MediaResolverAPI 的 `error` 仅返回文案、无结构化 `error.code`，因此「图文/删除」类终态
 > 可能被笼统归为「解析失败，稍后再试」。若你维护该服务，建议为终态返回 `error.code` 以便精确区分。
@@ -98,7 +106,7 @@ MediaResolverAPI 返回的视频直链在下载前会经过 **SSRF 校验**（`u
 ## 回退
 
 若启用后遇到问题，把 `downloaders.use_media_resolver` 改回 `false` 即可立即回到内置 TikHub 直连下载器，
-无需回滚代码（旧下载器在迁移期保留）。
+无需回滚代码（旧下载器在迁移期保留；视频号链接在未启用时将回退至通用下载器）。
 
 ## 故障排查
 
@@ -106,6 +114,8 @@ MediaResolverAPI 返回的视频直链在下载前会经过 **SSRF 校验**（`u
 |------|------|
 | 提示「鉴权失败」 | 检查 `media_resolver.api_key`；用 `curl -H "X-API-Key: <key>"` 直接打 `/api/resolve` 验证 |
 | 提示「解析服务暂不可用」 | 检查 `base_url` 可达性、`/health`、Docker 内是否误用 localhost |
+| 视频号下载失败（401） | 确认下载请求发往 resolver 域名并携带了 `X-API-Key` |
+| 视频号下载失败（429） | MediaResolverAPI 流式并发超限，稍后重试或调整 resolver 服务并发能力 |
 | 抖音下载撞大小上限 | 调高 `storage.max_download_size_mb`，或对长视频暂时关闭开关 |
 | 想确认走了哪个下载器 | 看日志 `为URL创建下载器: ..., 类型: MediaResolverDownloader` |
 
@@ -113,3 +123,4 @@ MediaResolverAPI 返回的视频直链在下载前会经过 **SSRF 校验**（`u
 
 - 设计与实现决策记录：[docs/designs/media-resolver-integration.md](../designs/media-resolver-integration.md)
 - 后续 v2 规划（多平台/观测/CDN 兜底）：见仓库 `TODOS.md`
+
