@@ -4,6 +4,9 @@ Covers HTTP/response -> exception mapping per the Error & Rescue Registry.
 All console output is English only.
 """
 
+import base64
+import logging
+
 import pytest
 import requests
 
@@ -216,3 +219,73 @@ class TestMalformed:
         patch_post(monkeypatch, FakeResponse(200, ["a", "b"]))
         with pytest.raises(ResolverResponseError):
             make_client().resolve("http://page")
+
+
+# --------------------------------------------------------------------------- #
+# GET /direct (wechat channels plaintext head + CDN URL)
+# --------------------------------------------------------------------------- #
+
+
+_SECRET_CDN = "https://finder.video.qq.com/secret-token-ABCDEF123456.mp4"
+_SPH = "AHaM8SrlXX"
+_DIRECT_HEAD = b"\x00\x00\x00\x20" + b"ftyp" + b"\x00" * 24
+
+
+def _direct_payload(**overrides):
+    body = {
+        "sph_code": _SPH,
+        "cdn_url": _SECRET_CDN,
+        "content_length": 1000,
+        "encrypted_head_bytes": len(_DIRECT_HEAD),
+        "head_b64": base64.b64encode(_DIRECT_HEAD).decode("ascii"),
+    }
+    body.update(overrides)
+    return body
+
+
+def patch_get(monkeypatch, *responses_or_exc):
+    seq = list(responses_or_exc)
+    calls = {"n": 0, "urls": [], "headers": []}
+
+    def fake_get(url, headers=None, timeout=None, **kwargs):
+        calls["urls"].append(url)
+        calls["headers"].append(headers)
+        idx = min(calls["n"], len(seq) - 1)
+        calls["n"] += 1
+        item = seq[idx]
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    return calls
+
+
+class TestFetchWechatDirect:
+    def test_returns_flat_json_and_omits_cdn_from_logs(self, monkeypatch, caplog):
+        caplog.set_level(logging.DEBUG)
+        calls = patch_get(monkeypatch, FakeResponse(200, _direct_payload()))
+        out = make_client().fetch_wechat_direct(_SPH)
+        assert out["cdn_url"] == _SECRET_CDN
+        assert calls["urls"][0].endswith(f"/api/stream/wechat_channels/{_SPH}/direct")
+        assert calls["headers"][0]["X-API-Key"] == "k"
+        joined = " ".join(r.getMessage() for r in caplog.records)
+        assert _SECRET_CDN not in joined
+
+    def test_401_auth(self, monkeypatch):
+        patch_get(monkeypatch, FakeResponse(401, text="unauthorized"))
+        with pytest.raises(ResolverAuthError) as ei:
+            make_client().fetch_wechat_direct(_SPH)
+        assert _SECRET_CDN not in str(ei.value)
+
+    def test_502_retries_then_server_error(self, monkeypatch):
+        calls = patch_get(monkeypatch, FakeResponse(502, text="up"), FakeResponse(502, text="up"))
+        with pytest.raises(ResolverServerError):
+            make_client(max_retries=2).fetch_wechat_direct(_SPH)
+        assert calls["n"] == 2
+
+    def test_head_b64_length_mismatch(self, monkeypatch):
+        patch_get(monkeypatch, FakeResponse(200, _direct_payload(encrypted_head_bytes=8)))
+        with pytest.raises(ResolverResponseError) as ei:
+            make_client().fetch_wechat_direct(_SPH)
+        assert _SECRET_CDN not in str(ei.value)

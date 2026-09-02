@@ -15,6 +15,8 @@
 异常映射见 Error & Rescue Registry（设计文档）。
 """
 
+import base64
+import re
 import time
 from typing import Optional
 
@@ -51,6 +53,9 @@ _RESOLVE_FAIL_CODES = {
     "RESOLVE_FAILED",
     "PROVIDER_ERROR",
 }
+# 视频号 sph_code：与 resolver 路径约束一致（1-64 位字母数字）
+_WECHAT_SPH_CODE_RE = re.compile(r"^[A-Za-z0-9]{1,64}$")
+
 # 文案兜底关键词（服务只回 message、无 code 时使用）
 _NON_VIDEO_KEYWORDS = (
     "图文", "图片", "无视频", "已删除", "删除", "私密", "不存在", "下架",
@@ -200,6 +205,98 @@ class MediaResolverClient:
         raise NetworkError(
             f"解析服务多次失败: {last_network_error}"
         )
+
+    def fetch_wechat_direct(self, sph_code: str) -> dict:
+        """GET /direct，返回扁平 JSON（不解码文件头；日志/异常不含 CDN 直链）。"""
+        if not isinstance(sph_code, str) or not _WECHAT_SPH_CODE_RE.fullmatch(sph_code):
+            raise InvalidURLError(f"illegal wechat sph_code: {sph_code!r}")
+
+        endpoint = f"{self.base_url}/api/stream/wechat_channels/{sph_code}/direct"
+        headers = {"X-API-Key": self.api_key, "Accept": "application/json"}
+        last_network_error: Optional[Exception] = None
+
+        for attempt in range(1, self.max_retries + 1):
+            logger.info(f"wechat direct request attempt={attempt} sph_code={sph_code}")
+            try:
+                response = requests.get(endpoint, headers=headers, timeout=self.timeout)
+            except requests.RequestException as e:
+                last_network_error = e
+                logger.warning(
+                    f"wechat direct unreachable attempt={attempt} sph_code={sph_code} err={type(e).__name__}"
+                )
+                if attempt < self.max_retries:
+                    time.sleep(self.retry_delay * attempt)
+                    continue
+                raise NetworkError(f"wechat direct service unavailable sph_code={sph_code}")
+
+            status = response.status_code
+            logger.info(f"wechat direct response status={status} sph_code={sph_code}")
+            if status == 401:
+                raise ResolverAuthError(
+                    f"wechat direct auth failed(401) sph_code={sph_code}: {self._safe_text(response)}"
+                )
+            if status == 400:
+                raise InvalidURLError(
+                    f"wechat direct illegal sph_code(400) sph_code={sph_code}: {self._safe_text(response)}"
+                )
+            if status >= 500:
+                logger.warning(f"wechat direct server error {status} attempt={attempt} sph_code={sph_code}")
+                if attempt < self.max_retries:
+                    time.sleep(self.retry_delay * attempt)
+                    continue
+                raise ResolverServerError(
+                    f"wechat direct server error({status}) sph_code={sph_code}: {self._safe_text(response)}"
+                )
+            if status != 200:
+                raise ResolverResponseError(
+                    f"wechat direct unexpected status({status}) sph_code={sph_code}: {self._safe_text(response)}"
+                )
+            try:
+                body = response.json()
+            except ValueError as e:
+                raise ResolverResponseError(
+                    f"wechat direct response is not JSON sph_code={sph_code}: {e}"
+                )
+            return self._validate_wechat_direct_body(sph_code, body)
+
+        raise NetworkError(
+            f"wechat direct failed after retries sph_code={sph_code}: "
+            f"{type(last_network_error).__name__ if last_network_error else 'unknown'}"
+        )
+
+    def _validate_wechat_direct_body(self, sph_code: str, body: dict) -> dict:
+        """校验 /direct 扁平 JSON；异常消息不含 CDN 直链。"""
+        if not isinstance(body, dict) or body.get("sph_code") != sph_code:
+            raise ResolverResponseError(f"wechat direct invalid body sph_code={sph_code}")
+        content_length = self._require_positive_int(body.get("content_length"), "content_length", sph_code)
+        encrypted_head_bytes = self._require_positive_int(
+            body.get("encrypted_head_bytes"), "encrypted_head_bytes", sph_code
+        )
+        head_b64 = body.get("head_b64")
+        if not isinstance(head_b64, str) or not head_b64:
+            raise ResolverResponseError(f"wechat direct missing head_b64 sph_code={sph_code}")
+        try:
+            head = base64.b64decode(head_b64, validate=True)
+        except ValueError as e:
+            raise ResolverResponseError(
+                f"wechat direct head_b64 is not standard base64 sph_code={sph_code}"
+            ) from e
+        if len(head) != encrypted_head_bytes:
+            raise ResolverResponseError(
+                f"wechat direct head_b64 length mismatch sph_code={sph_code} "
+                f"decoded={len(head)} encrypted_head_bytes={encrypted_head_bytes}"
+            )
+        logger.info(
+            f"wechat direct fetch ok sph_code={sph_code} "
+            f"content_length={content_length} encrypted_head_bytes={encrypted_head_bytes}"
+        )
+        return body
+
+    @staticmethod
+    def _require_positive_int(value, field: str, sph_code: str) -> int:
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ResolverResponseError(f"wechat direct invalid {field} sph_code={sph_code}")
+        return value
 
     def _classify_failure(self, body: dict) -> None:
         """根据 error.code / 文案把 success=false 映射为终态异常（必抛）。"""

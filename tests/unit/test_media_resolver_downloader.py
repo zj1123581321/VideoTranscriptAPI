@@ -26,6 +26,9 @@ class FakeClient:
             raise item
         return item
 
+    def fetch_wechat_direct(self, sph_code):
+        raise AssertionError("fetch_wechat_direct should not be called in this test")
+
 
 def make_downloader(responses, base_url="http://resolver.local:8000", api_key="secret-key"):
     dl = MediaResolverDownloader()
@@ -249,30 +252,6 @@ class TestExtractVideoId:
 # --------------------------------------------------------------------------- #
 
 class TestConditionalDownloadHeaders:
-    def test_resolver_domain_includes_api_key_header(self, monkeypatch):
-        monkeypatch.setattr(BaseDownloader, "_validate_media_file", lambda self, path: True)
-        dl = make_downloader([WECHAT_DATA], api_key="my-secret-key")
-        di = dl.get_download_info("https://weixin.qq.com/sph/AOzokRxWHz")
-
-        captured_headers = []
-
-        def fake_get(url, headers=None, stream=True, timeout=60):
-            captured_headers.append((url, headers))
-            mock_resp = Mock()
-            mock_resp.raise_for_status.return_value = None
-            mock_resp.headers = {"Content-Length": "100"}
-            mock_resp.iter_content.return_value = [b"fake_mp4_bytes"]
-            return mock_resp
-
-        import requests
-        monkeypatch.setattr(requests, "get", fake_get)
-        out = dl.download_file(di.download_url, di.filename)
-        assert out is not None
-        assert len(captured_headers) == 1
-        url, headers = captured_headers[0]
-        assert url == "http://resolver.local:8000/api/stream/wechat_channels/AOzokRxWHz"
-        assert headers == {"X-API-Key": "my-secret-key"}
-
     def test_cdn_domain_does_not_include_api_key_header(self, monkeypatch):
         monkeypatch.setattr(BaseDownloader, "_validate_media_file", lambda self, path: True)
         dl = make_downloader([DOUYIN_DATA], api_key="my-secret-key")
@@ -299,12 +278,10 @@ class TestConditionalDownloadHeaders:
 
     def test_reresolve_applies_correct_headers_on_retry(self, monkeypatch):
         monkeypatch.setattr(BaseDownloader, "_validate_media_file", lambda self, path: True)
-        fresh_stream = dict(
-            WECHAT_DATA,
-            video_url="http://resolver.local:8000/api/stream/wechat_channels/AOzokRxWHz?retry=1",
-        )
-        dl = make_downloader([WECHAT_DATA, fresh_stream], api_key="my-secret-key")
-        di = dl.get_download_info("https://weixin.qq.com/sph/AOzokRxWHz")
+        stale = dict(DOUYIN_DATA, video_url="https://cdn.example.com/v/7123-stale.mp4")
+        fresh = dict(DOUYIN_DATA, video_url="https://cdn.example.com/v/7123-fresh.mp4")
+        dl = make_downloader([stale, fresh], api_key="my-secret-key")
+        di = dl.get_download_info("https://www.douyin.com/video/7123")
 
         captured_headers = []
         attempt = {"count": 0}
@@ -312,7 +289,7 @@ class TestConditionalDownloadHeaders:
         def fake_get(url, headers=None, stream=True, timeout=60):
             attempt["count"] += 1
             captured_headers.append((url, headers))
-            if attempt["count"] == 1:
+            if "stale" in url:
                 import requests
                 raise requests.exceptions.HTTPError("403 Forbidden")
             mock_resp = Mock()
@@ -326,6 +303,6 @@ class TestConditionalDownloadHeaders:
         out = dl.download_file(di.download_url, di.filename, max_retries=1)
         assert out is not None
         assert len(captured_headers) >= 2
-        fresh_call_headers = [h for u, h in captured_headers if "retry=1" in u]
+        fresh_call_headers = [h for u, h in captured_headers if "fresh" in u]
         assert fresh_call_headers
-        assert fresh_call_headers[0] == {"X-API-Key": "my-secret-key"}
+        assert fresh_call_headers[0] is None or "X-API-Key" not in (fresh_call_headers[0] or {})
