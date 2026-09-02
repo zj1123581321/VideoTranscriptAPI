@@ -315,30 +315,22 @@ class MediaResolverDownloader(BaseDownloader):
         try:
             head = base64.b64decode(head_b64, validate=True)
         except ValueError as e:
-            raise ResolverResponseError(
-                f"wechat direct head decode failed sph_code={sph_code}"
-            ) from e
+            raise ResolverResponseError(f"wechat direct head decode failed sph_code={sph_code}") from e
         if len(head) != payload.get("encrypted_head_bytes"):
-            raise ResolverResponseError(
-                f"wechat direct head size mismatch sph_code={sph_code} decoded={len(head)}"
-            )
+            raise ResolverResponseError(f"wechat direct head size mismatch sph_code={sph_code} decoded={len(head)}")
         if len(head) < 8 or head[4:8] != _MP4_FTYP_MAGIC:
-            raise DownloadFailedError(
-                f"wechat direct head lacks ftyp magic sph_code={sph_code} head_bytes={len(head)}"
-            )
+            raise DownloadFailedError(f"wechat direct head lacks ftyp magic sph_code={sph_code} head_bytes={len(head)}")
         return head
 
     @staticmethod
-    def _content_range_start(header: Optional[str]) -> Optional[int]:
-        if not header or not isinstance(header, str):
+    def _parse_content_range(header: Optional[str]):
+        if not isinstance(header, str):
             return None
-        parts = header.strip().split()
-        if len(parts) < 2 or parts[0].lower() != "bytes" or parts[1].startswith("*"):
+        m = re.fullmatch(r"(?i)bytes\s+(\d+)-(\d+)/(\d+)", header.strip())
+        if not m:
             return None
-        try:
-            return int(parts[1].split("-", 1)[0])
-        except ValueError:
-            return None
+        start, end, total = map(int, m.groups())
+        return None if end < start or total <= 0 else (start, end, total)
 
     def _download_wechat_direct(self, sph_code: str, filename: str) -> str:
         """调 /direct 取解密头与 CDN 直链，Range 拼接成完整 mp4。"""
@@ -349,10 +341,6 @@ class MediaResolverDownloader(BaseDownloader):
         if not isinstance(content_length, int) or isinstance(content_length, bool):
             raise ResolverResponseError(f"wechat direct invalid content_length sph_code={sph_code}")
         if self.max_download_bytes and content_length > self.max_download_bytes:
-            logger.error(
-                f"wechat direct exceeds size limit sph_code={sph_code} "
-                f"content_length={content_length} limit={self.max_download_bytes}"
-            )
             raise DownloadFailedError(
                 f"wechat direct file exceeds size limit sph_code={sph_code} "
                 f"content_length={content_length} limit={self.max_download_bytes}"
@@ -384,6 +372,7 @@ class MediaResolverDownloader(BaseDownloader):
 
     def _append_wechat_cdn(self, fh, sph_code, payload, offset, content_length):
         """CDN Range 追加；中断/4xx/Range 不符则 /direct 换链续传。"""
+        origin = payload
         cdn_url = payload.get("cdn_url")
         if not isinstance(cdn_url, str) or not cdn_url.strip():
             raise ResolverResponseError(f"wechat direct missing CDN link sph_code={sph_code}")
@@ -393,10 +382,7 @@ class MediaResolverDownloader(BaseDownloader):
             try:
                 validate_url_safe(cdn_url)
             except URLValidationError:
-                logger.error(f"wechat direct CDN failed SSRF check sph_code={sph_code} offset={offset}")
-                raise DownloadFailedError(
-                    f"wechat direct CDN failed SSRF check sph_code={sph_code} offset={offset}"
-                )
+                raise DownloadFailedError(f"wechat direct CDN failed SSRF check sph_code={sph_code} offset={offset}")
             logger.info(
                 f"wechat direct CDN GET sph_code={sph_code} offset={offset} "
                 f"content_length={content_length} refreshes={refreshes}"
@@ -412,28 +398,27 @@ class MediaResolverDownloader(BaseDownloader):
                     f"offset={offset} content_length={content_length}"
                 )
             if zero_streak >= 2:
-                raise DownloadFailedError(
-                    f"wechat direct no progress sph_code={sph_code} offset={offset}"
-                )
+                raise DownloadFailedError(f"wechat direct no progress sph_code={sph_code} offset={offset}")
             if refreshes >= _WECHAT_DIRECT_MAX_REFRESHES:
                 raise DownloadFailedError(
-                    f"wechat direct refresh limit sph_code={sph_code} "
-                    f"offset={offset} refreshes={refreshes}"
+                    f"wechat direct refresh limit sph_code={sph_code} offset={offset} refreshes={refreshes}"
                 )
             logger.info(
                 f"wechat direct refresh CDN link sph_code={sph_code} "
                 f"offset={offset} refreshes={refreshes + 1}"
             )
-            payload = self.client.fetch_wechat_direct(sph_code)
-            cdn_url = payload.get("cdn_url")
+            fresh = self.client.fetch_wechat_direct(sph_code)
+            for field in ("content_length", "encrypted_head_bytes", "head_b64"):
+                if origin.get(field) != fresh.get(field):
+                    raise DownloadFailedError(
+                        f"wechat direct object identity mismatch sph_code={sph_code} field={field}"
+                    )
+            cdn_url = fresh.get("cdn_url")
             if not isinstance(cdn_url, str) or not cdn_url.strip():
-                raise ResolverResponseError(
-                    f"wechat direct missing CDN link after refresh sph_code={sph_code}"
-                )
+                raise ResolverResponseError(f"wechat direct missing CDN link after refresh sph_code={sph_code}")
             refreshes += 1
         raise DownloadFailedError(
-            f"wechat direct incomplete sph_code={sph_code} "
-            f"offset={offset} content_length={content_length}"
+            f"wechat direct incomplete sph_code={sph_code} offset={offset} content_length={content_length}"
         )
 
     def _stream_wechat_cdn_range(self, cdn_url, fh, sph_code, offset, content_length) -> int:
@@ -444,17 +429,23 @@ class MediaResolverDownloader(BaseDownloader):
             try:
                 response = requests.get(
                     cdn_url, headers={"Range": f"bytes={offset}-"},
-                    stream=True, timeout=_WECHAT_CDN_TIMEOUT,
+                    stream=True, timeout=_WECHAT_CDN_TIMEOUT, allow_redirects=False,
                 )
             except requests.RequestException:
                 logger.warning(f"wechat direct CDN connect failed sph_code={sph_code} offset={offset}")
                 return 0
+            parsed = self._parse_content_range(response.headers.get("Content-Range"))
+            clen = response.headers.get("Content-Length")
+            try:
+                clen_ok = clen in (None, "") or int(clen) == parsed[1] - parsed[0] + 1
+            except (TypeError, ValueError):
+                clen_ok = False
+            range_ok = parsed is not None and parsed[0] == offset and parsed[2] == content_length and clen_ok
             status = response.status_code
-            range_start = self._content_range_start(response.headers.get("Content-Range"))
-            if status in _WECHAT_CDN_RETRY_STATUSES or status != 206 or range_start != offset:
+            if status in _WECHAT_CDN_RETRY_STATUSES or status != 206 or not range_ok:
                 logger.warning(
                     f"wechat direct CDN unexpected response status={status} "
-                    f"range_start={range_start} offset={offset} sph_code={sph_code}"
+                    f"range={parsed} offset={offset} sph_code={sph_code}"
                 )
                 return 0
             try:
@@ -473,8 +464,7 @@ class MediaResolverDownloader(BaseDownloader):
                         break
             except requests.RequestException:
                 logger.warning(
-                    f"wechat direct CDN stream interrupted sph_code={sph_code} "
-                    f"offset={offset} gained={gained}"
+                    f"wechat direct CDN stream interrupted sph_code={sph_code} offset={offset} gained={gained}"
                 )
             return gained
         finally:
