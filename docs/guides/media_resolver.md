@@ -10,7 +10,7 @@
 - 把易碎的 TikHub 解析逻辑集中到专用服务，本仓库退化为「下载 + 转录 + LLM」；
 - 抖音改为下载**完整 mp4 再由 CapsWriter 提取音轨**（而非旧版直接抓 `music.play_url` 的 mp3）——
   对套用热门 BGM 模板的口播视频，提取的是**视频自带人声**而非背景乐，转录更准；
-- 支持微信视频号（`https://weixin.qq.com/sph/<sph_code>`）链接转录，通过 MediaResolverAPI 的流式代理端点边解密边拉取。
+- 支持微信视频号（`https://weixin.qq.com/sph/<sph_code>`）链接转录：resolver 只负责解析并下发解密文件头 + 微信 CDN 直链（`GET /api/stream/wechat_channels/{sph_code}/direct`），由本服务直连 CDN 按 Range 拼接成完整 mp4（不经 resolver 流式中转，避免跨机房 DERP 慢速）。
 
 > ⚠️ **行为变更**：开启后抖音下载体积由 mp3 增大为 mp4。长视频可能撞 `storage.max_download_size_mb`
 > 上限，或 CapsWriter 一次性入内存的限制。短视频无影响。
@@ -33,8 +33,8 @@
 2. 微信视频号转录前提：
    - 必须设置 `downloaders.use_media_resolver: true`（无原生下载器兜底）；
    - 若配置了 `security.download_url_allowlist` 安全下载白名单，MediaResolverAPI 服务域名/IP 须在允许列表中；
-   - 视频号 `video_url` 指向 resolver 自己的流式代理端点（`/api/stream/wechat_channels/{sph_code}`），下载时下载器会自动携带 `X-API-Key` 鉴权头（第三方 CDN 直链则不会携带）；
-   - resolver 流式端点受上游并发限制，若单进程并发超限会返回 429（Too Many Requests）。
+   - 视频号 `video_url` 仍指向 resolver 的流式端点路径（`/api/stream/wechat_channels/{sph_code}`），下载器识别后改调 `/direct` 拿到解密头与 CDN 直链，再由本机 Range 续传拼接；只有调 `/direct` 时携带 `X-API-Key`，请求微信 CDN 时不携带；
+   - CDN 直链含时效 token，慢读可能被 CDN 掐断，下载器会重新调 `/direct` 换链并从已下载偏移续传（最多 5 次）。
 3. 服务健康检查：
 
    ```bash
@@ -93,7 +93,6 @@ curl -X POST http://localhost:8000/api/transcribe \
 | 图文/已删除/私密等无视频内容 | 该内容无可转录视频 | 否 |
 | 全部解析源失败 | 解析失败，稍后再试 | 否 |
 | 服务端错误（HTTP 5xx） | 解析服务异常 | 是 |
-| 流式端点并发超限（HTTP 429） | 解析服务繁忙，稍后再试 | 是 |
 
 > 注：当前 MediaResolverAPI 的 `error` 仅返回文案、无结构化 `error.code`，因此「图文/删除」类终态
 > 可能被笼统归为「解析失败，稍后再试」。若你维护该服务，建议为终态返回 `error.code` 以便精确区分。
@@ -114,8 +113,9 @@ MediaResolverAPI 返回的视频直链在下载前会经过 **SSRF 校验**（`u
 |------|------|
 | 提示「鉴权失败」 | 检查 `media_resolver.api_key`；用 `curl -H "X-API-Key: <key>"` 直接打 `/api/resolve` 验证 |
 | 提示「解析服务暂不可用」 | 检查 `base_url` 可达性、`/health`、Docker 内是否误用 localhost |
-| 视频号下载失败（401） | 确认下载请求发往 resolver 域名并携带了 `X-API-Key` |
-| 视频号下载失败（429） | MediaResolverAPI 流式并发超限，稍后重试或调整 resolver 服务并发能力 |
+| 视频号下载失败（401） | 确认 `/direct` 请求发往 resolver 域名并携带了 `X-API-Key` |
+| 视频号下载失败（502） | resolver 拉微信元数据/CDN 失败，稍后重试 |
+| resolver 返回的 `video_url`（流式端点）的 netloc 须与 `media_resolver.base_url` 一致，否则 X-API-Key 不会携带且可能触发 SSRF 拦截 | 核对 `media_resolver.base_url` 与解析结果里的主机名（含端口）是否完全一致（小写比较） |
 | 抖音下载撞大小上限 | 调高 `storage.max_download_size_mb`，或对长视频暂时关闭开关 |
 | 想确认走了哪个下载器 | 看日志 `为URL创建下载器: ..., 类型: MediaResolverDownloader` |
 
