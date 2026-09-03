@@ -6,6 +6,7 @@
 - 分支：`card/VideoTranscriptAPI-20260904-01`
 - Base：`5480490a51969d8a807988d410921340055f00d3`
 - 日期：2026-09-04
+- PR：https://github.com/zlxlabs/VideoTranscriptAPI/pull/69 （#69，未合并）
 
 ## 落位清单
 
