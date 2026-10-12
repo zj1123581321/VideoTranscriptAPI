@@ -188,6 +188,7 @@ def test_signal_after_candidate_start_rolls_back(tmp_path):
     env["HEALTH_INTERVAL_SECONDS"] = "1"
     project = Path(env["PROJECT_ROOT_OVERRIDE"])
     old = "ghcr.io/zj1123581321/video-transcript-api@sha256:" + "b" * 64
+    candidate = "ghcr.io/example/api@sha256:" + "a" * 64
     (project / ".deploy-image").write_text(old + "\n", encoding="utf-8")
     log_path = Path(env["DOCKER_LOG"])
 
@@ -221,7 +222,7 @@ def test_signal_after_candidate_start_rolls_back(tmp_path):
     def candidate_health_probed(text):
         seen_up = False
         for line in text.splitlines():
-            if "compose" in line and "up -d" in line:
+            if "compose" in line and "up -d" in line and candidate in line:
                 seen_up = True
             elif seen_up and "State.Health.Status" in line:
                 return True
@@ -253,6 +254,7 @@ def test_signal_after_candidate_start_rolls_back(tmp_path):
     assert "Candidate health check failed" not in stderr
     assert "Rollback digest also failed" not in stderr
     assert len(compose_lines) == 2
+    assert candidate in compose_lines[0]
     assert old in compose_lines[1]
     assert probe_between
     assert (project / ".deploy-image").read_text(encoding="utf-8").strip() == old
