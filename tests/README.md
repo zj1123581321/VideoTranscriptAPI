@@ -59,7 +59,7 @@ uv run --frozen pytest -q tests/unit/test_upload_worker.py tests/integration/tes
 `test_local_upload_lifecycle.py` 以真实 FastAPI/SQLite/CacheManager 路由贯通三种重处理 owner gate、分享撤销与到期、public raw/page/export/summary、过滤后分页和撤销竞态；另用真实 `process_task_queue`、`process_transcription`、`Transcriber` 及隔离 CapsWriter 文件 producer 断言实际输入字节/时长/媒体映射、上传源文件在 LLM 前清理和 public output。`test_upload_worker.py` 锁定 named `UPLOAD_PROCESSING_FAILED` 与 dispatcher 使用持久映射。`test_notification_e2e_delivery.py` 贯通真实 router/channel/FIFO 到最终 HTTP JSON payload，验证 upload capability、用户标题、本地来源标签、完整总结/回执次序且不泄服务器路径。生产 ASR、真实凭据与真实通知均未调用。B 接收回归运行：
 
 ```bash
-uv run --frozen pytest -q tests/unit/test_upload_routes.py tests/unit/test_upload_dispatch.py tests/integration/test_upload_intake.py
+uv run --frozen pytest -q tests/unit/test_upload_routes.py tests/unit/test_upload_dispatch.py tests/integration/test_upload_intake.py tests/integration/test_upload_intake_cleanup.py
 ```
 
 其中 `test_upload_intake.py` 由真实 Bearer `UserManager`、FastAPI/ASGI raw request、临时 cache.db 与真实 `process_task_queue` consumer 构成；断言落盘 bytes 与 SHA-256、Unicode wire metadata、同 key零body/零重复入队、distinct key独立任务、actual receiver/inflight/free-space/bytes限制、queue/SQLite失败、ASGI断开、丢回执查询原任务、owner stop write-once。H1还断言独立SQLite连接在实际queue put时看见receiving/root-none；commit fault后真实入队的stale payload由dispatcher丢弃、不进PROCESSING/executor/ASR；cleanup/accept两顺序用真实SQLite与文件bytes/Event控制。ASR调用被替换为捕获真实 dispatcher 参数的本地消费者，生产 ASR/通知未调用；独立 `test_upload_dispatch.py` 证明 stale admission 不进PROCESSING/executor/ASR，并证明 local media未知/无音轨/超时长在ASR前拒绝且不走URL downloader。示例配置的四项 upload limits 为 null；这些测试不能被用作生产容量测量或部署授权。`tests/cache/test_cache_cleanup.py` 的缓存 fixture 仅写 `tmp_path`，并从缓存 producer 返回的实际文件路径删除，不触碰仓库 `test_cache_dir/`。浏览器全链 `e2e/tests/local-upload-full-chain.spec.ts` 通过 `tests/local_upload_real_server.py` 拉起真实 API；启动时在本轮 `serverScratch/tmp` 注入子进程 `TMPDIR`，`/__e2e__/state` 的 `gettempdir` 回读 `tempfile.gettempdir()`，锁定不是共享 `/tmp`。
@@ -222,6 +222,14 @@ LLM 处理器空输入守卫（#179）：`tests/unit/test_empty_input_processors
 `test_normal_speed_task_sends_no_slow_alert` 锁定。
 
 ## 并发压测
+
+B 接收回归补充：
+
+```bash
+uv run --frozen pytest -q tests/unit/test_upload_routes.py tests/unit/test_upload_dispatch.py tests/integration/test_upload_intake.py tests/integration/test_upload_intake_cleanup.py
+```
+
+`test_upload_intake_cleanup.py` 复用 `test_upload_intake.py` 的真实 fixture，锁定接收失败不短路资源释放的不变式（错误记录/目录清理故障后 slot、inflight、预算与目录的真实终态，正常受理不误删媒体），故障注入只在 fixture 域。
 
 `scripts/perf/concurrent_load.py` 会提交本地 API 任务，并使用真实抖音和 B 站
 URL。它是手工压测工具，不会被 pytest 收集，也不应在 CI 或没有明确授权的环境

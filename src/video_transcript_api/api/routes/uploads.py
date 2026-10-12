@@ -390,21 +390,34 @@ async def receive_upload(
         failure_code = "queue_full"
         raise _reject(503, failure_code, "转录队列已满，上传未正式受理") from exc
     finally:
-        if body_started and not transferred:
-            failure_code = failure_code or "receive_incomplete"
-            cache_manager.set_local_upload_error(upload_id, failure_code)
-            logger.warning("UPLOAD_INTAKE_REJECTED reason={} status=failed", failure_code)
-        if not transferred:
-            if task_dir is not None:
-                temp_manager.clean_up_task(task_id)
-                if task_dir.exists():
-                    raise OSError(f"failed to remove untransferred upload directory: {task_dir}")
-            if budget_acquired:
-                runtime.release_upload_temp(task_id)
-            if inflight_acquired:
-                inflight.release("transcription", task_id)
-        if receiver_acquired:
-            runtime.upload_receiver_slots.release()
+        # Ownership: a failure in one cleanup step must not short-circuit the
+        # remaining releases. The receiver slot is released by the outermost
+        # finally; inflight goes before directory cleanup; the temp budget is
+        # intentionally kept while the untransferred directory still occupies
+        # disk (no false reclamation). Errors still propagate as HTTP 500.
+        try:
+            try:
+                if body_started and not transferred:
+                    failure_code = failure_code or "receive_incomplete"
+                    cache_manager.set_local_upload_error(upload_id, failure_code)
+                    logger.warning(
+                        "UPLOAD_INTAKE_REJECTED reason={} status=failed", failure_code
+                    )
+            finally:
+                if not transferred:
+                    if inflight_acquired:
+                        inflight.release("transcription", task_id)
+                    if task_dir is not None:
+                        temp_manager.clean_up_task(task_id)
+                        if task_dir.exists():
+                            raise OSError(
+                                f"failed to remove untransferred upload directory: {task_dir}"
+                            )
+                    if budget_acquired:
+                        runtime.release_upload_temp(task_id)
+        finally:
+            if receiver_acquired:
+                runtime.upload_receiver_slots.release()
 
 
 @router.get("/by-idempotency-key/{key}")
