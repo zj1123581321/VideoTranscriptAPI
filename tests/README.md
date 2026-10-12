@@ -62,7 +62,7 @@ uv run --frozen pytest -q tests/unit/test_upload_worker.py tests/integration/tes
 uv run --frozen pytest -q tests/unit/test_upload_routes.py tests/unit/test_upload_dispatch.py tests/integration/test_upload_intake.py tests/integration/test_upload_intake_cleanup.py
 ```
 
-其中 `test_upload_intake_cleanup.py` 复用 `test_upload_intake.py` 的真实 fixture，锁定接收失败不短路资源释放的不变式（错误记录/目录清理故障后 slot、inflight、预算与目录的真实终态，正常受理不误删媒体），故障注入只在 fixture 域。`test_upload_intake.py` 由真实 Bearer `UserManager`、FastAPI/ASGI raw request、临时 cache.db 与真实 `process_task_queue` consumer 构成；断言落盘 bytes 与 SHA-256、Unicode wire metadata、同 key零body/零重复入队、distinct key独立任务、actual receiver/inflight/free-space/bytes限制、queue/SQLite失败、ASGI断开、丢回执查询原任务、owner stop write-once。H1还断言独立SQLite连接在实际queue put时看见receiving/root-none；commit fault后真实入队的stale payload由dispatcher丢弃、不进PROCESSING/executor/ASR；cleanup/accept两顺序用真实SQLite与文件bytes/Event控制。ASR调用被替换为捕获真实 dispatcher 参数的本地消费者，生产 ASR/通知未调用；独立 `test_upload_dispatch.py` 证明 stale admission 不进PROCESSING/executor/ASR，并证明 local media未知/无音轨/超时长在ASR前拒绝且不走URL downloader。示例配置的四项 upload limits 为 null；这些测试不能被用作生产容量测量或部署授权。`tests/cache/test_cache_cleanup.py` 的缓存 fixture 仅写 `tmp_path`，并从缓存 producer 返回的实际文件路径删除，不触碰仓库 `test_cache_dir/`。
+其中 `test_upload_intake.py` 由真实 Bearer `UserManager`、FastAPI/ASGI raw request、临时 cache.db 与真实 `process_task_queue` consumer 构成；断言落盘 bytes 与 SHA-256、Unicode wire metadata、同 key零body/零重复入队、distinct key独立任务、actual receiver/inflight/free-space/bytes限制、queue/SQLite失败、ASGI断开、丢回执查询原任务、owner stop write-once。H1还断言独立SQLite连接在实际queue put时看见receiving/root-none；commit fault后真实入队的stale payload由dispatcher丢弃、不进PROCESSING/executor/ASR；cleanup/accept两顺序用真实SQLite与文件bytes/Event控制。ASR调用被替换为捕获真实 dispatcher 参数的本地消费者，生产 ASR/通知未调用；独立 `test_upload_dispatch.py` 证明 stale admission 不进PROCESSING/executor/ASR，并证明 local media未知/无音轨/超时长在ASR前拒绝且不走URL downloader。示例配置的四项 upload limits 为 null；这些测试不能被用作生产容量测量或部署授权。`tests/cache/test_cache_cleanup.py` 的缓存 fixture 仅写 `tmp_path`，并从缓存 producer 返回的实际文件路径删除，不触碰仓库 `test_cache_dir/`。浏览器全链 `e2e/tests/local-upload-full-chain.spec.ts` 通过 `tests/local_upload_real_server.py` 拉起真实 API；启动时在本轮 `serverScratch/tmp` 注入子进程 `TMPDIR`，`/__e2e__/state` 的 `gettempdir` 回读 `tempfile.gettempdir()`，锁定不是共享 `/tmp`。
 
 任务通知数量回归：`tests/unit/test_notification_budget.py` 从真实转录入口运行下载、平台字幕、YouTube API 字幕、部分/全部缓存命中与两种失败路径，断言成功路径携带完整总结和分享回执、失败不带回执；同文件还以 25 MiB 下载 fixture 锁定 generic 下载不发进度通知。`tests/unit/test_terminal_notification_outbox.py` 覆盖单行 outbox、缺失快照可见降级与标记 sent、两条成功消息共用快照及失败路径。`tests/unit/test_notification_e2e_delivery.py` 使用真实 `process_transcription → _TaskNotifier → NotificationRouter → WeComChannel/FeishuChannel → wecom-notifier FIFO → HTTP JSON`（只替换最终外部 POST），并覆盖即时与 outbox 补发入口；检查 SQLite 实际快照字节、双渠道最终 payload 中完整总结先于分享回执、精确 view URL 与网页首段。`tests/unit/test_completion_share.py` 锁定 Markdown→网页同源 HTML→首个 p 可见文本与缺总结状态。相关设计及 N1–N4 更新见 `docs/sessions/261008-completion-share/design.md`。
 
@@ -85,6 +85,11 @@ CapsWriter final 返回回归（#166）：`tests/unit/test_capswriter_sdk_transp
 与非空产物」，不是耗时数字：成功预算硬边界 10s，子进程硬截止 45s（父进程 kill）。
 该缺陷只在 CPython ≤3.11 出现（3.12 重写了 `wait_for`），因此 ≥3.12 显式 skip；
 skip 不等于守住回归，见 `docs/sessions/sdk65-upgrade-261004/design.md` I6。
+
+章节错误清理回归（#226）：`tests/unit/test_chapters_error_cleanup.py` 覆盖
+`CacheManager.save_llm_status` 针对章节正常终态（`generated`、`skipped_short`、
+`skipped_no_timeline`、`disabled`）清理旧 `chapters_error`，同时确保 `pending`、
+`failed` 及未触碰章节状态保留历史诊断。
 
 ## 手动测试门禁
 
@@ -217,6 +222,14 @@ LLM 处理器空输入守卫（#179）：`tests/unit/test_empty_input_processors
 `test_normal_speed_task_sends_no_slow_alert` 锁定。
 
 ## 并发压测
+
+B 接收回归补充：
+
+```bash
+uv run --frozen pytest -q tests/unit/test_upload_routes.py tests/unit/test_upload_dispatch.py tests/integration/test_upload_intake.py tests/integration/test_upload_intake_cleanup.py
+```
+
+`test_upload_intake_cleanup.py` 复用 `test_upload_intake.py` 的真实 fixture，锁定接收失败不短路资源释放的不变式（错误记录/目录清理故障后 slot、inflight、预算与目录的真实终态，正常受理不误删媒体），故障注入只在 fixture 域。
 
 `scripts/perf/concurrent_load.py` 会提交本地 API 任务，并使用真实抖音和 B 站
 URL。它是手工压测工具，不会被 pytest 收集，也不应在 CI 或没有明确授权的环境
