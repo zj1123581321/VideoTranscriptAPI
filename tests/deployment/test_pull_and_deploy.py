@@ -184,6 +184,7 @@ def test_state_commit_failure_rolls_back_candidate(tmp_path):
 
 def test_signal_after_candidate_start_rolls_back(tmp_path):
     env = _fake_docker(tmp_path, health="starting")
+    env["HEALTH_ATTEMPTS"] = "30"
     env["HEALTH_INTERVAL_SECONDS"] = "1"
     project = Path(env["PROJECT_ROOT_OVERRIDE"])
     old = "ghcr.io/zj1123581321/video-transcript-api@sha256:" + "b" * 64
@@ -197,27 +198,63 @@ def test_signal_after_candidate_start_rolls_back(tmp_path):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline:
-        if log_path.exists() and "up -d" in log_path.read_text(encoding="utf-8"):
-            break
-        time.sleep(0.02)
-    else:
-        process.kill()
-        process.communicate()
-        raise AssertionError("candidate did not start")
 
-    Path(env["HEALTH_STATUS_FILE"]).write_text("healthy", encoding="utf-8")
+    def wait_logged(pred, fail):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if log_path.exists():
+                text = log_path.read_text(encoding="utf-8")
+                if pred(text):
+                    return text
+            time.sleep(0.02)
+        else:
+            process.kill()
+            process.communicate()
+            raise AssertionError(fail)
+
+    def compose_ups(text):
+        return [
+            line for line in text.splitlines()
+            if "compose" in line and "up -d" in line
+        ]
+
+    def candidate_health_probed(text):
+        seen_up = False
+        for line in text.splitlines():
+            if "compose" in line and "up -d" in line:
+                seen_up = True
+            elif seen_up and "State.Health.Status" in line:
+                return True
+        return False
+
+    # 候选保持 starting；等 fake-docker 真实探测后再 TERM，避免只见 up 就发信号。
+    wait_logged(candidate_health_probed, "candidate health probe did not run")
     process.terminate()
-    process.communicate(timeout=5)
+    wait_logged(
+        lambda text: len(compose_ups(text)) >= 2 and old in compose_ups(text)[1],
+        "old digest rollback up did not run",
+    )
+    # 旧摘要回滚 up 之后才放行健康，阻止候选抢先提交。
+    Path(env["HEALTH_STATUS_FILE"]).write_text("healthy", encoding="utf-8")
+    _, stderr = process.communicate(timeout=15)
     log = log_path.read_text(encoding="utf-8")
-    compose_lines = [
-        line for line in log.splitlines() if "compose" in line and "up -d" in line
-    ]
+    compose_lines = compose_ups(log)
+    probe_between = False
+    seen_first_up = False
+    for line in log.splitlines():
+        if "compose" in line and "up -d" in line:
+            if seen_first_up:
+                break
+            seen_first_up = True
+        elif seen_first_up and "State.Health.Status" in line:
+            probe_between = True
 
-    assert process.returncode != 0
+    assert process.returncode == 143
+    assert "Candidate health check failed" not in stderr
+    assert "Rollback digest also failed" not in stderr
     assert len(compose_lines) == 2
     assert old in compose_lines[1]
+    assert probe_between
     assert (project / ".deploy-image").read_text(encoding="utf-8").strip() == old
 
 
