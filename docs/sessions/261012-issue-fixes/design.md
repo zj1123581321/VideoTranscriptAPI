@@ -8,8 +8,9 @@
 缺陷：`receive_upload` 的 finally 按「写错误记录 → 目录清理 → 预算 → inflight →
 slot」顺序执行，任何一步抛异常即跳过其后全部释放。默认 `receive_concurrency`
 为 1，写库或目录清理失败一次就让上传入口持续 503 直到进程重启（单点变砖）。
-风险排序：slot ≫ inflight > 预算 > 目录（目录泄漏有 24 小时周期清理自愈，
-预算与 inflight 是内存账本、重启即清）。
+风险排序：slot ≫ inflight > 预算 > 目录（预算与 inflight 是内存账本、重启即清；
+目录泄漏无自动回收保证——已核定定时清理仅对 receiving 记录 unlink，
+不保证覆盖所有失败目录）。
 
 契约（不变式轴）：
 
@@ -28,14 +29,16 @@ slot」顺序执行，任何一步抛异常即跳过其后全部释放。默认 
 ## A（#226，另卡）：cache 合并仅在非 failed 终态清 error
 
 只允许 {generated, skipped_short, skipped_no_timeline, disabled} 终态清除旧
-error；pending 与未触碰状态保留旧 error——补跑先写 pending、进程中途死亡的
-场景不得丢掉上一次失败的诊断信息。另补「FAILED→pending 时 error 仍在」用例。
+error；pending 与未触碰状态保留旧 error；若 caller 写 pending 则 writer 保留
+旧诊断（该场景生产路径未证实，不作宣称）。另补「FAILED→pending 时
+error 仍在」用例。
 
 ## D（#216，另卡）：TMPDIR 指向 scratch 子目录
 
 e2e 子服务 TMPDIR 改为 serverScratch/tmp 子目录（先创建），并在既有
 /__e2e__/state 中断言 `tempfile.gettempdir()` 落在 scratch 之下。不引入
-108 字节 socket 路径预算：本链路无任何 AF_UNIX 使用方，该预算属虚构需求。
+108 字节 socket 路径预算：API 走 TCP，未发现带路径名（bind 文件系统路径）
+的 AF_UNIX 消费者，该预算缺乏真实需求。
 
 ## C（#212）：延后
 

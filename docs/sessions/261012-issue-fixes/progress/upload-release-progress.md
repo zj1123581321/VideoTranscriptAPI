@@ -21,3 +21,9 @@
 - 关键决策：tests/pytest-test-durations.json 仓内不存在且无消费者，不新造；全量用独立短 TMPDIR 隔离本机 AF_UNIX 环境噪声（#3825，非 #216）。
 - 已否决方案：等远端 draft CI 再收尾（卡面明确不作执行器完成条件）。
 - 下一步唯一动作：推送文档跟改提交，交主脑验收。
+
+### 2026-10-12 第 4 段：feedback 补齐（dlg-20261012-120624-077823）
+- 本段结论：补 rowcount ValueError 真实 writer 路径回归（不变式行1第二分支）：fixture 域包装 set_local_upload_receiving_path——先真实调用原方法、再真实 SQLite DELETE 删记录，令 finally 内真实 set_local_upload_error 的 UPDATE rowcount=0 自身抛 ValueError；不替身冒充 writer。测试内 sanity 直接调真实 set_local_upload_error 断言 ValueError（注入有效性同状态证明）；HTTP 500（非 400 静默）、目录清/预算零/inflight 0/槽可再获取/后继 202 全部锁死。变异红验：仅把错误记录打回释放前位置，新用例转红 AssertionError（见报告原文）；还原后复绿。design 三处事实收紧（目录无自愈保证、pending 场景不作生产宣称、AF_UNIX 预算依据改写）。
+- 关键决策：注入点选 set_local_upload_receiving_path（writer 前最后一个真实库调用，其后到 writer 之间产品代码无其他查库路径），注入自限一次只命中被测请求、不波及后继；首版全局包装误伤后继请求已修正。
+- 已否决方案：替身直接 raise ValueError（feedback 明确不接受）；wrapper 里 patch rowcount（那不是真实 writer 路径）。
+- 下一步唯一动作：commit+push，更新报告给新最终 SHA 等主脑冻结独立 review。

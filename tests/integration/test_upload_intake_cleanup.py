@@ -11,6 +11,8 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from tests.integration.test_upload_intake import (  # noqa: F401  fixture re-export
     PRODUCER_METADATA,
     RAW_PRODUCER_BYTES,
@@ -55,6 +57,74 @@ def test_writer_failure_still_releases_slot_inflight_budget_and_dir(
     )
     assert followup.status_code == 202, "后继上传不得因槽泄漏而503"
     assert followup.json()["state"] == "accepted"
+    worker_results.get(timeout=2)
+    _wait_for_worker_release(runtime)
+
+
+def test_writer_rowcount_mismatch_still_releases_slot_inflight_budget_and_dir(
+    upload_client, monkeypatch
+):
+    """不变式行1（rowcount分支）：真实writer的UPDATE rowcount!=1自身抛ValueError、
+    清理成功 → 四项全释放，HTTP 500可见。注入在fixture域：真实
+    set_local_upload_receiving_path成功后删除SQLite记录，令finally内真实
+    set_local_upload_error的UPDATE rowcount=0（不改schema/产品代码）。"""
+    client, runtime, body_reads, worker_calls, worker_results = upload_client
+    monkeypatch.setenv("VTA_UPLOADS_ENABLED", "true")
+    receiving_calls = []
+    deleted_upload_ids = []
+    real_receiving_path = runtime.cache_manager.set_local_upload_receiving_path
+
+    def receiving_path_then_delete(upload_id, media_path):
+        real_receiving_path(upload_id, media_path)  # 记录尚在，真实UPDATE先成功
+        receiving_calls.append(upload_id)
+        if not deleted_upload_ids:  # 仅被测请求注入一次；后继请求放行
+            with runtime.cache_manager._get_cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM local_uploads WHERE upload_id = ?", (upload_id,)
+                )
+            deleted_upload_ids.append(upload_id)
+
+    monkeypatch.setattr(
+        runtime.cache_manager,
+        "set_local_upload_receiving_path",
+        receiving_path_then_delete,
+    )
+    declared = {**PRODUCER_METADATA, "byte_size": len(RAW_PRODUCER_BYTES) + 1}
+    key = _key()
+    response = _post(
+        client, key, declared, RAW_PRODUCER_BYTES, "writer-rowcount-mismatch"
+    )
+
+    assert response.status_code == 500, (
+        "writer的ValueError必须以HTTP 500可见：若writer未被触发，"
+        "declared_size_mismatch会以400逃逸，不得静默成功"
+    )
+    assert len(receiving_calls) == 1 and deleted_upload_ids == [receiving_calls[0]], (
+        "注入必须只命中被测请求：发生在真实receiving_path成功之后（handler内、"
+        "错误记录writer之前）"
+    )
+    captured_id = deleted_upload_ids[0]
+    with pytest.raises(ValueError):
+        # 注入有效性：与handler内相同SQLite状态下，真实writer必然rowcount!=1抛ValueError
+        runtime.cache_manager.set_local_upload_error(captured_id, "declared_size_mismatch")
+    assert runtime.cache_manager.get_local_upload_by_owner_key("alice", key) is None, (
+        "记录已在fixture域真实删除，账本状态不得假造"
+    )
+    assert not list(Path(runtime.temp_manager.base_dir).glob("task_*/upload-source.bin")), (
+        "接收目录必须已被清理（writer的ValueError不得短路目录清理）"
+    )
+    assert runtime.inflight_registry.size("transcription") == 0, "未移交inflight必须已释放"
+    assert runtime._upload_reserved_bytes == {}, "临时预算必须归零"
+    assert runtime.upload_receiver_slots.acquire(blocking=False), "请求槽必须已释放"
+    runtime.upload_receiver_slots.release()
+
+    followup = _post(
+        client, _key(), PRODUCER_METADATA, RAW_PRODUCER_BYTES, "after-rowcount-mismatch"
+    )
+    assert followup.status_code == 202, "后继上传不得因槽泄漏而503"
+    assert followup.json()["state"] == "accepted"
+    assert len(receiving_calls) == 2, "后继请求必须真实走到receiving_path且未被注入"
+    assert deleted_upload_ids == [receiving_calls[0]], "注入不得波及后继请求"
     worker_results.get(timeout=2)
     _wait_for_worker_release(runtime)
 
