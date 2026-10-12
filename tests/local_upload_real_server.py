@@ -11,6 +11,7 @@ import shutil
 import socket
 import stat
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -153,6 +154,7 @@ def _register_state_inspector(app, run_dir: Path, upstreams: LoopbackUpstreams) 
                 "uploads": rows,
                 "ffprobe_calls": ffprobe_calls,
                 "queued_upload_items": runtime.task_queue.qsize(),
+                "gettempdir": tempfile.gettempdir(),
             }
         )
 
