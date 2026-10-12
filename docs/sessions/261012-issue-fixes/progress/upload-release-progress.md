@@ -15,3 +15,9 @@
 - 关键决策：只重构 uploads.py 现有 finally——错误记录包独立 try/finally，inflight 提前到目录清理之前，slot 放最外层 finally；目录仍在则预算刻意保留（不假报回收）；未新增重试/框架/错误协议。故障注入全部在 fixture 域（monkeypatch 实例方法），注入命中用调用计数证明、资源断言全部读真实状态。
 - 已否决方案：延迟捕获再重抛 writer 异常（嵌套 try/finally 顺序即可达成，少一层状态）；patch Path.unlink/shutil.rmtree 注入清理故障（目标不精确，clean_up_task 实例域更准）。
 - 下一步唯一动作：最小变异红验（打回 writer-before-release 顺序），随后全量 make test + pyright。
+
+### 2026-10-12 第 3 段：变异红验、全量与类型检查（收尾）
+- 本段结论：变异红验成立——仅把错误记录打回释放前位置（writer-before-release），行1用例转红 `AssertionError: 接收目录必须已被清理`；还原该处后窄回归复绿 41 passed exit=0。全量 `TMPDIR=/tmp/vta-B-suite.QgGFIJ make test` 进度到 [100%]、退出码 0（收集约3908例，日志仓外 /tmp/vta-B-full-suite.log）；新窄回归连续5次退出码 0,0,0,0,0。pyright：修复版与 base 版同为同一批 7 个既有错误（仅行号随 hunk 偏移），未新增类型错误。tests/README.md 的 B 接收回归命令清单跟改新文件（Scope-Follow）。
+- 关键决策：tests/pytest-test-durations.json 仓内不存在且无消费者，不新造；全量用独立短 TMPDIR 隔离本机 AF_UNIX 环境噪声（#3825，非 #216）。
+- 已否决方案：等远端 draft CI 再收尾（卡面明确不作执行器完成条件）。
+- 下一步唯一动作：推送文档跟改提交，交主脑验收。
