@@ -18,10 +18,10 @@
 
 ## 历史 red 保留与定性
 
-- D 首轮（dlg-20261012-175937-903764）曾红：`Cannot find module '@playwright/test'`
-  （当时 verify 未含 e2e 依赖前置安装）；卡末环境准备修复后，同锁 Playwright 1.62.0 +
-  缓存 Chromium 达成 17 绿。该红是当时的环境状态，非现产品缺陷；
-  first-red 的 JSON/log 原样保留、哈希未变。
+- D 首轮（dlg-20261012-160714-609acc）曾红：`Cannot find module '@playwright/test'`
+  （当时 verify 未含 e2e 依赖前置安装）；续修轮 dlg-20261012-175937-903764 保留该首红
+  现场、补锁依赖后达成 17 绿（同锁 Playwright 1.62.0 + 缓存 Chromium）。
+  该红是当时的环境状态，非现产品缺陷；first-red 的 JSON/log 原样保留、哈希未变。
 
 ## 历史与源
 
