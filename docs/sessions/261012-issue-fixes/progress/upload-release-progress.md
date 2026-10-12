@@ -27,3 +27,9 @@
 - 关键决策：注入点选 set_local_upload_receiving_path（writer 前最后一个真实库调用，其后到 writer 之间产品代码无其他查库路径），注入自限一次只命中被测请求、不波及后继；首版全局包装误伤后继请求已修正。
 - 已否决方案：替身直接 raise ValueError（feedback 明确不接受）；wrapper 里 patch rowcount（那不是真实 writer 路径）。
 - 下一步唯一动作：commit+push，更新报告给新最终 SHA 等主脑冻结独立 review。
+
+### 2026-10-12 第 5 段：transfer 账本不被 handler 误释放回归（dlg-20261012-135924-bf492d）
+- 本段结论：Opus 验收前复核通过、生产代码零改动。新增 worker 消费起点回归：包装 transcription.process_transcription 入口采样 (task_id, inflight.size, task_id in _upload_reserved_bytes) 后调用 fixture 原 fake，主线程经 worker_results.get 确认采样后断言 (该task, 1, True)。变异红验两处各一次：inflight.release 移出 not transferred → AssertionError assert 0 == 1；release_upload_temp 移出 not transferred → AssertionError assert False is True；均 edit 逆向精确还原，uploads.py 对 HEAD diff 为空。新用例连续 5 次绿（0,0,0,0,0），四文件窄测 43 passed（42+1）。design 缺陷段改「receive_concurrency 配置为 1 时」，实现段预算保留精确注明（目录可能随后被 sweep、reservation 偏保守保留至重启，不加对账/回收机制）。
+- 关键决策：采样在 fixture fake 外层包装（复用 fixture 真 asyncio.Queue + 同 loop consumer 的既有时序），断言全部在 pytest 主线程；未新增事件开关/通用 helper/fixture 框架。
+- 已否决方案：在后台 worker 内 assert（异常只进日志或 queue 超时，不可靠）；为 sampling 新建独立 fixture（无第二消费者）。
+- 下一步唯一动作：push 后交主脑冻结最终 H0 独立 review。

@@ -6,8 +6,10 @@
 ## B（本卡 #204）：接收失败不得短路请求槽与未移交在途资源释放
 
 缺陷：`receive_upload` 的 finally 按「写错误记录 → 目录清理 → 预算 → inflight →
-slot」顺序执行，任何一步抛异常即跳过其后全部释放。默认 `receive_concurrency`
-为 1，写库或目录清理失败一次就让上传入口持续 503 直到进程重启（单点变砖）。
+slot」顺序执行，任何一步抛异常即跳过其后全部释放。`receive_concurrency`
+配置为 1 时（示例配置为 null 时入口 fail-closed 不启用上传，构造信号量的
+fallback 1 不代表默认上传启用），写库或目录清理失败一次就让上传入口持续 503
+直到进程重启（单点变砖）。
 风险排序：slot ≫ inflight > 预算 > 目录（预算与 inflight 是内存账本、重启即清；
 目录泄漏无自动回收保证——已核定定时清理仅对 receiving 记录 unlink，
 不保证覆盖所有失败目录）。
@@ -23,7 +25,8 @@ slot」顺序执行，任何一步抛异常即跳过其后全部释放。默认 
 
 实现：只调整 uploads.py 现有 finally 控制流——错误记录包进独立 try/finally，
 其 finally 内按 inflight → 目录清理（含 exists 复查）→ 预算执行，目录仍在则
-预算刻意保留；slot release 放最外层 finally。不新增重试、资源框架、生命周期
+预算刻意保留（目录可能随后被定时 sweep，但 reservation 偏保守保留至重启，
+不为此加对账/回收机制）；slot release 放最外层 finally。不新增重试、资源框架、生命周期
 账本或错误协议；既有 header/body/receipt 语义不变。
 
 ## A（#226，另卡）：cache 合并仅在非 failed 终态清 error
