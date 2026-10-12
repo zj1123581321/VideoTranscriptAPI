@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -51,7 +51,7 @@ function startRealServer(): Promise<RealServer> {
     const spawnEnv = {
       PATH: process.env.PATH ?? '/usr/bin:/bin',
       HOME: process.env.HOME ?? '/tmp',
-      TMPDIR: '/tmp',
+      TMPDIR: join(serverScratch, 'tmp'),
       LANG: 'C.UTF-8',
       PYTHONUTF8: '1',
       PYTHONUNBUFFERED: '1',
@@ -133,9 +133,16 @@ async function selectUploadPage(page: Page): Promise<void> {
 
 test.beforeAll(async () => {
   serverScratch = await mkdtemp(join(tmpdir(), 'vta-upload-real-chain-'));
+  const isolatedTmp = join(serverScratch, 'tmp');
+  await mkdir(isolatedTmp);
   realServer = await startRealServer();
   const ready = await fetch(`${realServer.api_url}/livez`);
   expect(ready.status).toBe(200);
+  const stateResponse = await fetch(`${realServer.api_url}/__e2e__/state`);
+  expect(stateResponse.status).toBe(200);
+  const state = (await stateResponse.json()) as { gettempdir: string };
+  expect(state.gettempdir).toBe(isolatedTmp);
+  expect(state.gettempdir).not.toBe('/tmp');
 });
 
 test.afterAll(async () => {
