@@ -86,6 +86,11 @@ CapsWriter final 返回回归（#166）：`tests/unit/test_capswriter_sdk_transp
 该缺陷只在 CPython ≤3.11 出现（3.12 重写了 `wait_for`），因此 ≥3.12 显式 skip；
 skip 不等于守住回归，见 `docs/sessions/sdk65-upgrade-261004/design.md` I6。
 
+章节错误清理回归（#226）：`tests/unit/test_chapters_error_cleanup.py` 覆盖
+`CacheManager.save_llm_status` 针对章节正常终态（`generated`、`skipped_short`、
+`skipped_no_timeline`、`disabled`）清理旧 `chapters_error`，同时确保 `pending`、
+`failed` 及未触碰章节状态保留历史诊断。
+
 ## 手动测试门禁
 
 `tests/manual/` 默认自动发现时被排除；即使显式传入某个手动测试文件，未设置
