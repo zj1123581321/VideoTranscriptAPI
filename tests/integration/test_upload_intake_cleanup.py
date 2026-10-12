@@ -8,10 +8,13 @@
    tests/integration/test_upload_intake.py::test_receiver_and_inflight_limits_reject_without_body_consumption 覆盖）。
 """
 
+import queue
 import sqlite3
 from pathlib import Path
 
 import pytest
+
+from video_transcript_api.api.services import transcription
 
 from tests.integration.test_upload_intake import (  # noqa: F401  fixture re-export
     PRODUCER_METADATA,
@@ -178,5 +181,32 @@ def test_accepted_transfer_keeps_media_ownership_with_worker(upload_client, monk
     dispatched = worker_results.get(timeout=2)
     assert dispatched["task_id"] == receipt["task_id"]
     assert dispatched["bytes"] == RAW_PRODUCER_BYTES, "worker必须拿到真实媒体字节"
+    _wait_for_worker_release(runtime)
+    assert runtime.task_queue.qsize() == 0
+
+
+def test_worker_consumption_starts_while_intake_resources_still_held(
+    upload_client, monkeypatch
+):
+    """不变式行3补强：worker开始消费时inflight与临时预算仍被持有，handler未提前释放。"""
+    client, runtime, _body_reads, _worker_calls, worker_results = upload_client
+    monkeypatch.setenv("VTA_UPLOADS_ENABLED", "true")
+    fixture_fake = transcription.process_transcription
+    samples = queue.Queue()
+
+    def sampling_fake(*args, **kwargs):
+        samples.put((args[0], runtime.inflight_registry.size("transcription"),
+                     args[0] in runtime._upload_reserved_bytes))
+        return fixture_fake(*args, **kwargs)
+
+    monkeypatch.setattr(transcription, "process_transcription", sampling_fake)
+    response = _post(client, _key(), PRODUCER_METADATA, RAW_PRODUCER_BYTES, "worker-held")
+    assert response.status_code == 202
+    task_id = response.json()["task_id"]
+    assert worker_results.get(timeout=2)["task_id"] == task_id, "采样必须先于断言实际发生"
+    sampled_task, sampled_inflight, sampled_budget = samples.get_nowait()
+    assert sampled_task == task_id
+    assert sampled_inflight == 1, "worker消费开始时inflight必须仍被持有"
+    assert sampled_budget is True, "worker消费开始时临时预算必须仍被持有"
     _wait_for_worker_release(runtime)
     assert runtime.task_queue.qsize() == 0
