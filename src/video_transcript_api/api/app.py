@@ -310,7 +310,7 @@ def create_app(
     app = FastAPI(
         title="VideoTranscriptAPI",
         description="视频转录API服务",
-        version="1.0.0",
+        version="1.0.1",
         lifespan=lifespan,
     )
 
