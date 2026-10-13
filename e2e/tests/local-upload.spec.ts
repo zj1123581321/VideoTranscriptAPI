@@ -120,6 +120,11 @@ test('upload page selects local media, submits raw bytes with metadata headers, 
     },
   });
 
+  // Assert UI feedback shows accepted receipt
+  await expect(page.locator('#status-content')).toContainText('文件上传成功，任务已受理！');
+  await expect(page.locator('#status-content')).toContainText('上传ID:');
+  await expect(page.locator('#status-content a[href^="/view/"]')).toBeVisible();
+
   // Assert actual raw body bytes captured by browser server fixture
   const lastUploadRes = await request.get(`${baseURL}/__e2e__/last-upload`);
   expect(lastUploadRes.status()).toBe(200);
@@ -128,11 +133,6 @@ test('upload page selects local media, submits raw bytes with metadata headers, 
   expect(lastUpload.raw_bytes_sha256).toBe(expectedSha256);
   expect(lastUpload.filename).toBe('测试音频.mp3');
   expect(lastUpload.byte_size).toBe(fileBytes.length);
-
-  // Assert UI feedback shows accepted receipt
-  await expect(page.locator('#status-content')).toContainText('文件上传成功，任务已受理！');
-  await expect(page.locator('#status-content')).toContainText('上传ID:');
-  await expect(page.locator('#status-content a[href^="/view/"]')).toBeVisible();
 });
 
 test('upload page prevents double submission on duplicate clicks', async ({ page }) => {
