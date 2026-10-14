@@ -74,16 +74,6 @@ _SPACE_NOT_REPLAYABLE_MARKERS = ("is_live", "is_upcoming", "live_status=missing"
 _SPACE_UNAVAILABLE_MARKERS = ("replay is disabled", "no longer available", "not available")
 
 
-def space_not_replayable_message(detail: str) -> str:
-    """X Space 直播中/未开播的用户可见文案（resolve 与 stream 两条路径共用）。"""
-    return f"X Space 这场还不能回放（直播中或尚未开始）: {detail}"
-
-
-def space_unavailable_message(detail: str) -> str:
-    """X Space 未开启回放/已过期的用户可见文案（resolve 与 stream 两条路径共用）。"""
-    return f"X Space 回放不可用（未开启回放或已过期）: {detail}"
-
-
 class MediaResolverClient:
     """MediaResolverAPI 解析客户端（requests 实现，超时/退避复用现有风格）。"""
 
@@ -348,14 +338,16 @@ class MediaResolverClient:
 
         直播中/未开播 → 「这场还不能回放」（终态，重试无意义）；
         未开启回放或已过期 → 「回放不可用」。两者都不可退化成「无法识别的链接」。
+        stream 侧（下载端点 400/404）的同一套文案在
+        MediaResolverDownloader._space_stream_terminal_error，逐字一致由单测锁住。
         """
         lowered = message.lower()
         if not any(marker in lowered for marker in _SPACE_ERROR_MARKERS):
             return
         if any(marker in lowered for marker in _SPACE_NOT_REPLAYABLE_MARKERS):
-            raise NonVideoContentError(space_not_replayable_message(message))
+            raise NonVideoContentError(f"X Space 这场还不能回放（直播中或尚未开始）: {message}")
         if any(marker in lowered for marker in _SPACE_UNAVAILABLE_MARKERS):
-            raise NonVideoContentError(space_unavailable_message(message))
+            raise NonVideoContentError(f"X Space 回放不可用（未开启回放或已过期）: {message}")
 
     @staticmethod
     def _safe_text(response, limit: int = 300) -> str:
