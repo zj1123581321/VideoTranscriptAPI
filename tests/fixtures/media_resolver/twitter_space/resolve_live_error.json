@@ -1,0 +1,4 @@
+{
+  "success": false,
+  "error": "Video unavailable (terminal) for platform 'twitter_space', video_id '1AKEmvYqbrOKL': twitter space 1AKEmvYqbrOKL is not a replay (live_status=is_live)"
+}

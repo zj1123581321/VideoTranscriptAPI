@@ -175,6 +175,8 @@ class TestMediaResolverRouting:
         "https://weixin.qq.com/sph/AOzokRxWHz",
         "https://x.com/someuser/status/1234567890",
         "https://twitter.com/someuser/status/1234567890?s=20",
+        "https://x.com/i/spaces/1AKEmvYqbrOKL",
+        "https://x.com/i/spaces/1AKEmvYqbrOKL/peek?s=20",
     ])
     def test_flag_on_routes_to_resolver(self, resolver_on, url):
         downloader = create_downloader(url)

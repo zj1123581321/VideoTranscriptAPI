@@ -289,3 +289,106 @@ class TestFetchWechatDirect:
         with pytest.raises(ResolverResponseError) as ei:
             make_client().fetch_wechat_direct(_SPH)
         assert _SECRET_CDN not in str(ei.value)
+
+
+# --------------------------------------------------------------------------- #
+# X Space replay (resolver v2 file delivery protocol)
+#
+# Contract samples below are the MediaResolverAPI side's own response shapes
+# (PR #45, branch card/x-space-mat): the 200-body `error` is a plain STRING
+# there (ResolveResponse.error: Optional[str]), and the 202 body is
+# {"status": "extracting", "retry_after": 5}. Fixtures are read from disk so
+# the tests cannot drift onto a hand-rolled variant of the contract.
+# --------------------------------------------------------------------------- #
+
+import json as _json
+import pathlib as _pathlib
+
+_SPACE_ID = "1AKEmvYqbrOKL"
+_SPACE_URL = f"https://x.com/i/spaces/{_SPACE_ID}"
+_FIXTURE_DIR = _pathlib.Path(__file__).resolve().parents[1] / "fixtures" / "media_resolver" / "twitter_space"
+
+
+def load_space_fixture(name: str) -> dict:
+    with open(_FIXTURE_DIR / name, encoding="utf-8") as fh:
+        return _json.load(fh)
+
+
+class TestSpaceResolveContract:
+    def test_success_fixture_maps_to_space_data(self, monkeypatch):
+        body = load_space_fixture("resolve_success.json")
+        patch_post(monkeypatch, FakeResponse(200, body))
+        data = make_client().resolve(_SPACE_URL)
+
+        assert body["success"] is True
+        assert data["platform"] == "twitter_space"
+        assert data["media_type"] == "audio"
+        assert data["duration"] is None
+        assert data["variants"] is None
+        assert data["video_id"] == _SPACE_ID
+        assert data["video_url"].endswith(f"/api/stream/twitter_space/{_SPACE_ID}")
+
+    def test_live_fixture_says_not_replayable_yet(self, monkeypatch):
+        body = load_space_fixture("resolve_live_error.json")
+        assert body["success"] is False and "is_live" in body["error"]
+        patch_post(monkeypatch, FakeResponse(200, body))
+        with pytest.raises(NonVideoContentError) as ei:
+            make_client().resolve(_SPACE_URL)
+        assert "这场还不能回放" in str(ei.value)
+        assert "无法识别的链接" not in str(ei.value)
+
+    def test_replay_disabled_fixture_says_replay_unavailable(self, monkeypatch):
+        body = load_space_fixture("resolve_replay_disabled.json")
+        assert body["success"] is False and "replay is disabled" in body["error"]
+        patch_post(monkeypatch, FakeResponse(200, body))
+        with pytest.raises(NonVideoContentError) as ei:
+            make_client().resolve(_SPACE_URL)
+        assert "回放不可用" in str(ei.value)
+        assert "无法识别的链接" not in str(ei.value)
+
+    @pytest.mark.parametrize("live_marker", [
+        "is_live",
+        "is_upcoming",
+        "live_status=missing",
+        "is not a replay",
+    ])
+    def test_not_started_space_says_not_replayable_yet(self, monkeypatch, live_marker):
+        """The resolver reports not-started Space as live_status=is_upcoming or
+        live_status=missing, not only is_live. All three are "not a replay yet"
+        for the user and must not degrade into "解析失败，稍后再试"."""
+        patch_post(monkeypatch, FakeResponse(200, {
+            "success": False,
+            "error": f"Video unavailable (terminal) for platform 'twitter_space', "
+                     f"video_id '{_SPACE_ID}': twitter space is not a replay ({live_marker})",
+        }))
+        with pytest.raises(NonVideoContentError) as ei:
+            make_client().resolve(_SPACE_URL)
+        assert "这场还不能回放" in str(ei.value)
+
+    @pytest.mark.parametrize("gone_marker", [
+        "replay is disabled",
+        "no longer available",
+        "The requested live replay is not available",
+    ])
+    def test_expired_space_says_replay_unavailable(self, monkeypatch, gone_marker):
+        patch_post(monkeypatch, FakeResponse(200, {
+            "success": False,
+            "error": f"All providers failed for platform 'twitter_space', "
+                     f"video_id '{_SPACE_ID}'. Errors: [ytdlp: twitter space replay "
+                     f"unavailable: {gone_marker}]",
+        }))
+        with pytest.raises(NonVideoContentError) as ei:
+            make_client().resolve(_SPACE_URL)
+        assert "回放不可用" in str(ei.value)
+
+    def test_non_space_failure_unaffected_by_space_branch(self, monkeypatch):
+        """The Space branch keys off the resolver's own platform marker, so a
+        douyin failure containing similar wording keeps its old mapping."""
+        patch_post(monkeypatch, FakeResponse(200, {
+            "success": False,
+            "error": {"message": "该内容为图文笔记，没有视频"},
+        }))
+        with pytest.raises(NonVideoContentError) as ei:
+            make_client().resolve("https://www.douyin.com/video/7123")
+        assert "这场还不能回放" not in str(ei.value)
+        assert "回放不可用" not in str(ei.value)

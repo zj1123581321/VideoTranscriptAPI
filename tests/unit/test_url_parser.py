@@ -188,6 +188,34 @@ class TestURLParserBasic:
         assert extract_platform(url) != "twitter"
 
     @pytest.mark.parametrize("url,expected_id", [
+        ("https://x.com/i/spaces/1AKEmvYqbrOKL", "1AKEmvYqbrOKL"),
+        ("https://twitter.com/i/spaces/1AKEmvYqbrOKL", "1AKEmvYqbrOKL"),
+        ("https://mobile.twitter.com/i/spaces/1AKEmvYqbrOKL", "1AKEmvYqbrOKL"),
+        ("https://www.x.com/i/spaces/1AKEmvYqbrOKL", "1AKEmvYqbrOKL"),
+        ("https://x.com/i/spaces/1AKEmvYqbrOKL/peek", "1AKEmvYqbrOKL"),
+        ("https://x.com/i/spaces/1AKEmvYqbrOKL/peek?s=20", "1AKEmvYqbrOKL"),
+        ("https://x.com/i/spaces/1AKEmvYqbrOKL/", "1AKEmvYqbrOKL"),
+        ("https://x.com/i/spaces/1AKEmvYqbrOKL?s=20", "1AKEmvYqbrOKL"),
+    ])
+    def test_twitter_space_url_parsing(self, url, expected_id):
+        """X Space replay links parse as twitter_space, never as twitter/generic."""
+        parser = URLParser()
+        result = parser.parse(url)
+
+        assert result.platform == "twitter_space"
+        assert result.video_id == expected_id
+        assert not result.is_short_url
+        assert result.original_url == url
+        assert extract_platform(url) == "twitter_space"
+
+    def test_twitter_space_id_length_enforced(self):
+        """Resolver only accepts 13-char Space ids, so the parser must not
+        hand a wrong-length id downstream as if it were a valid Space."""
+        parser = URLParser()
+        result = parser.parse("https://x.com/i/spaces/short")
+        assert result.platform != "twitter_space"
+
+    @pytest.mark.parametrize("url,expected_id", [
         ("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ"),
         ("https://m.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ"),
         ("https://www.youtube.com/watch?list=PLtest&v=dQw4w9WgXcQ", "dQw4w9WgXcQ"),
