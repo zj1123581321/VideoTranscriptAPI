@@ -31,3 +31,32 @@
 - **下一步唯一动作**：给 `MediaResolverClient._classify_failure` 加 Space 分支
   （`is_live`/`is_upcoming`/未开播 → `这场还不能回放`；`replay is disabled`/过期 → `回放不可用`），
   用四份 fixture 驱动写红测。
+---
+
+## 里程碑 2：Space v2 客户端（202 轮询 → 完整 m4a）
+
+- **当前阶段**：implementing（第 2/3 步：下载器 + 错误映射）
+- **本段结论**：`MediaResolverDownloader.download_file` 在视频号分支之后加 Space 分支：
+  命中 `<resolver>/api/stream/twitter_space/<13位id>` 时同步轮询同一 URL——202 按响应
+  `retry_after` 退避、502/503 在预算内退避重试、400/404 转终态文案、200 直接落盘且
+  **字节数与 Content-Length 严格相等**（不走基类 1024 容差），等待上限 1800 秒，
+  超时抛含「回放仍在准备」的 `DownloadFailedError`。`_infer_file_ext` 增加
+  `platform=twitter_space` / `media_type=audio` → `m4a`。`MediaResolverClient._classify_failure`
+  在既有分类之前加 Space 分支，直播/未开播 → 「这场还不能回放」，禁用回放/过期 →
+  「回放不可用」。四个定向文件 242 passed。
+- **关键决策与已否决方案**：
+  - **否决**「等 20 分钟/1800 秒是就绪保证」：写死为上限，超时必给用户可见错误，
+    文档明写「服务端后台物化，客户端不保证在上限内就绪」。
+  - **否决**用 `force_refresh` 重解析当 502 的补救：对方 v2 的补救语义就是「下次 GET
+    同一 URL 重新 spawn」，重解析改不了服务端物化状态；测试锁死「502 期间零次 resolve」。
+  - **否决**把 400/404 复用成 `InvalidURLError`（既有「无法识别的链接」文案）：那正是卡面
+    点名要避免的用户可见错误；改用 `NonVideoContentError` + Space 专属文案。
+  - **对轴表的一处扩写（显式提出）**：卡面只列了 error 含 `is_live` → 「这场还不能回放」，
+    但对方 `YtdlpProvider` 对未开播/缺失回的是 `live_status=is_upcoming` / `live_status=missing`
+    （`live_status not in ("was_live","post_live")` 即终态）。只认 `is_live` 会让「未开播」
+    掉进默认分支显示「解析失败，稍后再试」。故关键词扩为
+    `is_live` / `is_upcoming` / `live_status=missing` / `is not a replay`，并加测试锁死四格。
+  - 单测不真睡：monkeypatch `media_resolver.time.sleep` + `time.monotonic`，
+    假时钟只在被 sleep 时推进，1800 秒预算跑完约 0.1 秒。
+- **下一步唯一动作**：补 `docs/guides/media_resolver.md` 的 Space 客户端协议节
+  （202 轮询 / m4a / 1800 秒上限 / 占一个转录 worker / 不接直播与 t.co），跑 `make test`。

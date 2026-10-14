@@ -486,3 +486,331 @@ class TestVariantsSelection:
         assert fresh_variants[0]["url"] in downloaded_urls
         assert dl._video_url_to_page.get(fresh_variants[0]["url"]) == dl._normalize_url("https://x.com/someuser/status/1234567890")
 
+
+
+# --------------------------------------------------------------------------- #
+# X Space replay: MediaResolverAPI v2 two-phase file delivery
+#
+# The stream endpoint answers 202 + {"status": "extracting", "retry_after": 5}
+# while it materializes the replay server-side, then 200 with Content-Length
+# once the single m4a file is published. The 202 body must never be written to
+# disk as media.
+# --------------------------------------------------------------------------- #
+
+import json as _json
+import pathlib as _pathlib
+
+from video_transcript_api.downloaders import media_resolver as mr_module
+
+_SPACE_ID = "1AKEmvYqbrOKL"
+_SPACE_URL = f"https://x.com/i/spaces/{_SPACE_ID}"
+_SPACE_STREAM_URL = f"http://resolver.local:8000/api/stream/twitter_space/{_SPACE_ID}"
+_FIXTURE_DIR = _pathlib.Path(__file__).resolve().parents[1] / "fixtures" / "media_resolver" / "twitter_space"
+_MEDIA_BYTES = b"\x00\x00\x00\x20ftypM4A fake-m4a-payload-for-unit-test"
+
+
+def load_space_fixture(name):
+    with open(_FIXTURE_DIR / name, encoding="utf-8") as fh:
+        return _json.load(fh)
+
+
+class FakeSpaceResponse:
+    """Stand-in for requests.Response with the fields the Space loop reads."""
+
+    def __init__(self, status_code, *, headers=None, chunks=(), text=""):
+        self.status_code = status_code
+        self.headers = headers or {}
+        self._chunks = list(chunks)
+        self.text = text
+        self.closed = False
+
+    def json(self):
+        if self.status_code == 202:
+            return load_space_fixture("stream_202.json")
+        raise ValueError("no json")
+
+    def iter_content(self, chunk_size=8192):
+        return iter(self._chunks)
+
+    def close(self):
+        self.closed = True
+
+
+def space_202_response():
+    body = load_space_fixture("stream_202.json")
+    return FakeSpaceResponse(
+        202,
+        headers={"Content-Type": "application/json"},
+        chunks=[_json.dumps(body).encode("utf-8")],
+        text=_json.dumps(body),
+    )
+
+
+def space_200_response(payload=_MEDIA_BYTES, content_length=None):
+    return FakeSpaceResponse(
+        200,
+        headers={
+            "Content-Type": "audio/mp4",
+            "Content-Disposition": f'attachment; filename="space-{_SPACE_ID}.m4a"',
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(len(payload) if content_length is None else content_length),
+        },
+        chunks=[payload],
+    )
+
+
+class FakeClock:
+    """Monotonic clock that only advances when the code under test sleeps."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+def make_space_downloader(monkeypatch, responses, with_clock=False, sleep_log=None):
+    dl = MediaResolverDownloader()
+    dl._resolver_netloc = "resolver.local:8000"
+    dl._resolver_api_key = "secret-key"
+    monkeypatch.setattr(BaseDownloader, "_validate_media_file", lambda self, path: True)
+    if sleep_log is None:
+        sleep_log = []
+    clock = FakeClock() if with_clock else None
+    if clock is not None:
+        monkeypatch.setattr(mr_module.time, "monotonic", clock)
+
+    seq = list(responses)
+    calls = {"urls": [], "headers": []}
+
+    def fake_get(url, headers=None, stream=False, timeout=None, **kwargs):
+        calls["urls"].append(url)
+        calls["headers"].append(headers)
+        item = seq[min(len(calls["urls"]) - 1, len(seq) - 1)]
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    def fake_sleep(seconds):
+        sleep_log.append(seconds)
+        if clock is not None:
+            clock.sleep(seconds)
+
+    monkeypatch.setattr(mr_module.requests, "get", fake_get)
+    monkeypatch.setattr(mr_module.time, "sleep", fake_sleep)
+    return dl, calls, sleep_log
+
+
+class TestSpaceStreamDetection:
+    def test_space_stream_url_takes_space_branch(self, monkeypatch):
+        """A resolved Space download_url must not fall through to the generic
+        base-class downloader, which would treat HTTP 202 as a finished file."""
+        dl, calls, _ = make_space_downloader(monkeypatch, [space_200_response()])
+        out = dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+        assert out is not None
+        assert calls["urls"] == [_SPACE_STREAM_URL]
+
+    def test_wechat_stream_url_keeps_direct_branch(self, monkeypatch):
+        """Guard: the Space branch must not swallow the wechat /direct path."""
+        dl = make_downloader([WECHAT_DATA])
+        called = {"n": 0}
+
+        def fake_direct(self, sph_code, filename):
+            called["n"] += 1
+            return "/tmp/wechat.mp4"
+
+        monkeypatch.setattr(MediaResolverDownloader, "_download_wechat_direct", fake_direct)
+        monkeypatch.setattr(BaseDownloader, "download_file",
+                            lambda self, u, f, max_retries=3: pytest.fail("base download must not run"))
+        out = dl.download_file(
+            "http://resolver.local:8000/api/stream/wechat_channels/AOzokRxWHz", "x.mp4"
+        )
+        assert out == "/tmp/wechat.mp4"
+        assert called["n"] == 1
+
+    def test_non_space_url_keeps_base_branch(self, monkeypatch):
+        dl = make_downloader([DOUYIN_DATA])
+        di = dl.get_download_info("https://www.douyin.com/video/7123")
+        monkeypatch.setattr(BaseDownloader, "_validate_media_file", lambda self, path: True)
+        monkeypatch.setattr(
+            BaseDownloader, "download_file",
+            lambda self, u, f, max_retries=3: "/tmp/base.mp4",
+        )
+        assert dl.download_file(di.download_url, di.filename) == "/tmp/base.mp4"
+
+
+class TestSpacePollingProtocol:
+    def test_202_polls_same_url_until_200(self, monkeypatch):
+        dl, calls, sleeps = make_space_downloader(
+            monkeypatch, [space_202_response(), space_202_response(), space_200_response()]
+        )
+        out = dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+
+        assert out is not None
+        assert calls["urls"] == [_SPACE_STREAM_URL] * 3  # same URL every time
+        retry_after = load_space_fixture("stream_202.json")["retry_after"]
+        assert sleeps == [float(retry_after)] * 2
+        assert all(h and h.get("X-API-Key") == "secret-key" for h in calls["headers"])
+
+    def test_202_json_body_is_never_written_as_media(self, monkeypatch):
+        """The 202 body is a status document. Media bytes must come from the
+        200 response only, byte for byte."""
+        dl, _calls, _sleeps = make_space_downloader(
+            monkeypatch, [space_202_response(), space_200_response()]
+        )
+        out = dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+
+        with open(out, "rb") as fh:
+            assert fh.read() == _MEDIA_BYTES
+
+    def test_written_size_matches_content_length_exactly(self, monkeypatch):
+        """Content-Length is authoritative; the base class' 1024-byte tolerance
+        must not apply here."""
+        payload = _MEDIA_BYTES + b"x" * 40
+        resp = FakeSpaceResponse(
+            200,
+            headers={"Content-Type": "audio/mp4", "Content-Length": str(len(payload) - 10)},
+            chunks=[payload],
+        )
+        dl, _calls, _sleeps = make_space_downloader(monkeypatch, [resp])
+        with pytest.raises(DownloadFailedError) as ei:
+            dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+        assert "Content-Length" in str(ei.value)
+
+    def test_truncated_body_is_rejected_and_temp_file_removed(self, monkeypatch):
+        resp = FakeSpaceResponse(
+            200,
+            headers={"Content-Type": "audio/mp4", "Content-Length": "99999"},
+            chunks=[b"short"],
+        )
+        dl, _calls, _sleeps = make_space_downloader(monkeypatch, [resp])
+        with pytest.raises(DownloadFailedError):
+            dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+
+    def test_zero_byte_200_rejected(self, monkeypatch):
+        resp = FakeSpaceResponse(
+            200, headers={"Content-Type": "audio/mp4", "Content-Length": "0"}, chunks=[b""]
+        )
+        dl, _calls, _sleeps = make_space_downloader(monkeypatch, [resp])
+        with pytest.raises(DownloadFailedError):
+            dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+
+
+class TestSpaceWaitBudget:
+    def test_never_ready_times_out_with_visible_message(self, monkeypatch):
+        """A permanently 202 endpoint must end in a user-visible timeout, not
+        an infinite poll and not a generic 'unrecognized link'."""
+        dl, calls, sleeps = make_space_downloader(
+            monkeypatch, [space_202_response()], with_clock=True
+        )
+        with pytest.raises(DownloadFailedError) as ei:
+            dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+        assert "回放仍在准备" in str(ei.value)
+        # every poll except the last one waited; the last one hit the budget
+        assert len(sleeps) == len(calls["urls"]) - 1 > 0
+        assert len(calls["urls"]) <= 400  # 1800s / retry_after 5s, bounded
+
+    def test_timeout_test_does_not_really_sleep(self, monkeypatch):
+        """Guard for the unit test itself: the budget is 1800 simulated seconds."""
+        dl, _calls, sleeps = make_space_downloader(
+            monkeypatch, [space_202_response()], with_clock=True
+        )
+        with pytest.raises(DownloadFailedError):
+            dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+        assert 0 < sum(sleeps) <= 1800
+
+
+class TestSpaceStatusMapping:
+    def test_400_stream_error_says_not_replayable_yet(self, monkeypatch):
+        resp = FakeSpaceResponse(400, text="Invalid X Space id")
+        dl, calls, _sleeps = make_space_downloader(monkeypatch, [resp])
+        with pytest.raises(Exception) as ei:
+            dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+        assert "这场还不能回放" in str(ei.value)
+        assert "无法识别的链接" not in str(ei.value)
+        assert len(calls["urls"]) == 1  # terminal, no polling
+
+    def test_404_stream_error_says_replay_unavailable(self, monkeypatch):
+        resp = FakeSpaceResponse(404, text="replay is disabled")
+        dl, calls, _sleeps = make_space_downloader(monkeypatch, [resp])
+        with pytest.raises(Exception) as ei:
+            dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+        assert "回放不可用" in str(ei.value)
+
+    def test_502_retries_same_stream_url_without_re_resolve(self, monkeypatch):
+        """v2: a failed materialization is re-spawned by the next GET of the
+        same URL. Re-resolving the page URL would not help and is forbidden."""
+        dl, calls, sleeps = make_space_downloader(
+            monkeypatch, [FakeSpaceResponse(502, text="materialization failed"), space_200_response()]
+        )
+        out = dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+        assert out is not None
+        assert calls["urls"] == [_SPACE_STREAM_URL, _SPACE_STREAM_URL]
+        assert sleeps and all(s > 0 for s in sleeps)
+
+    def test_502_forever_fails_visibly(self, monkeypatch):
+        dl, calls, _sleeps = make_space_downloader(
+            monkeypatch, [FakeSpaceResponse(502, text="down")], with_clock=True
+        )
+        with pytest.raises(DownloadFailedError):
+            dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+        assert len(set(calls["urls"])) == 1
+        assert len(calls["urls"]) > 1  # retried, not failed fast
+
+    def test_503_retried_then_fails_visibly_when_budget_exhausted(self, monkeypatch):
+        dl, calls, sleeps = make_space_downloader(
+            monkeypatch, [FakeSpaceResponse(503, text="queue is full")], with_clock=True
+        )
+        with pytest.raises(DownloadFailedError) as ei:
+            dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+        assert len(calls["urls"]) > 1
+        assert sum(sleeps) <= 1800
+        assert str(ei.value)
+
+    def test_503_then_200_recovers(self, monkeypatch):
+        dl, _calls, _sleeps = make_space_downloader(
+            monkeypatch, [FakeSpaceResponse(503, text="queue is full"), space_200_response()]
+        )
+        assert dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a") is not None
+
+    def test_unexpected_status_fails_loud(self, monkeypatch):
+        dl, calls, _sleeps = make_space_downloader(
+            monkeypatch, [FakeSpaceResponse(401, text="unauthorized")]
+        )
+        with pytest.raises(Exception) as ei:
+            dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+        assert "401" in str(ei.value)
+        assert len(calls["urls"]) == 1
+
+
+class TestSpaceDownloadInfo:
+    def test_space_product_is_m4a(self):
+        data = load_space_fixture("resolve_success.json")["data"]
+        dl = make_downloader([data])
+        di = dl.get_download_info(_SPACE_URL)
+        assert di.file_ext == "m4a"
+        assert di.filename == f"twitter_space_{_SPACE_ID}.m4a"
+        assert di.download_url.endswith(f"/api/stream/twitter_space/{_SPACE_ID}")
+
+    def test_media_type_audio_is_m4a_for_any_platform(self):
+        data = dict(DOUYIN_DATA, media_type="audio")
+        dl = make_downloader([data])
+        di = dl.get_download_info("https://www.douyin.com/video/7123")
+        assert di.file_ext == "m4a"
+
+    def test_video_media_type_stays_mp4(self):
+        data = dict(DOUYIN_DATA, media_type="video")
+        dl = make_downloader([data])
+        di = dl.get_download_info("https://www.douyin.com/video/7123")
+        assert di.file_ext == "mp4"
+
+    def test_space_metadata_from_fixture(self):
+        data = load_space_fixture("resolve_success.json")["data"]
+        dl = make_downloader([data])
+        md = dl.get_metadata(_SPACE_URL)
+        assert md.platform == "twitter_space"
+        assert md.video_id == _SPACE_ID
+        assert md.duration is None  # Space metadata carries no duration

@@ -17,6 +17,7 @@ import base64
 import math
 import os
 import re
+import time
 from typing import Dict, Optional
 from urllib.parse import urlparse, urlunparse
 
@@ -24,8 +25,19 @@ import requests
 
 from .base import BaseDownloader
 from .models import VideoMetadata, DownloadInfo
-from .media_resolver_client import MediaResolverClient
-from ..errors import DownloadFailedError, ResolverResponseError
+from .media_resolver_client import (
+    MediaResolverClient,
+    _SPACE_NOT_REPLAYABLE_MARKERS,
+    _SPACE_UNAVAILABLE_MARKERS,
+    space_not_replayable_message,
+    space_unavailable_message,
+)
+from ..errors import (
+    DownloadFailedError,
+    InvalidMediaError,
+    NonVideoContentError,
+    ResolverResponseError,
+)
 from ..utils.logging import setup_logger
 from ..utils.url_validator import validate_url_safe, URLValidationError
 
@@ -57,6 +69,18 @@ _WECHAT_DIRECT_MAX_REFRESHES = 5
 _WECHAT_CDN_TIMEOUT = (10, 60)
 _WECHAT_CDN_RETRY_STATUSES = frozenset({401, 403, 404, 410})
 _MP4_FTYP_MAGIC = b"ftyp"
+
+# X Space 回放下载端点（v2 两阶段交付）：文件未就绪时 202，就绪后 200 普通文件。
+# space_id 长度约束与解析服务一致（13 位字母数字）。
+_SPACE_STREAM_PATH_RE = re.compile(r"^/api/stream/twitter_space/([A-Za-z0-9]{13})$")
+# 等待上限：解析服务在服务端后台物化（典型 2 小时场约 10 分钟），同步 worker 轮询等待。
+# 这是上限而不是「保证 30 分钟内一定就绪」：超时给用户可见错误，不静默挂住。
+_SPACE_WAIT_BUDGET_SECONDS = 1800
+# 202 缺 retry_after 时的轮询间隔（对齐服务端默认建议值）
+_SPACE_POLL_DEFAULT_SECONDS = 5
+# 502（物化失败，下次 GET 重新 spawn）/ 503（队列满或水位不足，未受理）退避间隔
+_SPACE_RETRY_SECONDS = 2
+_SPACE_GET_TIMEOUT = 60
 
 
 class MediaResolverDownloader(BaseDownloader):
@@ -252,8 +276,8 @@ class MediaResolverDownloader(BaseDownloader):
         key = self._normalize_url(url)
         self._video_url_to_page[download_url] = key
 
-        file_ext = self._infer_file_ext(download_url)
         platform = data.get("platform", "media")
+        file_ext = self._infer_file_ext(download_url, platform=platform, media_type=data.get("media_type"))
         vid = str(data.get("video_id") or video_id or "media")
         filename = f"{platform}_{vid}.{file_ext}"
         return DownloadInfo(
@@ -264,8 +288,14 @@ class MediaResolverDownloader(BaseDownloader):
         )
 
     @staticmethod
-    def _infer_file_ext(video_url: str) -> str:
-        """contract #3：优先取 video_url 路径后缀；取不到默认 mp4。"""
+    def _infer_file_ext(video_url: str, platform: str = "", media_type=None) -> str:
+        """contract #3：优先取 video_url 路径后缀；取不到默认 mp4。
+
+        例外：audio 产物（X Space 恒为 audio）统一用 m4a —— 服务端交付的是
+        拼接后的单一 m4a 文件，URL 上不带后缀，默认 mp4 会让扩展名与容器不符。
+        """
+        if platform == "twitter_space" or media_type == "audio":
+            return "m4a"
         try:
             path = urlparse(video_url).path
             ext = os.path.splitext(path)[1].lstrip(".").lower()
@@ -309,6 +339,9 @@ class MediaResolverDownloader(BaseDownloader):
         if sph_code:
             return self._download_wechat_direct(sph_code, filename)
 
+        if self._space_stream_id(url):
+            return self._download_space_replay(url, filename)
+
         self._prepare_download_headers(url)
         local_file = super().download_file(url, filename, max_retries=max_retries)
         if local_file:
@@ -349,6 +382,147 @@ class MediaResolverDownloader(BaseDownloader):
         if local_file:
             return local_file
         raise DownloadFailedError(f"重解析后仍下载失败: {fresh_url[:100]}")
+
+    # ------------------------------------------------------------------ #
+    # X Space：v2 两阶段文件交付（202 轮询 → 200 完整 m4a）
+    # ------------------------------------------------------------------ #
+    def _space_stream_id(self, url: str) -> Optional[str]:
+        """命中 resolver 的 Space 下载端点时返回 space_id，否则 None。"""
+        if not url or not self._resolver_netloc:
+            return None
+        try:
+            parsed = urlparse(url)
+        except Exception:
+            return None
+        if (parsed.netloc or "").lower() != self._resolver_netloc:
+            return None
+        match = _SPACE_STREAM_PATH_RE.match(parsed.path or "")
+        return match.group(1) if match else None
+
+    def _download_space_replay(self, url: str, filename: str) -> str:
+        """轮询同一个 stream URL 直到 200 就绪，落盘严格对齐 Content-Length。
+
+        v2 协议：未就绪 202（JSON 状态文档，不得当媒体写盘），就绪 200 普通文件。
+        502 = 上次物化失败（下次 GET 重新 spawn）与 503 = 新任务未受理（可重试）
+        都在等待预算内重试同一 URL；**不做 force_refresh 重解析**——重解析解决不了
+        服务端物化状态，v2 的补救动作就是再 GET 一次。
+        """
+        space_id = self._space_stream_id(url)
+        deadline = time.monotonic() + _SPACE_WAIT_BUDGET_SECONDS
+        headers = {"X-API-Key": self._resolver_api_key} if self._resolver_api_key else {}
+        attempt = 0
+        while True:
+            attempt += 1
+            response = requests.get(url, headers=headers, stream=True, timeout=_SPACE_GET_TIMEOUT)
+            try:
+                status = response.status_code
+                logger.info(f"space stream GET space_id={space_id} attempt={attempt} status={status}")
+                if status == 200:
+                    return self._write_space_file(response, space_id, filename)
+                if status == 202:
+                    delay = self._space_retry_after(response)
+                elif status in (400, 404):
+                    raise self._space_stream_terminal_error(status, self._space_detail(response))
+                elif status in (502, 503):
+                    delay = _SPACE_RETRY_SECONDS
+                    logger.warning(f"space stream retry space_id={space_id} status={status} attempt={attempt}")
+                else:
+                    raise DownloadFailedError(
+                        f"Space 下载端点返回意外状态码({status}): {self._space_detail(response)[:200]}"
+                    )
+            finally:
+                response.close()
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise DownloadFailedError(
+                    f"X Space 回放仍在准备中（已等待 {_SPACE_WAIT_BUDGET_SECONDS} 秒仍未就绪），请稍后重试"
+                )
+            time.sleep(min(delay, remaining))
+
+    @staticmethod
+    def _space_retry_after(response) -> float:
+        """读 202 响应 JSON 的 retry_after 秒数；缺失/畸形时回默认轮询间隔。"""
+        try:
+            body = response.json()
+            retry_after = body.get("retry_after") if isinstance(body, dict) else None
+            if isinstance(retry_after, bool) or not isinstance(retry_after, (int, float)):
+                return float(_SPACE_POLL_DEFAULT_SECONDS)
+            return max(0.0, float(retry_after))
+        except Exception:
+            return float(_SPACE_POLL_DEFAULT_SECONDS)
+
+    @staticmethod
+    def _space_detail(response) -> str:
+        try:
+            return response.text or ""
+        except Exception:
+            return "<no body>"
+
+    @staticmethod
+    def _space_stream_terminal_error(status: int, detail: str) -> Exception:
+        """stream 侧 400/404 → 用户可见终态文案，不得退化成「无法识别的链接」。"""
+        lowered = (detail or "").lower()
+        if any(marker in lowered for marker in _SPACE_NOT_REPLAYABLE_MARKERS):
+            return NonVideoContentError(space_not_replayable_message(detail))
+        if any(marker in lowered for marker in _SPACE_UNAVAILABLE_MARKERS):
+            return NonVideoContentError(space_unavailable_message(detail))
+        # detail 无可辨识关键词时按服务端状态码语义定：400 = 终态不可回放
+        # （space_cache：TerminalError→400），404 = 视频不存在/已过期
+        # （VideoNotFoundError→404）。
+        if status == 400:
+            return NonVideoContentError(space_not_replayable_message(detail or f"HTTP {status}"))
+        return NonVideoContentError(space_unavailable_message(detail or f"HTTP {status}"))
+
+    def _write_space_file(self, response, space_id: str, filename: str) -> str:
+        """把 200 响应写盘；字节数与 Content-Length 严格相等（不走基类 1024 容差）。"""
+        expected_size = self._space_content_length(response)
+        if self.max_download_bytes and expected_size is not None and expected_size > self.max_download_bytes:
+            raise DownloadFailedError(
+                f"Space 回放文件超出体积上限 space_id={space_id} "
+                f"content_length={expected_size} limit={self.max_download_bytes}"
+            )
+
+        ext = os.path.splitext(filename)[1] if "." in filename else ".m4a"
+        local_path = self.temp_manager.create_temp_file(suffix=ext)
+        try:
+            written = 0
+            with open(local_path, "wb") as fh:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if not chunk:
+                        continue
+                    if self.max_download_bytes and written + len(chunk) > self.max_download_bytes:
+                        raise DownloadFailedError(
+                            f"Space 回放流式体积超限 space_id={space_id} "
+                            f"written={written + len(chunk)} limit={self.max_download_bytes}"
+                        )
+                    fh.write(chunk)
+                    written += len(chunk)
+
+            if written == 0:
+                raise DownloadFailedError(f"Space 回放落盘 0 字节 space_id={space_id}")
+            if expected_size is not None and written != expected_size:
+                raise DownloadFailedError(
+                    f"Space 回放落盘字节与 Content-Length 不一致 space_id={space_id} "
+                    f"written={written} content_length={expected_size}"
+                )
+            if not self._validate_media_file(local_path):
+                raise InvalidMediaError(f"Space 回放不是有效媒体文件 space_id={space_id}")
+            logger.info(f"space download complete space_id={space_id} bytes={written}")
+            return str(local_path)
+        except Exception:
+            self._discard_temp(local_path)
+            raise
+
+    @staticmethod
+    def _space_content_length(response) -> Optional[int]:
+        raw = response.headers.get("Content-Length")
+        if raw in (None, ""):
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
 
     # ------------------------------------------------------------------ #
     # 视频号：/direct 解密头 + CDN Range 直连拼接（不经 resolver 流式中转）
