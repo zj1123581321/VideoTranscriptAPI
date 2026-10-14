@@ -1,6 +1,6 @@
 # MediaResolverAPI 集成指南（抖音 / 小红书 / 微信视频号 / X(Twitter) 解析）
 
-> 适用版本：v1（接管 **抖音 + 小红书 + 微信视频号 + X(Twitter)**）。其它平台（B 站 / YouTube / 小宇宙）不受影响，仍走原生下载器。
+> 适用版本：v1（接管 **抖音 + 小红书 + 微信视频号 + X(Twitter)**）。X(Twitter) 含推文音视频与 **X Space 回放**（两阶段文件交付，见「X Space 回放」节）。其它平台（B 站 / YouTube / 小宇宙）不受影响，仍走原生下载器。
 
 ## 这是什么
 
@@ -80,7 +80,33 @@ curl -X POST http://localhost:8000/api/transcribe \
   -d '{"url": "https://weixin.qq.com/sph/AOzokRxWHz"}'
 ```
 
-支持的链接形态：`douyin.com` / `v.douyin.com` 短链 / `xiaohongshu.com` / `xhslink.com` 短链 / `xhslink.cn` 短链 / `weixin.qq.com/sph/<sph_code>` 视频号链接 / `x.com` 与 `twitter.com` 推文链接。
+支持的链接形态：`douyin.com` / `v.douyin.com` 短链 / `xiaohongshu.com` / `xhslink.com` 短链 / `xhslink.cn` 短链 / `weixin.qq.com/sph/<sph_code>` 视频号链接 / `x.com` 与 `twitter.com` 推文链接 / X Space 回放链接。
+
+## X Space 回放（两阶段文件交付）
+
+提交 `https://x.com/i/spaces/<13位ID>`（含 `/peek` 与 query）时，解析服务不会直接给一个能立刻拉的直链，
+而是给一个指向自己的下载端点 `GET /api/stream/twitter_space/{id}`。这是**两阶段物化**：
+
+1. 首次 GET 返回 `202` + `{"status": "extracting", "retry_after": 5}`——服务端后台在物化整场音频
+   （提取回放清单、逐段抓取、拼成单个 m4a 落盘）。**断开连接不影响服务端任务。**
+2. 客户端按 `retry_after` 秒间隔**轮询同一 URL**，直到拿到 `200` 普通文件响应
+   （`Content-Type: audio/mp4`、`Content-Length: <整场大小>`），此时落盘的就是可直接转录的完整 m4a。
+
+本仓库的客户端约定：
+
+| 项 | 行为 |
+|----|------|
+| 202 | 按 `retry_after` 退避后再 GET **同一 URL**；该 JSON 状态体永远不会写进媒体文件 |
+| 200 | 直接落盘，字节数与 `Content-Length` **严格相等**（不套用通用下载器的 1024 字节容差），再走音轨校验 |
+| 400 / 404 | 终态：直播中/未开播 → 「这场还不能回放」；未开启回放或已过期 → 「回放不可用」（不是「无法识别的链接」） |
+| 502 | 上一次后台物化失败（服务端下次 GET 会重新拉起），退避后再 GET 同一 URL；**不做** `force_refresh` 重解析 |
+| 503 | 物化队列满或磁盘水位不足，任务未被受理；在等待预算内退避重试，预算耗尽后失败可见 |
+| 产物后缀 | `twitter_space` 平台或 `media_type=audio` 的解析结果固定为 `m4a`（不是默认 mp4） |
+| 等待上限 | 默认 **1800 秒**（同步等待，超时抛用户可见错误「回放仍在准备」）。这是**上限不是保证**：服务端按约 10~30 倍速拉完全场，2 小时场约 10 分钟，队列满时会更久 |
+| 占用 | 轮询期间**占用一个转录 worker**（`concurrent.max_workers` 的一格），期间不推进 ASR |
+
+不支持：直播中/尚未开播的 Space（那是实时录制，不在本服务范围）；`t.co` 短链包裹的 Space 链接；
+本仓库不解析 HLS、不跑 yt-dlp——物化与合并全在解析服务侧完成。
 
 ## 错误与提示对照
 
@@ -94,6 +120,9 @@ curl -X POST http://localhost:8000/api/transcribe \
 | 图文/已删除/私密等无视频内容 | 该内容无可转录视频 | 否 |
 | 全部解析源失败 | 解析失败，稍后再试 | 否 |
 | 服务端错误（HTTP 5xx） | 解析服务异常 | 是 |
+| X Space 直播中/未开播 | 这场还不能回放（直播中或尚未开始） | 否 |
+| X Space 未开启回放/已过期 | 回放不可用（未开启回放或已过期） | 否 |
+| X Space 等待超上限（>1800 秒仍未就绪） | X Space 回放仍在准备中，请稍后重试 | 否 |
 
 > 注：当前 MediaResolverAPI 的 `error` 仅返回文案、无结构化 `error.code`，因此「图文/删除」类终态
 > 可能被笼统归为「解析失败，稍后再试」。若你维护该服务，建议为终态返回 `error.code` 以便精确区分。
@@ -118,6 +147,8 @@ MediaResolverAPI 返回的视频直链在下载前会经过 **SSRF 校验**（`u
 | 视频号下载失败（502） | resolver 拉微信元数据/CDN 失败，稍后重试 |
 | resolver 返回的 `video_url`（流式端点）的 netloc 须与 `media_resolver.base_url` 一致，否则 X-API-Key 不会携带且可能触发 SSRF 拦截 | 核对 `media_resolver.base_url` 与解析结果里的主机名（含端口）是否完全一致（小写比较） |
 | 抖音下载撞大小上限 | 调高 `storage.max_download_size_mb`，或对长视频暂时关闭开关 |
+| X Space 一直 202，最后报「回放仍在准备」 | 解析服务还在后台物化（队列满/长场次会慢）；重试即可，已物化完成的文件在服务端保留 72 小时 |
+| X Space 报「回放不可用」 | X 只保留回放约 30 天；确认该场次开了回放且未过期 |
 | 想确认走了哪个下载器 | 看日志 `为URL创建下载器: ..., 类型: MediaResolverDownloader` |
 
 ## 相关文档
