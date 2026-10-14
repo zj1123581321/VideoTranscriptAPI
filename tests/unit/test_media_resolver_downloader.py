@@ -678,6 +678,24 @@ class TestSpaceStreamDetection:
         assert out is not None
         assert calls["urls"] == [foreign, foreign]
 
+    def test_wechat_path_on_foreign_netloc_is_not_swallowed_by_space(self, monkeypatch):
+        """Red-verification found this blind spot: the wechat branch is tested
+        first in download_file, so broadening _SPACE_STREAM_PATH_RE to cover
+        other /api/stream/* paths stayed green. Pin the regex itself, since
+        dropping the host gate made Space path matching host-agnostic."""
+        assert MediaResolverDownloader._space_stream_id(
+            MediaResolverDownloader.__new__(MediaResolverDownloader),
+            "http://other-host:9000/api/stream/twitter_space/1AKEmvYqbrOKL",
+        ) == "1AKEmvYqbrOKL"
+        assert MediaResolverDownloader._space_stream_id(
+            MediaResolverDownloader.__new__(MediaResolverDownloader),
+            "http://other-host:9000/api/stream/wechat_channels/AOzokRxWHz",
+        ) is None
+        assert MediaResolverDownloader._space_stream_id(
+            MediaResolverDownloader.__new__(MediaResolverDownloader),
+            "http://other-host:9000/api/stream/twitter_space/short",
+        ) is None
+
     def test_matching_netloc_still_sends_api_key(self, monkeypatch):
         """Guard the other side of the split: dropping the netloc check for
         branch selection must NOT drop X-API-Key delivery to the real host
