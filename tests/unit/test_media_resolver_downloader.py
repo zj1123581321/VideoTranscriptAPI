@@ -498,6 +498,7 @@ class TestVariantsSelection:
 # --------------------------------------------------------------------------- #
 
 import json as _json
+import os
 import pathlib as _pathlib
 
 from video_transcript_api.downloaders import media_resolver as mr_module
@@ -681,14 +682,26 @@ class TestSpacePollingProtocol:
         assert "Content-Length" in str(ei.value)
 
     def test_truncated_body_is_rejected_and_temp_file_removed(self, monkeypatch):
+        """A body that stops short of Content-Length must fail AND leave no
+        half-written temp file behind for the ASR stage to pick up."""
+        created = []
         resp = FakeSpaceResponse(
             200,
             headers={"Content-Type": "audio/mp4", "Content-Length": "99999"},
             chunks=[b"short"],
         )
         dl, _calls, _sleeps = make_space_downloader(monkeypatch, [resp])
+        real_create = dl.temp_manager.create_temp_file
+
+        def tracking_create(*args, **kwargs):
+            path = real_create(*args, **kwargs)
+            created.append(str(path))
+            return path
+
+        monkeypatch.setattr(dl.temp_manager, "create_temp_file", tracking_create)
         with pytest.raises(DownloadFailedError):
             dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+        assert created and not os.path.exists(created[0])
 
     def test_zero_byte_200_rejected(self, monkeypatch):
         resp = FakeSpaceResponse(
