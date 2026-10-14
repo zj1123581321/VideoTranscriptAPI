@@ -715,7 +715,9 @@ class TestSpacePollingProtocol:
 class TestSpaceWaitBudget:
     def test_never_ready_times_out_with_visible_message(self, monkeypatch):
         """A permanently 202 endpoint must end in a user-visible timeout, not
-        an infinite poll and not a generic 'unrecognized link'."""
+        an infinite poll and not a generic 'unrecognized link'. The 1800s
+        budget is simulated (fake clock advances only on sleep), so this test
+        costs no wall-clock time."""
         dl, calls, sleeps = make_space_downloader(
             monkeypatch, [space_202_response()], with_clock=True
         )
@@ -724,16 +726,8 @@ class TestSpaceWaitBudget:
         assert "回放仍在准备" in str(ei.value)
         # every poll except the last one waited; the last one hit the budget
         assert len(sleeps) == len(calls["urls"]) - 1 > 0
-        assert len(calls["urls"]) <= 400  # 1800s / retry_after 5s, bounded
-
-    def test_timeout_test_does_not_really_sleep(self, monkeypatch):
-        """Guard for the unit test itself: the budget is 1800 simulated seconds."""
-        dl, _calls, sleeps = make_space_downloader(
-            monkeypatch, [space_202_response()], with_clock=True
-        )
-        with pytest.raises(DownloadFailedError):
-            dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
         assert 0 < sum(sleeps) <= 1800
+        assert len(calls["urls"]) <= 400  # 1800s / retry_after 5s, bounded
 
 
 class TestSpaceStatusMapping:
