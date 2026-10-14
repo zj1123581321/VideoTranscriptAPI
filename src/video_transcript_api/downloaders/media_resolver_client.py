@@ -63,6 +63,17 @@ _NON_VIDEO_KEYWORDS = (
 )
 
 
+# X Space 回放终态文案关键词（与 MediaResolverAPI v2 交付协议对齐）。
+# 平台标记：对方 resolve 的两条失败链都会把 platform 名印进 error 字符串
+# （终态："... for platform 'twitter_space' ... is not a replay (live_status=is_live)"；
+#  全源失败："All providers failed for platform 'twitter_space' ... replay is disabled"）。
+# 只在带该标记时启用本组映射，避免其它平台含相同词汇的报错被改写。
+_SPACE_ERROR_MARKERS = ("twitter_space", "twitter space")
+# 未开播（is_upcoming）与 live_status 缺失也归这一类：都不是可回放状态。
+_SPACE_NOT_REPLAYABLE_MARKERS = ("is_live", "is_upcoming", "live_status=missing", "is not a replay")
+_SPACE_UNAVAILABLE_MARKERS = ("replay is disabled", "no longer available", "not available")
+
+
 class MediaResolverClient:
     """MediaResolverAPI 解析客户端（requests 实现，超时/退避复用现有风格）。"""
 
@@ -306,6 +317,8 @@ class MediaResolverClient:
         code = (error.get("code") or "").strip().upper()
         message = error.get("message") or "解析失败"
 
+        self._raise_space_failure(message)
+
         if code in _NON_VIDEO_CODES:
             raise NonVideoContentError(f"该内容无可转录视频: {message}")
         if code in _RESOLVE_FAIL_CODES:
@@ -318,6 +331,21 @@ class MediaResolverClient:
 
         # 默认归类为全源失败（不可重试，提示稍后再试）
         raise ResolverResolveError(f"解析失败，稍后再试: {message}")
+
+    @staticmethod
+    def _raise_space_failure(message: str) -> None:
+        """X Space 回放终态 → 用户文案；非 Space 报错原样返回给既有分类。
+
+        直播中/未开播 → 「这场还不能回放」（终态，重试无意义）；
+        未开启回放或已过期 → 「回放不可用」。两者都不可退化成「无法识别的链接」。
+        """
+        lowered = message.lower()
+        if not any(marker in lowered for marker in _SPACE_ERROR_MARKERS):
+            return
+        if any(marker in lowered for marker in _SPACE_NOT_REPLAYABLE_MARKERS):
+            raise NonVideoContentError(f"X Space 这场还不能回放（直播中或尚未开始）: {message}")
+        if any(marker in lowered for marker in _SPACE_UNAVAILABLE_MARKERS):
+            raise NonVideoContentError(f"X Space 回放不可用（未开启回放或已过期）: {message}")
 
     @staticmethod
     def _safe_text(response, limit: int = 300) -> str:
