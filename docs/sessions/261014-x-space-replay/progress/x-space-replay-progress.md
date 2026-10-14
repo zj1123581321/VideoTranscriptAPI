@@ -60,3 +60,27 @@
     假时钟只在被 sleep 时推进，1800 秒预算跑完约 0.1 秒。
 - **下一步唯一动作**：补 `docs/guides/media_resolver.md` 的 Space 客户端协议节
   （202 轮询 / m4a / 1800 秒上限 / 占一个转录 worker / 不接直播与 t.co），跑 `make test`。
+
+---
+
+## 里程碑 3：收尾（文档、全量测试、红验、push）
+
+- **当前阶段**：done（本卡可交付，等主脑验收）
+- **本段结论**：`docs/guides/media_resolver.md` 增补「X Space 回放（两阶段文件交付）」节
+  （202 轮询 / 200 Content-Type audio\/mp4 / 400·404 / 502 / 503 / m4a / 1800 秒上限 /
+  占用一个转录 worker / 不接直播与 t.co），错误对照表与故障排查表各补 3 行。
+  全量 `pytest tests` = 3961 passed, 3 skipped, 1 subtests passed in 177.33s（exit=0）。
+  五处红验全部按最小注入转红（等待预算、1024 容差、超时文案、m4a 分支、502 重试），
+  外加第六处（临时文件清理）确认截断测试判据非恒真。已 push 到
+  `origin/card/vta-261014-x-space-replay`（远端 b8232ed1）。
+- **关键决策与已否决方案**：
+  - **否决**把 `verify-output.log` 用 `git add -f` 硬塞进仓：`.gitignore:30` 收 `*.log`，
+    绕过忽略闸属「扫描式守卫变红只许上报」那类；改为把归档件放在 delegate report 目录
+    （`verify-output.log` / `make-test-final.log`），仓内只留 commit 与报告引用。
+  - **否决**在 `tests/unit/test_asr_monitor_alert_delivery.py` 上「顺手修」那条
+    `OSError: AF_UNIX path too long`：它是执行器沙箱 `TMPDIR` 长达 129 字符导致的继承红
+    （同一条测试 `TMPDIR=/tmp` 下 14 passed），与本卡无关且不在允许清单内。
+  - 合并「等待预算」两格测试为一格（超时文案 + 轮数有界 + 累计 sleep ≤1800），
+    判据不丢、净减 6 行，用于把 diff 从 838 行压回 832 行。
+- **下一步唯一动作**：主脑验收；合并前复核对方 MediaResolverAPI PR #45 的
+  `_202_extracting()` 与 `space_cache._record_failure()` 未再改动。
