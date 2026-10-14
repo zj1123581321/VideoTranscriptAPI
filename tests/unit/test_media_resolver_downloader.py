@@ -501,6 +501,7 @@ import json as _json
 import inspect
 import os
 import pathlib as _pathlib
+import requests
 
 from video_transcript_api.downloaders import media_resolver as mr_module
 from video_transcript_api.downloaders.media_resolver_client import MediaResolverClient
@@ -532,6 +533,12 @@ class FakeSpaceResponse:
         if self.status_code == 202:
             return load_space_fixture("stream_202.json")
         raise ValueError("no json")
+
+    def raise_for_status(self):
+        """Mirror requests.Response: only >=400 raises. HTTP 202 does NOT,
+        which is exactly why the base downloader wrote the 202 JSON to disk."""
+        if self.status_code >= 400:
+            raise requests.exceptions.HTTPError(f"{self.status_code} Error")
 
     def iter_content(self, chunk_size=8192):
         return iter(self._chunks)
@@ -634,6 +641,55 @@ class TestSpaceStreamDetection:
         )
         assert out == "/tmp/wechat.mp4"
         assert called["n"] == 1
+
+    def test_space_path_on_foreign_netloc_still_takes_space_branch(self, monkeypatch):
+        """Consult 20261014-164636: matching the Space *path* is enough to
+        enter the 202-polling branch. If the download URL's host differs from
+        media_resolver.base_url (reverse proxy, CDN alias, PUBLIC_BASE_URL
+        rewrite), the old netloc gate let the URL fall through to the base
+        downloader, which called raise_for_status() on HTTP 202 (no raise) and
+        wrote the {"status": "extracting"} JSON to disk as media."""
+        dl, calls, sleeps = make_space_downloader(monkeypatch, [space_200_response()])
+        foreign = "http://other-host:9000/api/stream/twitter_space/1AKEmvYqbrOKL"
+
+        monkeypatch.setattr(
+            BaseDownloader, "download_file",
+            lambda self, u, f, max_retries=3: pytest.fail("base download must not run"),
+        )
+        out = dl.download_file(foreign, f"twitter_space_{_SPACE_ID}.m4a")
+
+        assert out is not None
+        assert calls["urls"] == [foreign]
+        assert sleeps == []  # 200 arrived immediately, no polling needed
+
+    def test_space_path_with_empty_resolver_netloc_takes_space_branch(self, monkeypatch):
+        """Same gate, other half: _resolver_netloc empty (config not loaded
+        through the constructor) must not disable Space detection either."""
+        dl, calls, _sleeps = make_space_downloader(monkeypatch, [space_202_response(), space_200_response()])
+        dl._resolver_netloc = ""
+        foreign = "http://other-host:9000/api/stream/twitter_space/1AKEmvYqbrOKL"
+
+        monkeypatch.setattr(
+            BaseDownloader, "download_file",
+            lambda self, u, f, max_retries=3: pytest.fail("base download must not run"),
+        )
+        out = dl.download_file(foreign, f"twitter_space_{_SPACE_ID}.m4a")
+
+        assert out is not None
+        assert calls["urls"] == [foreign, foreign]
+
+    def test_foreign_netloc_202_never_becomes_the_media_file(self, monkeypatch):
+        """The exact leak from the consult: 202 body must never be the bytes
+        handed to the ASR stage, whatever the URL host."""
+        dl, _calls, _sleeps = make_space_downloader(
+            monkeypatch, [space_202_response(), space_200_response()]
+        )
+        foreign = "http://other-host:9000/api/stream/twitter_space/1AKEmvYqbrOKL"
+        out = dl.download_file(foreign, f"twitter_space_{_SPACE_ID}.m4a")
+
+        with open(out, "rb") as fh:
+            assert fh.read() == _MEDIA_BYTES
+        assert b"extracting" not in _MEDIA_BYTES
 
     def test_non_space_url_keeps_base_branch(self, monkeypatch):
         dl = make_downloader([DOUYIN_DATA])
