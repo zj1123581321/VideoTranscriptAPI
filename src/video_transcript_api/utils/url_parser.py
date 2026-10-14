@@ -54,7 +54,7 @@ class ParsedURL:
     解析后的 URL 信息
 
     Attributes:
-        platform: 平台名称 (youtube/bilibili/douyin/xiaohongshu/xiaoyuzhou/apple_podcast/wechat_channels/twitter/generic)
+        platform: 平台名称 (youtube/bilibili/douyin/xiaohongshu/xiaoyuzhou/apple_podcast/wechat_channels/twitter_space/twitter/generic)
         video_id: 视频ID (唯一标识)
         normalized_url: 规范化的URL（长链接格式）
         is_short_url: 是否为短链接
@@ -114,6 +114,12 @@ class URLParser:
         ],
         'wechat_channels': [
             r'weixin\.qq\.com/sph/([A-Za-z0-9_-]+)',  # 微信视频号
+        ],
+        # X Space 回放：/i/spaces/<13位字母数字>（含 /peek 与 query）。
+        # 必须排在 'twitter' 之前：两者互斥（Space 无 /status/ 路径），
+        # 但先命中 Space 才能让 extract_platform 的正则遍历给出 twitter_space。
+        'twitter_space': [
+            r'(?:^|://|//|@|[\s])(?:[a-zA-Z0-9-]+\.)*(?:twitter\.com|x\.com)/i/spaces/([A-Za-z0-9]{13})(?![A-Za-z0-9])',  # X Space 回放
         ],
         'twitter': [
             r'(?:^|://|//|@|[\s])(?:[a-zA-Z0-9-]+\.)*(?:twitter\.com|x\.com)(?::\d+)?/[^/?#]+/status(?:es)?/(\d+)',  # X(Twitter) 推文/视频
