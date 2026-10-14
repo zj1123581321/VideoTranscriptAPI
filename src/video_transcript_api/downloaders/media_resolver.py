@@ -385,14 +385,19 @@ class MediaResolverDownloader(BaseDownloader):
     # X Space：v2 两阶段文件交付（202 轮询 → 200 完整 m4a）
     # ------------------------------------------------------------------ #
     def _space_stream_id(self, url: str) -> Optional[str]:
-        """命中 resolver 的 Space 下载端点时返回 space_id，否则 None。"""
-        if not url or not self._resolver_netloc:
+        """命中 Space 下载端点路径时返回 space_id，否则 None。
+
+        只看 path、不看 netloc（咨询 20261014-164636）：解析服务可能以反向代理、
+        CDN 别名或改写过的 PUBLIC_BASE_URL 下发 video_url，主机名与配置的
+        media_resolver.base_url 不必字节相等。主机门闩会让这类 URL 落进基类
+        download_file，而基类 raise_for_status() 对 202 不抛，{"status":
+        "extracting"} 的 JSON 会被当媒体写盘。路径形态已足够特异，无需主机前缀。
+        """
+        if not url:
             return None
         try:
             parsed = urlparse(url)
         except Exception:
-            return None
-        if (parsed.netloc or "").lower() != self._resolver_netloc:
             return None
         match = _SPACE_STREAM_PATH_RE.match(parsed.path or "")
         return match.group(1) if match else None
@@ -407,7 +412,10 @@ class MediaResolverDownloader(BaseDownloader):
         """
         space_id = self._space_stream_id(url)
         deadline = time.monotonic() + _SPACE_WAIT_BUDGET_SECONDS
-        headers = {"X-API-Key": self._resolver_api_key} if self._resolver_api_key else {}
+        # 路径门闩不看主机，X-API-Key 不能跟着一起放开：复用既有的按 netloc
+        # 判定（与视频号 /direct 同一套比较），别名主机不拿解析服务密钥。
+        self._prepare_download_headers(url)
+        headers = dict(self.download_headers or {})
         attempt = 0
         while True:
             attempt += 1

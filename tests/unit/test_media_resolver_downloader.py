@@ -678,6 +678,26 @@ class TestSpaceStreamDetection:
         assert out is not None
         assert calls["urls"] == [foreign, foreign]
 
+    def test_matching_netloc_still_sends_api_key(self, monkeypatch):
+        """Guard the other side of the split: dropping the netloc check for
+        branch selection must NOT drop X-API-Key delivery to the real host
+        (the stream endpoint requires it)."""
+        dl, calls, _sleeps = make_space_downloader(monkeypatch, [space_200_response()])
+        out = dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
+        assert out is not None
+        assert calls["headers"] == [{"X-API-Key": "secret-key"}]
+
+    def test_foreign_netloc_does_not_receive_api_key(self, monkeypatch):
+        """Branch selection is host-agnostic; credential delivery is not.
+        A proxy/CDN alias host must not receive media_resolver.api_key."""
+        dl, calls, _sleeps = make_space_downloader(monkeypatch, [space_200_response()])
+        foreign = "http://other-host:9000/api/stream/twitter_space/1AKEmvYqbrOKL"
+        out = dl.download_file(foreign, f"twitter_space_{_SPACE_ID}.m4a")
+        assert out is not None
+        assert all(
+            not (h or {}).get("X-API-Key") for h in calls["headers"]
+        ), "X-API-Key leaked to a host that is not media_resolver.base_url"
+
     def test_foreign_netloc_202_never_becomes_the_media_file(self, monkeypatch):
         """The exact leak from the consult: 202 body must never be the bytes
         handed to the ASR stage, whatever the URL host."""
