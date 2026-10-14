@@ -29,8 +29,6 @@ from .media_resolver_client import (
     MediaResolverClient,
     _SPACE_NOT_REPLAYABLE_MARKERS,
     _SPACE_UNAVAILABLE_MARKERS,
-    space_not_replayable_message,
-    space_unavailable_message,
 )
 from ..errors import (
     DownloadFailedError,
@@ -461,18 +459,23 @@ class MediaResolverDownloader(BaseDownloader):
 
     @staticmethod
     def _space_stream_terminal_error(status: int, detail: str) -> Exception:
-        """stream 侧 400/404 → 用户可见终态文案，不得退化成「无法识别的链接」。"""
+        """stream 侧 400/404 → 用户可见终态文案，不得退化成「无法识别的链接」。
+
+        文案与 resolve 侧（MediaResolverClient._raise_space_failure）逐字一致，
+        由 tests/unit/test_media_resolver_downloader.py 的跨面一致用例锁住。
+        """
         lowered = (detail or "").lower()
         if any(marker in lowered for marker in _SPACE_NOT_REPLAYABLE_MARKERS):
-            return NonVideoContentError(space_not_replayable_message(detail))
+            return NonVideoContentError(f"X Space 这场还不能回放（直播中或尚未开始）: {detail}")
         if any(marker in lowered for marker in _SPACE_UNAVAILABLE_MARKERS):
-            return NonVideoContentError(space_unavailable_message(detail))
+            return NonVideoContentError(f"X Space 回放不可用（未开启回放或已过期）: {detail}")
         # detail 无可辨识关键词时按服务端状态码语义定：400 = 终态不可回放
         # （space_cache：TerminalError→400），404 = 视频不存在/已过期
         # （VideoNotFoundError→404）。
+        shown = detail or f"HTTP {status}"
         if status == 400:
-            return NonVideoContentError(space_not_replayable_message(detail or f"HTTP {status}"))
-        return NonVideoContentError(space_unavailable_message(detail or f"HTTP {status}"))
+            return NonVideoContentError(f"X Space 这场还不能回放（直播中或尚未开始）: {shown}")
+        return NonVideoContentError(f"X Space 回放不可用（未开启回放或已过期）: {shown}")
 
     def _write_space_file(self, response, space_id: str, filename: str) -> str:
         """把 200 响应写盘；字节数与 Content-Length 严格相等（不走基类 1024 容差）。"""

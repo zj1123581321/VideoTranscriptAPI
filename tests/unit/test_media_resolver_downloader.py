@@ -498,10 +498,13 @@ class TestVariantsSelection:
 # --------------------------------------------------------------------------- #
 
 import json as _json
+import inspect
 import os
 import pathlib as _pathlib
 
 from video_transcript_api.downloaders import media_resolver as mr_module
+from video_transcript_api.downloaders.media_resolver_client import MediaResolverClient
+from video_transcript_api.errors import NonVideoContentError
 
 _SPACE_ID = "1AKEmvYqbrOKL"
 _SPACE_URL = f"https://x.com/i/spaces/{_SPACE_ID}"
@@ -791,6 +794,36 @@ class TestSpaceStatusMapping:
             dl.download_file(_SPACE_STREAM_URL, f"twitter_space_{_SPACE_ID}.m4a")
         assert "401" in str(ei.value)
         assert len(calls["urls"]) == 1
+
+
+class TestSpaceWordingConsistency:
+    """One wording, two surfaces: the resolve-side failure (MediaResolverClient)
+    and the stream-side failure (this downloader) must not drift apart."""
+
+    def test_stream_and_resolve_prefixes_are_identical(self):
+        with pytest.raises(NonVideoContentError) as resolve_side:
+            MediaResolverClient._raise_space_failure(
+                "Video unavailable (terminal) for platform 'twitter_space': not a replay (is_live)"
+            )
+        stream_side = MediaResolverDownloader._space_stream_terminal_error(400, "Invalid X Space id")
+        assert isinstance(stream_side, NonVideoContentError)
+        assert str(resolve_side.value).split(":")[0] == str(stream_side).split(":")[0]
+
+        with pytest.raises(NonVideoContentError) as resolve_gone:
+            MediaResolverClient._raise_space_failure(
+                "All providers failed for platform 'twitter_space': replay is disabled"
+            )
+        stream_gone = MediaResolverDownloader._space_stream_terminal_error(404, "no body")
+        assert isinstance(stream_gone, NonVideoContentError)
+        assert str(resolve_gone.value).split(":")[0] == str(stream_gone).split(":")[0]
+
+    def test_all_three_user_visible_sentences_live_in_the_downloader(self):
+        """Task card failure-visibility: the three sentences the user sees on
+        the Space path are produced by code in this module."""
+        source = inspect.getsource(mr_module)
+        assert "回放仍在准备" in source
+        assert "这场还不能回放" in source
+        assert "回放不可用" in source
 
 
 class TestSpaceDownloadInfo:
