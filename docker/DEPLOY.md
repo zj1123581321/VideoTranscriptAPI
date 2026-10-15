@@ -5,7 +5,7 @@
 push `main` 后自动完成构建与部署：`.github/workflows/deploy.yml` 调用 `zlxlabs/ci-templates` 的 `build-deploy.yml@v2`（self-hosted runner）：构建镜像（`docker/Dockerfile`，构建上下文为仓根）→ 推送 ACR（不可变 12 位短 SHA tag）→ SSH 到 n305 → 健康探针通过后在部署目录 `/opt/media/VideoTranscriptAPI` 按本地 tag `video-transcript-api:latest` 切换容器，探针失败自动回滚上一健康版本。`paths-ignore` 排除 `**.md`、`docs/**`、`.github/**`——只改文档或 CI 不扇出生产部署；workflow 自身修复后用 `workflow_dispatch` 手动补发。
 
 - 健康探针用 `http://localhost:8200/livez`（宿主 8200 → 容器 8000），不用 `/health`：`/livez` 是纯存活探针、恒 200、不依赖下游，专为部署探针设计；`/health` 的深度检查依赖转写后端等下游服务，下游抖动会把健康的新版本误判为不健康并触发无谓回滚。
-- 在飞任务保护（忙锁门禁）已在 workflow 启用（`busy_lock_file` 指向部署目录 `.deploy-state/busy.lock`，超时 600s 延期）：服务侧 BusyLock 对同一文件持共享 flock，锁基础设施异常一律 fail-closed 拒绝新任务（HTTP 503），不存在「锁文件缺失自动创建后门禁空转」的降级路径——宿主锁文件缺失时 deploy.yml 的 pre-flight 对账即失败，自动部署 fail-closed 延期、人工介入；事后对账失败还会自动回滚到 pre-flight 记录的锚点镜像。部署窗口仍建议确认无长转写任务（事故背景：2026-10-15 手动部署打断在飞转写任务）。
+- 在飞任务保护（忙锁门禁）已在 workflow 启用（`busy_lock_file` 指向部署目录 `.deploy-state/busy.lock`，超时 600s 延期）：服务侧 BusyLock 只读打开部署侧预建的锁文件并持共享 flock（服务侧永不自建锁文件——自建文件落在容器层时与宿主部署锁不同 inode，互斥静默失效），锁基础设施异常一律 fail-closed 拒绝新任务（HTTP 503），不存在「锁文件缺失自动创建后门禁空转」的降级路径——宿主锁文件缺失时 deploy.yml 的 pre-flight 对账即失败，自动部署 fail-closed 延期、人工介入（首次人工部署步骤含 `touch busy.lock`）；事后对账失败还会自动回滚到 `.deploy-state/last_verified_good` 记录的最近验证好镜像。部署窗口仍建议确认无长转写任务（事故背景：2026-10-15 手动部署打断在飞转写任务）。
 - 部署目录的 compose 必须与本仓种子同形态（本地 tag）：ci-templates 部署脚本从 ACR 拉取不可变 SHA 镜像后在本机 retag 成 `video-transcript-api:latest`，镜像对账也认这个本地名；旧的 digest-env 形态（registry digest env 占位）与之不兼容，首次自动部署前需先确认部署目录已换成本仓种子。
 
 ## 旧手动链路（已退役）

@@ -282,11 +282,15 @@ def client(
     tmp_path,
     monkeypatch,
 ):
-    # Busy lock is fail-closed: pin the lock path to tmp so admission tracks
-    # the flow under test, not the absent /app mount (see test_busy_lock).
+    # Busy lock is fail-closed and never self-provisions: pin the lock path
+    # to tmp and pre-create the file (standing in for the deployment side);
+    # admission must track the flow under test, not the absent /app mount
+    # (see test_busy_lock).
+    lock_path = tmp_path / "busy.lock"
+    lock_path.touch()
     monkeypatch.setattr(
         "video_transcript_api.utils.busy_lock.BUSY_LOCK_PATH",
-        str(tmp_path / "busy.lock"),
+        str(lock_path),
     )
     app = _build_test_app()
     return TestClient(app)

@@ -135,3 +135,19 @@ implementing：三处修复落盘，yaml/actionlint/Accept-Check 通过，待 pu
 
 ### 下一步唯一动作
 commit 本段，push fast-forward，更新 PR 正文第 6 轮处置，写报告。
+
+## 2026-10-16 里程碑9：gate primary 第 7 轮——锚点语义重构 + 服务侧禁止自建锁文件
+
+### 当前阶段
+implementing：三条裁决落盘，全量 make test 唯一失败=继承红 AF_UNIX，待 push。
+
+### 本段结论
+①锚点重构为「last verified good」单一事实源：verify 对账通过后 tmp+rename 原子写 `.deploy-state/last_verified_good`（写前 sha256 格式校验）；回滚只读该文件，缺失/格式坏→rollback_failed；pre-flight 不再写任何锚点、run id 隔离文件代码全删（RUN_ID 传参/校验/文件名后缀）。并发时序：ship host 锁串行化替换 + 各自 verify 在自己 ship 后写锚点 → B 替换后 verify 失败回滚到 A 写下的上一验证好版本，语义正确。旧方案缺陷（pre-flight 锚点可能采到不健康版本——旧容器健康状况从未被验证）随重构消除。②服务侧禁止自建锁基础设施：busy_lock.py 删 makedirs 与 O_CREAT，只读打开既有文件；ENOENT（文件/目录缺失同分支）→ disabled + admission False + WARN「lock file missing — deployment mount likely broken」；目录不存在/文件不存在同走该分支；isfile 检查保留在 flock 前（目录 fd 也能 flock，必须先拦）。③finding③（SSH 会话不可达）答辩不入码：回滚自身同样需要 SSH，物理无修复通道；缓解=workflow 红 + 飞书 CI 告警（已有），答辩文字进 PR 正文。
+
+### 关键决策与已否决方案
+- 红验：注入旧自建行为（exists 检查+makedirs+O_CREAT）→ `test_missing_lock_file_denies_and_warns` 报 `assert True is False`（被验不变式的 AssertionError）；另一用例红在注入副作用（not-a-dir 父路径 makedirs 撞 FileExistsError），不计入证据。仅还原注入行，窄验复绿。
+- 涟漪同步（越界申报，与第 5 轮同类）：禁止自建使「钉路径到 tmp 但不建文件」的 4 处测试支撑全部失效——test_api_routes autouse fixture、test_processing_options client fixture（+touch 一行×2）、local_upload_capacity.py 沙箱（mkdir+touch 预建，沙箱代表部署侧）。断言零改动。
+- 原子写用 tmp+rename 而非直接覆盖：回滚读侧绝不看到半截文件；`.tmp.$$` 后缀随进程消亡，无清理需求。
+
+### 下一步唯一动作
+commit 本段，push fast-forward，PR 正文补第 7 轮处置与 finding③ 答辩，写报告。

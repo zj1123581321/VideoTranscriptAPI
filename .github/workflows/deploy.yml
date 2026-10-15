@@ -1,12 +1,12 @@
 # ci-templates 已迁移到 zlxlabs org；部署工作流与脚本钉到同一移动版本 tag，随上游 v2 被动升级。
 # push main 自动 build→ACR→SSH n305→探针→部署。
 #
-# 忙锁门禁 fail-closed 全链：服务侧 BusyLock 锁基础设施异常即拒绝新任务（HTTP 503）；
-# 部署脚本对同一文件申请排他锁。事前 pre-flight：对当前运行容器对账宿主/容器 busy.lock 的
-# stat -c %i，并把当前运行镜像 ID 记为本 run 专属回滚锚点
-# （.deploy-state/last_good_image.<run_id>，按 run 隔离防并发覆盖）；失败则 ship 不跑。
-# 事后 verify-busy-lock-inode：ship 成功后对账新容器，失败则 retag 本 run 锚点镜像并
-# compose up -d 回滚（不自动重试部署，回滚后人工判断）。双闸 + 回滚，不静默降级。
+# 忙锁门禁 fail-closed 全链：服务侧 BusyLock 只认部署侧预建的锁文件（缺失即拒绝新任务，
+# HTTP 503）；部署脚本对同一文件申请排他锁。事前 pre-flight：对当前运行容器对账宿主/容器
+# busy.lock 的 stat -c %i；失败则 ship 不跑。事后 verify-busy-lock-inode：ship 成功后
+# 对账新容器，通过则原子写「last verified good」镜像（.deploy-state/last_verified_good，
+# 单一事实源）；对账失败则 retag 该文件记录的镜像并 compose up -d 回滚（不自动重试部署，
+# 回滚后人工判断）。双闸 + 回滚，不静默降级。
 # SSH 身份不再正则解析 ci-templates default：全部 SSH 使用处读 repo variable（见下方 env
 # 与 ship 的 ssh_user 输入，同名变量）；未配置时 pre-flight 第一步即失败并给配置指引。
 name: deploy
@@ -29,7 +29,7 @@ env:
   SSH_USER: ${{ vars.VTA_DEPLOY_SSH_USER }}
 
 jobs:
-  # 替换前对当前运行容器做 inode 对账并记录回滚锚点。失败 → ship 不执行（首次无挂载/inode 不一致/容器不存在均 fail-closed）。
+  # 替换前对当前运行容器做 inode 对账。失败 → ship 不执行（首次无挂载/inode 不一致/容器不存在均 fail-closed）。
   pre-flight:
     runs-on: [self-hosted, linux, x64, codex]
     timeout-minutes: 5
@@ -60,7 +60,7 @@ jobs:
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
           [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
           SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
-          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "RUN_ID='${GITHUB_RUN_ID}' DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' bash -s" <<'REMOTE'
+          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' bash -s" <<'REMOTE'
           set -euo pipefail
           host_lock="${DEPLOY_DIR}/.deploy-state/busy.lock"
           container_lock="/app/.deploy-state/busy.lock"
@@ -86,13 +86,7 @@ jobs:
             echo "::error::pre-flight busy.lock inode mismatch host=${host_inode} container=${container_inode}"
             exit 1
           fi
-          # 回滚锚点：ship 替换前先记下当前运行镜像 ID，按 run 隔离（verify 失败回滚只读
-          # 本 run 的文件，防接续/并发部署覆盖共享锚点导致回滚到错镜像）。只在全部对账
-          # 通过后记录；本步失败同样 fail-closed 阻止 ship。
-          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::invalid RUN_ID: ${RUN_ID}"; exit 1; }
-          running_image="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME")"
-          printf '%s\n' "$running_image" > "${DEPLOY_DIR}/.deploy-state/last_good_image.${RUN_ID}"
-          echo "pre-flight busy.lock inode ok ${host_inode}; last good image recorded for run ${RUN_ID}: ${running_image}"
+          echo "pre-flight busy.lock inode ok ${host_inode}"
           REMOTE
 
   ship:
@@ -121,9 +115,10 @@ jobs:
       FEISHU_CI_WEBHOOK: ${{ secrets.FEISHU_CI_WEBHOOK }}   # 未配置时通知层打 warning 跳过,不影响部署结论
 
   # reusable ship job 无法插入步骤；本 job 在健康探针已通过之后、workflow 宣告成功之前
-  # 对账 inode。同一 host / key / deploy_dir（新 SSH 会话）。挂载失败 → job failure，
-  # 且自动 retag pre-flight 记录的回滚锚点镜像并 compose up -d 回滚；回滚本身失败则
-  # 双重失败（workflow 红 + rollback failed 错误行），不吞错、不自动重试部署。
+  # 对账 inode。同一 host / key / deploy_dir（新 SSH 会话）。通过 → 原子写 last_verified_good
+  # （唯一回滚事实源）；失败 → job failure，且自动 retag last_verified_good 记录的镜像并
+  # compose up -d 回滚；回滚本身失败则双重失败（workflow 红 + rollback failed 错误行），
+  # 不吞错、不自动重试部署。
   verify-busy-lock-inode:
     needs: ship
     runs-on: [self-hosted, linux, x64, codex]
@@ -179,14 +174,25 @@ jobs:
             exit 1
           fi
           echo "busy.lock inode ok ${host_inode}"
+          # 对账通过 → 记录「last verified good」（唯一回滚事实源）。tmp+rename 原子写，
+          # 读侧不会看到半截文件；并发时序由 ship 的 host 部署锁串行化替换 + 各自 verify
+          # 在自己 ship 后写锚点保证：B 替换后 verify 失败，回滚到 A 写下的上一验证好版本。
+          verified_image="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME")"
+          case "$verified_image" in
+            sha256:*) ;;
+            *) echo "::error::rollback_failed: refusing to record malformed image ref: ${verified_image}"; exit 1 ;;
+          esac
+          printf '%s\n' "$verified_image" > "${DEPLOY_DIR}/.deploy-state/last_verified_good.tmp.$$"
+          mv -f "${DEPLOY_DIR}/.deploy-state/last_verified_good.tmp.$$" "${DEPLOY_DIR}/.deploy-state/last_verified_good"
+          echo "last verified good recorded: ${verified_image}"
           REMOTE
 
-      # 对账失败 → 回滚到本 run pre-flight 记录的镜像锚点（同一 host / key，新 SSH 会话）。
-      # always() 保证本 step 不随前序 step 失败被跳过；是否真回滚由运行时按对账 step 的
-      # outcome 显式分支：failure → 回滚；success/skipped/cancelled → 空转成功（对账失败
-      # 本身已让 job 变红，回滚成功也不改变结论——回滚后人工判断，不自动重试部署）。
-      # 回滚自身任何一步失败都报 rollback failed，job 双重失败，不吞错。
-      - name: Rollback to last good image (post-verify failed)
+      # 对账失败 → 回滚到 last_verified_good 记录的最近验证好镜像（同一 host / key，
+      # 新 SSH 会话）。always() 保证本 step 不随前序 step 失败被跳过；是否真回滚由运行时按
+      # 对账 step 的 outcome 显式分支：failure → 回滚；success/skipped/cancelled → 空转成功
+      # （对账失败本身已让 job 变红，回滚成功也不改变结论——回滚后人工判断，不自动重试部署）。
+      # 锚点缺失/格式坏/回滚自身任何一步失败都报 rollback failed，job 双重失败，不吞错。
+      - name: Rollback to last verified good image (post-verify failed)
         if: always()
         env:
           DEPLOY_HOST: 100.68.21.80
@@ -203,12 +209,10 @@ jobs:
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
           [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
           SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
-          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "RUN_ID='${GITHUB_RUN_ID}' DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' IMAGE_NAME='$IMAGE_NAME' bash -s" <<'REMOTE'
+          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' IMAGE_NAME='$IMAGE_NAME' bash -s" <<'REMOTE'
           set -euo pipefail
-          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::invalid RUN_ID: ${RUN_ID}"; exit 1; }
-          # 锚点按 run 隔离：只读本 run pre-flight 写入的文件，防接续/并发部署覆盖
-          # 共享锚点导致回滚到错镜像；串行化由 ship 的 host 级部署锁保证。
-          last_good_file="${DEPLOY_DIR}/.deploy-state/last_good_image.${RUN_ID}"
+          # 只读唯一事实源：最近一次对账通过时记录的镜像（tmp+rename 原子写，无半截读）。
+          last_good_file="${DEPLOY_DIR}/.deploy-state/last_verified_good"
           if [ ! -s "$last_good_file" ]; then
             echo "::error::rollback_failed: last good image record missing or empty: ${last_good_file}"
             exit 1

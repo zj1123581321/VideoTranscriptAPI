@@ -300,6 +300,11 @@ def run_experiment(duration_seconds: int) -> int:
         root = Path(temporary).resolve()
         if root == PROJECT_ROOT or PROJECT_ROOT in root.parents:
             raise ExperimentFailure("sandbox_must_be_outside_project_tree")
+        # busy lock is fail-closed and never self-provisions: the sandbox stands
+        # in for the deployment side and pre-creates the lock file (service-side
+        # admission opens it read-only via VTA_BUSY_LOCK_PATH).
+        (root / "data").mkdir(parents=True, exist_ok=True)
+        (root / "data" / "busy.lock").touch()
         wav_path = root / "bounded-synthetic.wav"
         payload = _make_wav(wav_path, duration_seconds)
         if len(payload) > 4 * 1024 * 1024:
