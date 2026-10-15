@@ -5,8 +5,10 @@ Source: Noto Sans SC variable font (OFL), downloaded from google/fonts:
 License: tests/og_card/fonts/OFL.txt (SIL Open Font License 1.1).
 
 Glyph coverage is derived from every non-ASCII character that appears in
-tests/og_card/*.py plus a fixed ASCII printable set, so any new Chinese text
-added to the tests must be followed by a rerun of this script:
+tests/og_card/*.py and in the renderer source (its own text literals, e.g.
+the "AI 总结" footer label), plus a fixed ASCII printable set, so any new
+Chinese text added to the tests or the renderer must be followed by a rerun
+of this script:
 
   uv run --with fonttools python tests/og_card/fonts/build_subsets.py \
       --source /path/to/NotoSansSC-VF.ttf
@@ -26,12 +28,17 @@ from fontTools.ttLib import TTFont
 from fontTools.varLib.instancer import instantiateVariableFont
 
 TESTS_DIR = Path(__file__).resolve().parent.parent
+RENDERER_SRC = (
+    Path(__file__).resolve().parents[3]
+    / "src" / "video_transcript_api" / "utils" / "rendering" / "og_card.py"
+)
 OUTPUT_DIR = Path(__file__).resolve().parent
 
 
 def collect_characters() -> str:
     chars = set(string.printable)
-    for path in sorted(TESTS_DIR.glob("*.py")):
+    scan_paths = [*sorted(TESTS_DIR.glob("*.py")), RENDERER_SRC]
+    for path in scan_paths:
         chars.update(path.read_text(encoding="utf-8"))
     # Layout constants referenced by the renderer but not spelled out in tests.
     chars.update("…·")

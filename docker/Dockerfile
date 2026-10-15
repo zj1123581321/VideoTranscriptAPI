@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     git \
     libjemalloc2 \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # jemalloc: 替代 glibc malloc，主动归还空闲内存给 OS，

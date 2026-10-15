@@ -20,3 +20,12 @@ Dispatch: dlg-20261015-161551-bd7bb2
 - 本段结论：views.py 新增 `GET /og/{view_token}.png`（include_in_schema=False）：ViewTokenResolver 解 token → load_share_card 读卡 → og_card.png 比 json 新则直接回缓存、否则重渲染原子覆盖后返回，Content-Type image/png；token 无缓存/无卡/卡不合契约一律 404。路由测试 8 条全绿（含缓存命中哨兵字节断言、json 更新重渲染、404 三态、/view 与 /og 互不吞、字体缺失 500 fail-loud）。
 - 关键决策与已否决方案：缓存新鲜度用 st_mtime_ns 整数比较（浮点 st_mtime 有精度坑）；渲染抖动不加锁——两个并发请求同时 miss 各自渲染，os.replace 原子覆盖后两者都是合法 PNG，幂等无需串行化；平台展示名把 generate_download_filename 内的局部 dict 提升为模块常量 _PLATFORM_DISPLAY_MAP 复用（第二个消费者即本路由，非新抽象）；测试用 os.utime 显式设置 mtime 消除文件系统时间戳粒度不确定性。
 - 下一步唯一动作：生产依赖（Pillow 移入 [project].dependencies）、Dockerfile 字体、config.example、样图。
+
+---
+
+## 段3：生产依赖 + 字体部署 + 样图
+
+- 当前阶段：verifying
+- 本段结论：pillow 从 [dependency-groups].dev 移入 [project].dependencies，uv.lock 同步（组间迁移，版本不变 12.3.0）；Dockerfile apt 增加 fonts-noto-cjk；config.example.jsonc web 段新增 og_font_path/og_font_bold_path（Debian Noto CJK 默认路径，commentjson 解析验证通过）。样图 og-card-sample.png 入库。测试 29 条全绿。
+- 关键决策与已否决方案：踩了一个真坑——字体子集先生成、SAMPLE_CARD 后写，样图首次出现大片空 glyph；修法是把子集脚本的字形扫描源扩为 tests/og_card/*.py + 渲染器源码（含「AI 总结」字面量），并在脚本 docstring 写明「新增中文必须重跑」；否决了手工维护字形清单（会漂移）。样图目检确认：标题两行折行、中英文混排、序号、域名与 AI 总结 均正常。
+- 下一步唯一动作：全量回归（make test）、红验、docker 构建验证 fc-list、推送开 draft PR。

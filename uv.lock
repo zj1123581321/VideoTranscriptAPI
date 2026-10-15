@@ -4469,6 +4469,7 @@ dependencies = [
     { name = "markdown" },
     { name = "nh3" },
     { name = "numpy" },
+    { name = "pillow" },
     { name = "propcache" },
     { name = "pyclip" },
     { name = "pydantic" },
@@ -4498,7 +4499,6 @@ perf = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "pillow" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -4519,6 +4519,7 @@ requires-dist = [
     { name = "markdown", specifier = ">=3.4.0" },
     { name = "nh3", specifier = ">=0.2.0" },
     { name = "numpy", specifier = "==1.24.3" },
+    { name = "pillow", specifier = ">=12.3.0" },
     { name = "propcache", specifier = "==0.3.1" },
     { name = "pyclip", specifier = ">=0.7.0" },
     { name = "pydantic", specifier = ">=2.1.1" },
@@ -4544,7 +4545,6 @@ provides-extras = ["perf"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "pillow", specifier = ">=12.3.0" },
     { name = "pytest", specifier = ">=7.4.0" },
     { name = "pytest-asyncio", specifier = ">=0.21.0" },
     { name = "pytest-cov", specifier = ">=4.1.0" },
