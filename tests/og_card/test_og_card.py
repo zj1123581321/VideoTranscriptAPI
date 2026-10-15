@@ -12,8 +12,10 @@ import json
 from pathlib import Path
 
 import pytest
+from fontTools.ttLib import TTFont
 from PIL import Image, ImageDraw, ImageFont
 
+from video_transcript_api.api.routes import views as views_routes
 from video_transcript_api.utils.rendering import og_card
 from video_transcript_api.utils.rendering.og_card import (
     CONTENT_WIDTH,
@@ -299,3 +301,29 @@ class TestRenderOgCard:
         )
         assert out.is_file()
         assert list(tmp_path.iterdir()) == [out]
+
+
+class TestSubsetGlyphCoverage:
+    """G2: subset fonts must cover every non-ASCII glyph in tests/og_card/*.py,
+    the renderer text literals (AI_LABEL/ELLIPSIS) and the route's platform
+    display names (_PLATFORM_DISPLAY_MAP), so a stale subset cannot render
+    boxes silently."""
+
+    @staticmethod
+    def _expected_chars() -> set:
+        expected = set()
+        for path in sorted(Path(__file__).parent.glob("*.py")):
+            expected.update(c for c in path.read_text(encoding="utf-8") if not c.isascii())
+        expected.update(og_card.AI_LABEL + og_card.ELLIPSIS)
+        expected.update("".join(views_routes._PLATFORM_DISPLAY_MAP.values()))
+        return expected
+
+    @pytest.mark.parametrize("font_path", [REGULAR_FONT, BOLD_FONT], ids=lambda p: p.name)
+    def test_subsets_cover_expected_glyphs(self, font_path):
+        assert font_path.is_file(), f"fixture font missing: {font_path}"
+        with TTFont(str(font_path)) as font:
+            covered = set()
+            for table in font["cmap"].tables:
+                covered.update(chr(cp) for cp in table.cmap)
+        missing = self._expected_chars() - covered
+        assert not missing, f"glyphs missing from {font_path.name}: {sorted(missing)}"
