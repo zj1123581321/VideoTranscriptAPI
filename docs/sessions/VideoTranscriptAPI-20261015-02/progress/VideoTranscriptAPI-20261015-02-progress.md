@@ -119,3 +119,19 @@ fail-closed 落地后 make test 新红 21 条（test_api_routes 15、test_proces
 
 ### 下一步唯一动作
 push fast-forward 到 card/VideoTranscriptAPI-261015-d3，更新 PR #246 正文 findings 处置节。
+
+## 2026-10-16 里程碑8：gate primary 第 6 轮裁决——回滚触发语义 + 锚点 run 隔离 + 文档矛盾
+
+### 当前阶段
+implementing：三处修复落盘，yaml/actionlint/Accept-Check 通过，待 push。
+
+### 本段结论
+①根因确认：deploy.yml 只在 main push 触发，PR 分支上从未有过 deploy run（gh run list 仅 CI/gate-shadow/Browser regression），第 6 轮「no-rollback」是模型主审对 YAML 的静态审查结论。上轮 `if: steps.verify.outcome == 'failure'` 按文档语义会在 verify 失败时运行，但存在真实盲区：verify 被跳过时 outcome='skipped' 条件为假，且触发路径静态不可读（主审正是无法从 YAML 确证）。按裁决改为 `if: always()` + step 内运行时按 `steps.verify.outcome` 显式分支：failure→回滚，success/skipped/cancelled→空转成功；触发不再依赖条件表达式语义。②回滚锚点按 run 隔离：`last_good_image.<run_id>`（RUN_ID 经 ssh 前缀传入远端，两端各加 `[0-9]+` 校验），读写只碰本 run 文件；不加清理逻辑（每部署 ~80B、读侧 run 隔离使陈旧文件无语义影响；将来需要时可在 pre-flight 写前 prune 保留最近 N=3，需配合 host 级并发组时序，当前规模不做）。③DEPLOY.md 删「锁文件由部署脚本自动创建（WARN 后继续，门禁空转）」旧行为描述，改为 fail-closed 现实（宿主锁文件缺失→pre-flight 失败→自动部署延期人工介入；服务侧 503；事后对账失败自动回滚）。
+
+### 关键决策与已否决方案
+- 否决「维持 steps.verify.outcome 条件并答辩」：主审读不出可靠性的条件本身就是维护负债，always()+运行时分支是严格更稳形态，且卡面明确裁决采纳此修法。
+- 空转分支覆盖 cancelled：job 取消时回滚 step 仍被 always() 触发，outcome 非.failure 即空转，不会在半途状态上做无把握回滚。
+- 清理逻辑不加（卡面授权项）：报告写明累积量与未来 prune 方案。
+
+### 下一步唯一动作
+commit 本段，push fast-forward，更新 PR 正文第 6 轮处置，写报告。

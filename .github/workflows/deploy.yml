@@ -3,8 +3,9 @@
 #
 # 忙锁门禁 fail-closed 全链：服务侧 BusyLock 锁基础设施异常即拒绝新任务（HTTP 503）；
 # 部署脚本对同一文件申请排他锁。事前 pre-flight：对当前运行容器对账宿主/容器 busy.lock 的
-# stat -c %i，并把当前运行镜像 ID 记为回滚锚点（.deploy-state/last_good_image）；失败则 ship
-# 不跑。事后 verify-busy-lock-inode：ship 成功后对账新容器，失败则 retag 回滚锚点镜像并
+# stat -c %i，并把当前运行镜像 ID 记为本 run 专属回滚锚点
+# （.deploy-state/last_good_image.<run_id>，按 run 隔离防并发覆盖）；失败则 ship 不跑。
+# 事后 verify-busy-lock-inode：ship 成功后对账新容器，失败则 retag 本 run 锚点镜像并
 # compose up -d 回滚（不自动重试部署，回滚后人工判断）。双闸 + 回滚，不静默降级。
 # SSH 身份不再正则解析 ci-templates default：全部 SSH 使用处读 repo variable（见下方 env
 # 与 ship 的 ssh_user 输入，同名变量）；未配置时 pre-flight 第一步即失败并给配置指引。
@@ -59,7 +60,7 @@ jobs:
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
           [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
           SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
-          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' bash -s" <<'REMOTE'
+          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "RUN_ID='${GITHUB_RUN_ID}' DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' bash -s" <<'REMOTE'
           set -euo pipefail
           host_lock="${DEPLOY_DIR}/.deploy-state/busy.lock"
           container_lock="/app/.deploy-state/busy.lock"
@@ -85,11 +86,13 @@ jobs:
             echo "::error::pre-flight busy.lock inode mismatch host=${host_inode} container=${container_inode}"
             exit 1
           fi
-          # 回滚锚点：ship 替换前先记下当前运行镜像 ID（宿主侧持久文件，verify job 可读）。
-          # 只在全部对账通过后记录；本步失败同样 fail-closed 阻止 ship。
+          # 回滚锚点：ship 替换前先记下当前运行镜像 ID，按 run 隔离（verify 失败回滚只读
+          # 本 run 的文件，防接续/并发部署覆盖共享锚点导致回滚到错镜像）。只在全部对账
+          # 通过后记录；本步失败同样 fail-closed 阻止 ship。
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::invalid RUN_ID: ${RUN_ID}"; exit 1; }
           running_image="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME")"
-          printf '%s\n' "$running_image" > "${DEPLOY_DIR}/.deploy-state/last_good_image"
-          echo "pre-flight busy.lock inode ok ${host_inode}; last good image recorded: ${running_image}"
+          printf '%s\n' "$running_image" > "${DEPLOY_DIR}/.deploy-state/last_good_image.${RUN_ID}"
+          echo "pre-flight busy.lock inode ok ${host_inode}; last good image recorded for run ${RUN_ID}: ${running_image}"
           REMOTE
 
   ship:
@@ -178,11 +181,13 @@ jobs:
           echo "busy.lock inode ok ${host_inode}"
           REMOTE
 
-      # 对账失败 → 回滚到 pre-flight 记录的镜像锚点（同一 host / key，新 SSH 会话）。
-      # 仅在对账步骤实际失败时运行；对账失败本身已让 job 变红，回滚成功也不改变结论
-      # （回滚后人工判断，不自动重试部署）。回滚自身任何一步失败都报 rollback failed。
+      # 对账失败 → 回滚到本 run pre-flight 记录的镜像锚点（同一 host / key，新 SSH 会话）。
+      # always() 保证本 step 不随前序 step 失败被跳过；是否真回滚由运行时按对账 step 的
+      # outcome 显式分支：failure → 回滚；success/skipped/cancelled → 空转成功（对账失败
+      # 本身已让 job 变红，回滚成功也不改变结论——回滚后人工判断，不自动重试部署）。
+      # 回滚自身任何一步失败都报 rollback failed，job 双重失败，不吞错。
       - name: Rollback to last good image (post-verify failed)
-        if: steps.verify.outcome == 'failure'
+        if: always()
         env:
           DEPLOY_HOST: 100.68.21.80
           DEPLOY_DIR: /opt/media/VideoTranscriptAPI
@@ -190,12 +195,20 @@ jobs:
           IMAGE_NAME: video-transcript-api
         run: |
           set -euo pipefail
+          verify_outcome="${{ steps.verify.outcome }}"
+          if [ "$verify_outcome" != "failure" ]; then
+            echo "post-verify outcome=${verify_outcome}; rollback not applicable"
+            exit 0
+          fi
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
           [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
           SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
-          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' IMAGE_NAME='$IMAGE_NAME' bash -s" <<'REMOTE'
+          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "RUN_ID='${GITHUB_RUN_ID}' DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' IMAGE_NAME='$IMAGE_NAME' bash -s" <<'REMOTE'
           set -euo pipefail
-          last_good_file="${DEPLOY_DIR}/.deploy-state/last_good_image"
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::invalid RUN_ID: ${RUN_ID}"; exit 1; }
+          # 锚点按 run 隔离：只读本 run pre-flight 写入的文件，防接续/并发部署覆盖
+          # 共享锚点导致回滚到错镜像；串行化由 ship 的 host 级部署锁保证。
+          last_good_file="${DEPLOY_DIR}/.deploy-state/last_good_image.${RUN_ID}"
           if [ ! -s "$last_good_file" ]; then
             echo "::error::rollback_failed: last good image record missing or empty: ${last_good_file}"
             exit 1
