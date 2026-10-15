@@ -199,6 +199,33 @@ class TestOgShareCardRoute:
         response = strict_client.get(f"/og/{token}.png")
         assert response.status_code == 404
 
+    def test_response_body_matches_disk_png(self, og_client):
+        """The response body is served from the cached og_card.png bytes."""
+        client, _cache, token, cache_dir = og_client
+        _write_card(cache_dir, SAMPLE_CARD)
+        response = client.get(f"/og/{token}.png")
+        assert response.status_code == 200
+        assert response.content == (cache_dir / og_card.PNG_FILENAME).read_bytes()
+
+    def test_png_deleted_before_read_returns_404(self, og_client, monkeypatch):
+        """A resummarize deletes og_card.png after the freshness stat but
+        before the handler reads it: must 404, not 500 (FileResponse race,
+        gate finding G1)."""
+        client, _cache, token, cache_dir = og_client
+        _write_card(cache_dir, SAMPLE_CARD)
+        assert client.get(f"/og/{token}.png").status_code == 200
+        png_path = cache_dir / og_card.PNG_FILENAME
+        real_read_bytes = Path.read_bytes
+
+        def read_then_delete(self):
+            png_path.unlink()
+            return real_read_bytes(self)
+
+        monkeypatch.setattr(Path, "read_bytes", read_then_delete)
+        strict_client = TestClient(client.app, raise_server_exceptions=False)
+        response = strict_client.get(f"/og/{token}.png")
+        assert response.status_code == 404
+
     def test_unknown_token_returns_404(self, og_client):
         client, _cache, _token, cache_dir = og_client
         _write_card(cache_dir, SAMPLE_CARD)

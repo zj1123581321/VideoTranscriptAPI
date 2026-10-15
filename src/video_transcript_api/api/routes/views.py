@@ -9,7 +9,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response
 
 from ..context import (
     get_cache_manager,
@@ -1597,8 +1597,17 @@ async def og_share_card(view_token: str):
             ),
             output_path=png_path,
         )
-    return FileResponse(
-        png_path,
+    # Starlette's FileResponse stats/opens the file at send time, outside
+    # this handler: a resummarize deleting og_card.png in that window would
+    # 500. Read eagerly so the deletion window is handled here (404 below);
+    # render errors (e.g. missing font) stay loud in the block above.
+    try:
+        png_bytes = png_path.read_bytes()
+    except FileNotFoundError as exc:
+        logger.warning("OG 卡片缓存在读取前消失: view_token={}", view_token)
+        raise HTTPException(status_code=404, detail="share card not found") from exc
+    return Response(
+        content=png_bytes,
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=300"},
     )
