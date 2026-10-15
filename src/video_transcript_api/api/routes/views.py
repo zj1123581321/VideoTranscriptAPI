@@ -9,7 +9,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response
 
 from ..context import (
     get_cache_manager,
@@ -27,6 +27,14 @@ from ...utils.rendering import (
     render_markdown_to_html,
     render_transcript_content,
 )
+from ...utils.rendering.og_card import (
+    CARD_FILENAME,
+    DEFAULT_FONT_BOLD_PATH,
+    DEFAULT_FONT_PATH,
+    PNG_FILENAME,
+    load_share_card,
+    render_og_card,
+)
 from ...utils.timeutil import format_datetime_for_display
 from ...utils.llm_status import CalibrationStatus, ChaptersStatus, NotesStatus
 
@@ -42,6 +50,19 @@ router = APIRouter()
 # success (the task row stayed failed) but export/render treat the files the
 # same way because they are on disk.
 _CONTENT_VIEW_STATUSES = ("success", "interrupted")
+
+# 平台代号 -> 展示名（下载文件名与 OG 卡片共用）
+_PLATFORM_DISPLAY_MAP = {
+    "youtube": "YouTube",
+    "bilibili": "哔哩哔哩",
+    "douyin": "抖音",
+    "xiaohongshu": "小红书",
+    "xiaoyuzhou": "小宇宙",
+    "apple_podcast": "Apple播客",
+    "wechat_channels": "视频号",
+    "twitter": "X",
+    "generic": "自定义",
+}
 
 # robots.txt：允许首页和分享页面被收录，禁止 API 和静态资源
 _ROBOTS_TXT_TEMPLATE = """\
@@ -642,21 +663,8 @@ def generate_download_filename(title: str, platform: str, content_type: str) -> 
         "transcript": "原始转录",
     }
 
-    # 平台名称映射
-    platform_map = {
-        "youtube": "YouTube",
-        "bilibili": "哔哩哔哩",
-        "douyin": "抖音",
-        "xiaohongshu": "小红书",
-        "xiaoyuzhou": "小宇宙",
-        "apple_podcast": "Apple播客",
-        "wechat_channels": "视频号",
-        "twitter": "X",
-        "generic": "自定义",
-    }
-
     content_name = type_map.get(content_type, content_type)
-    platform_name = platform_map.get(platform, platform)
+    platform_name = _PLATFORM_DISPLAY_MAP.get(platform, platform)
 
     # 限制标题长度，避免文件名过长
     max_title_length = 50
@@ -1534,3 +1542,72 @@ async def view_transcript(
                 "message": "查看页面失败，请稍后重试",
             },
         )
+
+
+@router.get("/og/{view_token}.png", include_in_schema=False)
+async def og_share_card(view_token: str):
+    """Serve the 1200x630 share-card PNG for a view token (X/Twitter card).
+
+    404 when the token is unknown or the task has no contract-valid
+    llm_share_card.json (no fallback card). The rendered og_card.png is cached
+    in the task directory and reused while it is not older than the card JSON;
+    a regenerated card JSON triggers a re-render.
+    """
+    cache_data = await asyncio.to_thread(
+        ViewTokenResolver(cache_manager).get_cache_by_view_token, view_token
+    )
+    if not cache_data or not cache_data.get("file_path"):
+        raise HTTPException(status_code=404, detail="share card not found")
+
+    cache_dir = Path(cache_data["file_path"])
+    card = await asyncio.to_thread(load_share_card, cache_dir)
+    if not card:
+        raise HTTPException(status_code=404, detail="share card not found")
+
+    json_path = cache_dir / CARD_FILENAME
+    png_path = cache_dir / PNG_FILENAME
+
+    def _cache_is_fresh() -> bool:
+        if not png_path.is_file():
+            return False
+        return png_path.stat().st_mtime_ns >= json_path.stat().st_mtime_ns
+
+    try:
+        cache_fresh = _cache_is_fresh()
+    except FileNotFoundError as exc:
+        # A resummarize deletes llm_share_card.json / og_card.png between
+        # load_share_card and the stat: treat as no card. Render errors
+        # (e.g. missing font) must stay loud, so only stat is guarded.
+        logger.warning("OG 卡片缓存文件在发送窗口内消失: view_token={}", view_token)
+        raise HTTPException(status_code=404, detail="share card not found") from exc
+
+    if not cache_fresh:
+        web_config = get_config().get("web", {})
+        await asyncio.to_thread(
+            render_og_card,
+            card,
+            platform_display=_PLATFORM_DISPLAY_MAP.get(
+                cache_data.get("platform", ""), cache_data.get("platform", "")
+            ),
+            author=cache_data.get("author", ""),
+            site_url=get_base_url(),
+            font_path=web_config.get("og_font_path", DEFAULT_FONT_PATH),
+            font_bold_path=web_config.get(
+                "og_font_bold_path", DEFAULT_FONT_BOLD_PATH
+            ),
+            output_path=png_path,
+        )
+    # Starlette's FileResponse stats/opens the file at send time, outside
+    # this handler: a resummarize deleting og_card.png in that window would
+    # 500. Read eagerly so the deletion window is handled here (404 below);
+    # render errors (e.g. missing font) stay loud in the block above.
+    try:
+        png_bytes = png_path.read_bytes()
+    except FileNotFoundError as exc:
+        logger.warning("OG 卡片缓存在读取前消失: view_token={}", view_token)
+        raise HTTPException(status_code=404, detail="share card not found") from exc
+    return Response(
+        content=png_bytes,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=300"},
+    )

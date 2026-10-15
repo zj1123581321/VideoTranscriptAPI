@@ -84,7 +84,10 @@
                 "label": "复制深度阅读 Prompt",
                 "template": "请读取下面 URL 的播客校对稿全文，按时间顺序分主题做详细笔记，保留人名、数字、时间点和原话，使用分层 bullets，关键论断加粗；不要浓缩省略。\n\n{url}\n"
             }
-        ]
+        ],
+        // OG 分享卡片渲染字体（字体文件不存在时出图接口直接报错，不降级）
+        "og_font_path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "og_font_bold_path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
     },
 
     // ============================================================
