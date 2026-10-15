@@ -153,6 +153,46 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
+      - name: Verify container image identity
+        env:
+          DEPLOY_HOST: 100.68.21.80
+          CONTAINER_NAME: video-transcript-api
+          IMAGE_NAME: video-transcript-api
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_USER:-}" ]; then
+            echo "::error::SSH_USER is empty: set the repo variable that feeds the workflow-level env block in .github/workflows/deploy.yml (Settings > Secrets and variables > Actions > Variables); value = deploy host login user"
+            exit 1
+          fi
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
+          [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
+          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
+          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "CONTAINER_NAME='$CONTAINER_NAME' IMAGE_NAME='$IMAGE_NAME' GIT_SHA='$GIT_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          running_image="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME" 2>/dev/null || true)"
+          candidate_image="$(docker inspect --format='{{.Id}}' "${IMAGE_NAME}:latest" 2>/dev/null || true)"
+          identity_ok=1
+          if [ -z "$running_image" ] || [ -z "$candidate_image" ] || [ "$running_image" != "$candidate_image" ]; then
+            identity_ok=0
+          fi
+          if [ -n "${GIT_SHA:-}" ]; then
+            short_sha="${GIT_SHA:0:12}"
+            sha_image="$(docker images --filter "reference=*${short_sha}*" --format '{{.ID}}' 2>/dev/null | head -n 1 || true)"
+            if [ -n "$sha_image" ]; then
+              case "$candidate_image" in
+                *"$sha_image"*) ;;
+                *) identity_ok=0 ;;
+              esac
+            fi
+          fi
+          if [ "$identity_ok" -ne 1 ]; then
+            echo "::error::deploy_identity_mismatch: running=${running_image:-none} candidate=${candidate_image:-none}"
+            exit 1
+          fi
+          echo "container image identity ok: ${running_image}"
+          REMOTE
+
       - name: Verify busy.lock host/container inode
         id: verify
         env:
