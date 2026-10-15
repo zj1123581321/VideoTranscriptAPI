@@ -856,10 +856,11 @@ SPEAKER_INFERENCE_SYSTEM_PROMPT = """你是专业的说话人身份裁决助手�
    - 该说话人首次出现的时间戳（如有）
    - 首次出场前，其他人称呼/提及该说话人的上下文片段（若存在，是判断身份的最强信号）
    - 该说话人本人的发言样本（仅为代表性片段，并非全部对话）
+3. **第三人提及旁证区**（若存在）：其他说话人呼叫某说话人、且紧邻下一段就是该说话人应答的短句，每条标注实际发言者、段号与呼叫对象。呼叫-回应关系已由程序核实；某条旁证**只能**作为其「呼叫对象」那个说话人的 dialog_address 证据来源，引用其他说话人的旁证句会被作废。
 
 ## 证据类型（candidates[].evidence_type，只能取以下四个值）
 
-- `dialog_address`：对话内其他人对该说话人的称呼，或该说话人的自我介绍。最强的证据，单条核对通过即可被采用为显示名。
+- `dialog_address`：对话内其他人对该说话人的称呼，或该说话人的自我介绍。最强的证据，单条核对通过即可被采用为显示名。引用可来自：该说话人本人片段/出场上下文，或第三人提及旁证区中呼叫对象为该说话人的句子（旁证句的呼叫-回应关系已由程序核实，采用时程序会在 meta 里记录来源说话人与段号）。
 - `title_credit`：视频标题/专场名/作者名。仅当另有该说话人的 `dialog_address` 佐证（表明该说话人是专场主角/主持人）时才会被采用；标题名与对话称呼是否同一人属于推测，采用时显示名会保留原始说话人编号并以「标题关联推测」等标注形式同时带上两条来源名。
 - `author_host`：作者署名即主持人身份。与 `title_credit` 同规则。
 - `description_roster`：描述中的参会名单。名单只是名单，核对通过也**不会单独**让名字被采用，仅作为佐证记录；不要把它当作「实际发言人名单」。
@@ -875,6 +876,23 @@ SPEAKER_INFERENCE_SYSTEM_PROMPT = """你是专业的说话人身份裁决助手�
 ## 输出格式
 
 必须输出 JSON 格式，包含 speaker_mapping、confidence（每个说话人对应一个 0-1 的置信度）、candidates（每个说话人对应一个候选数组，每项含 name / evidence_type / evidence_quote）、reasoning 字段。"""
+
+
+# 平台说话人先验（gate 修复轮第 5 轮③）。表内平台会在 user prompt 的视频信息区
+# 追加一段平台背景说明（表外平台零变化：不追加任何行，prompt 与不带 platform
+# 参数的旧输出逐字一致）。先验段只进 prompt 展示、**不进**
+# build_speaker_quote_sections 的任何引用分区——先验是背景知识不是原文证据，
+# 核对侧分区不含它，LLM 从先验文案里摘 quote 会被逐字核对 fail-closed 作废。
+# 发现机制不依赖先验做旁证索引（codex 收紧要求：「Adrian Punk」与「胖哥」无
+# 字面对应，旁证发现靠呼叫-回应模式本身），先验只帮 LLM 理解「作者常任主持人、
+# 专场标题多为主讲、称呼与账号名可能完全不同」这类平台常识。
+PLATFORM_SPEAKER_PRIORS = {
+    "twitter_space": (
+        "- 平台背景（twitter_space）：这是实时语音专场。作者（创建者）通常就是本场主持人，"
+        "通常开场即在场并全程控场；标题中「XX专场」里的名字通常指主讲嘉宾；"
+        "对话里互相使用的称呼（昵称、别称）可能与标题/描述/参会名单里的任何文字都不同。"
+    ),
+}
 
 
 def build_speaker_quote_sections(
@@ -910,7 +928,9 @@ def build_speaker_inference_user_prompt(
     original_speakers: list,
     video_title: str = "",
     author: str = "",
-    description: str = ""
+    description: str = "",
+    platform: str = "",
+    corroboration_snippets: str = "",
 ) -> str:
     """
     构建说话人推断任务的 User Prompt
@@ -927,6 +947,13 @@ def build_speaker_inference_user_prompt(
         video_title: 视频标题
         author: 作者
         description: 视频描述
+        platform: 平台标识（gate 修复轮第 5 轮③）。命中 PLATFORM_SPEAKER_PRIORS
+            的平台在视频信息区追加一段平台背景先验；表外平台不追加任何行，
+            与不带该参数的旧输出逐字一致。先验段不进任何引用分区（见
+            PLATFORM_SPEAKER_PRIORS 注释）。
+        corroboration_snippets: 第三人提及旁证区文本（gate 修复轮第 5 轮①，
+            由 SpeakerInferencer 收集并渲染；空串时该区整体不出现，prompt
+            与无旁证的旧输出逐字一致）。
 
     Returns:
         User prompt 字符串
@@ -948,6 +975,10 @@ def build_speaker_inference_user_prompt(
     parts.append(sections["author_host"])
     if description:
         parts.append(sections["description_roster"])
+    # 平台先验段（表内平台才有；不属于引用分区，见 PLATFORM_SPEAKER_PRIORS 注释）
+    prior_text = PLATFORM_SPEAKER_PRIORS.get(platform or "", "")
+    if prior_text:
+        parts.append(prior_text)
 
     # 原始说话人标识
     parts.append(f"\n**原始说话人标识**：{', '.join(original_speakers)}")
@@ -955,6 +986,13 @@ def build_speaker_inference_user_prompt(
     # 证据引用区二：转录内容片段（按说话人分组，按首次出现时间排序，含出场上下文）
     parts.append("\n**转录内容片段**（证据引用区之二；按说话人首次出现顺序分组，标注首次出现时间与出场上下文）：")
     parts.append(sections["dialog_address"])
+
+    # 第三人提及旁证区（gate 修复轮第 5 轮①）：独立区，不混入任何说话人的
+    # 本人分组。每条旁证已由程序核实「该他人发言的紧邻回应者是所标注的呼叫
+    # 对象」，可作为对应说话人的 dialog_address 引用来源（来源说话人与段号
+    # 由程序在核对时记录进 meta）。空串时整区不出现（表外零变化语义）。
+    if corroboration_snippets:
+        parts.append(f"\n{corroboration_snippets}")
 
     return "\n".join(parts)
 

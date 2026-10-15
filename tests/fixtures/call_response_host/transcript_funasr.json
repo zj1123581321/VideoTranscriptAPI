@@ -1,0 +1,44 @@
+{
+ "task_id": "synthetic-fixture-00000000-0000-0000-0000-000000000001",
+ "file_name": "synthetic_call_response_host.m4a",
+ "file_hash": "synthetic-not-a-real-file-hash",
+ "duration": 68.0,
+ "segments": [
+  {"start_time": 0.0, "end_time": 4.0, "text": "人都到齐了我们就开始，欢迎今晚来专场的朋友们。", "speaker": "Speaker1", "words": null},
+  {"start_time": 4.0, "end_time": 8.0, "text": "江哥，开场白你先来，我们洗耳恭听。", "speaker": "Speaker3", "words": null},
+  {"start_time": 8.0, "end_time": 12.0, "text": "谢谢大家，下面先请出今天的主讲嘉宾。", "speaker": "Speaker1", "words": null},
+  {"start_time": 12.0, "end_time": 16.0, "text": "大家好，我是林知遥，今天给大家分享我的出海经历。", "speaker": "Speaker2", "words": null},
+  {"start_time": 16.0, "end_time": 20.0, "text": "这个项目我做了一年多，中间踩过不少坑。", "speaker": "Speaker2", "words": null},
+  {"start_time": 20.0, "end_time": 24.0, "text": "知遥姐这个开场就很抓人，我都想直接听结论了。", "speaker": "Speaker3", "words": null},
+  {"start_time": 24.0, "end_time": 28.0, "text": "同问，结论部分在第几段？", "speaker": "Speaker4", "words": null},
+  {"start_time": 28.0, "end_time": 32.0, "text": "大家问题先记下来，后面统一开放提问。", "speaker": "Speaker1", "words": null},
+  {"start_time": 32.0, "end_time": 36.0, "text": "没关系，我可以先剧透一句：活着比增长重要。", "speaker": "Speaker2", "words": null},
+  {"start_time": 36.0, "end_time": 40.0, "text": "江哥，开放提问环节大概什么时候开始？", "speaker": "Speaker4", "words": null},
+  {"start_time": 40.0, "end_time": 44.0, "text": "我也想问连线环节的规则。", "speaker": "Speaker3", "words": null},
+  {"start_time": 44.0, "end_time": 48.0, "text": "问答环节放在分享结束之后，大概半小时后。", "speaker": "Speaker1", "words": null},
+  {"start_time": 48.0, "end_time": 52.0, "text": "分享完我会留下来一起参与问答。", "speaker": "Speaker2", "words": null},
+  {"start_time": 52.0, "end_time": 56.0, "text": "江哥，时间差不多了吧？", "speaker": "Speaker3", "words": null},
+  {"start_time": 56.0, "end_time": 60.0, "text": "是的，我们开始提问环节。", "speaker": "Speaker1", "words": null},
+  {"start_time": 60.0, "end_time": 64.0, "text": "江哥，我第一个举手。", "speaker": "Speaker4", "words": null},
+  {"start_time": 64.0, "end_time": 68.0, "text": "好，你来。", "speaker": "Speaker1", "words": null}
+ ],
+ "speakers": [
+  "Speaker1",
+  "Speaker2",
+  "Speaker3",
+  "Speaker4"
+ ],
+ "created_at": "2026-10-15T00:00:00",
+ "processing_time": 3.0,
+ "error": null,
+ "metadata": {
+  "engine": "funasr",
+  "diarize": true,
+  "word_align": false,
+  "language": null,
+  "projected": false,
+  "segment_merge_max_span_sec": 120.0,
+  "synthetic": true,
+  "note": "Hand-written synthetic dialogue (fictional names/content) modeling the production form where the host never self-identifies and every address term appears in OTHER speakers' segments with an immediate response by the addressed speaker. See README.md in this directory."
+ }
+}

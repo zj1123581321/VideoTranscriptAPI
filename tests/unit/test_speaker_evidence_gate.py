@@ -860,5 +860,78 @@ class TestCompositeNameDownstreamSurfaces(unittest.TestCase):
         self.assertEqual(normalized[0]["speaker_id"], "Speaker2")
 
 
+class TestPlatformSpeakerPriors(unittest.TestCase):
+    """gate 修复轮第 5 轮③：平台说话人先验。
+
+    契约：表内平台（twitter_space）在视频信息区追加先验段；表外平台/未传
+    platform 与旧输出逐字一致（零变化）；先验段只进 prompt 展示、不进任何
+    引用分区（从先验文案摘 quote 会被逐字核对 fail-closed 作废）；规则版本
+    随先验上线 bump 3→4。
+    """
+
+    def _build(self, platform=""):
+        from video_transcript_api.llm.prompts import (
+            PLATFORM_SPEAKER_PRIORS,
+            build_speaker_inference_user_prompt,
+        )
+
+        return build_speaker_inference_user_prompt(
+            context_snippets="[Speaker1]：你好",
+            original_speakers=["Speaker1"],
+            video_title="标题",
+            author="作者",
+            description="描述",
+            platform=platform,
+        ), PLATFORM_SPEAKER_PRIORS
+
+    def test_prior_injected_for_known_platform(self):
+        prompt, priors = self._build(platform="twitter_space")
+        self.assertIn(priors["twitter_space"], prompt)
+        # 先验段位置：位于元数据区内（描述行之后、转录片段区之前）。
+        self.assertIn(priors["twitter_space"], prompt.split("**转录内容片段**")[0])
+
+    def test_unknown_or_missing_platform_output_unchanged(self):
+        """表外平台零变化：不传 platform、传空串、传未知平台三种形态的
+        prompt 与旧（无先验）输出逐字一致。"""
+        from video_transcript_api.llm.prompts import build_speaker_inference_user_prompt
+
+        legacy = build_speaker_inference_user_prompt(
+            context_snippets="[Speaker1]：你好",
+            original_speakers=["Speaker1"],
+            video_title="标题",
+            author="作者",
+            description="描述",
+        )
+        for platform in ("", "youtube", "bilibili"):
+            self.assertEqual(
+                self._build(platform=platform)[0],
+                legacy,
+                f"platform={platform!r} 的 prompt 与旧输出不一致",
+            )
+
+    def test_prior_never_enters_quote_sections(self):
+        """先验段不是证据：不进 build_speaker_quote_sections 任何分区，
+        从先验文案摘 quote 会被 fail-closed 作废。"""
+        from video_transcript_api.llm.prompts import (
+            PLATFORM_SPEAKER_PRIORS,
+            build_speaker_quote_sections,
+        )
+
+        sections = build_speaker_quote_sections(
+            video_title="标题",
+            author="作者",
+            description="描述",
+            context_snippets="[Speaker1]：你好",
+        )
+        prior = PLATFORM_SPEAKER_PRIORS["twitter_space"]
+        for evidence_type, text in sections.items():
+            self.assertNotIn(prior, text)
+            self.assertNotIn("平台背景", text)
+
+    def test_rules_version_bumped_to_4(self):
+        """先验与旁证上线属裁决规则变化：v3→v4，旧缓存经指纹自然失效。"""
+        self.assertEqual(SPEAKER_EVIDENCE_RULES_VERSION, 4)
+
+
 if __name__ == "__main__":
     unittest.main()
