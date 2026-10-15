@@ -34,9 +34,11 @@ logger = setup_logger(__name__)
 # 唯一定义处，与 SpeakerInferencer.input_fingerprint 同文件维护。
 # v2 = 证据裁决上线；v3 = 复合显示名带「推测」标注（gate 修复轮第 3 轮：
 # 标题名与对话称呼是否同一人属模型推测，mapping 值必须就地自证推测属性，
-# 含原始说话人编号 + 推测标注 + 两条来源名）。显示格式属于裁决规则的
-# 一部分，bump 版本让旧格式缓存经指纹自然失效重算。
-SPEAKER_EVIDENCE_RULES_VERSION = 3
+# 含原始说话人编号 + 推测标注 + 两条来源名）；v4 = 平台先验段 + 第三人提及
+# 旁证区（gate 修复轮第 5 轮：prompt 新增 twitter_space 平台背景先验、采样
+# 阶段新增呼叫-回应旁证收集与 dialog_address 旁证引用判据）。显示格式与
+# 证据可达性都属于裁决规则的一部分，bump 版本让旧格式缓存经指纹自然失效重算。
+SPEAKER_EVIDENCE_RULES_VERSION = 4
 
 
 def build_speaker_risk_flags(
@@ -453,6 +455,7 @@ class SpeakerInferencer:
             video_title=title,
             author=author,
             description=description,
+            platform=platform,
         )
         # quote 核对分区（gate 审查修复②）：与 user_prompt 同参同源构建，
         # 核对收窄到 evidence_type 对应分区，防止「仅出现在描述参会名单里的
