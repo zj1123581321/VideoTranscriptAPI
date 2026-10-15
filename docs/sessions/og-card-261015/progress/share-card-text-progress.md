@@ -20,3 +20,10 @@
   - 截断职责收敛在 build_share_card_user_prompt 一处（processor 不预切片，避免双处截断丢失 truncation 标记，曾踩坑一次）。
   - FAILED 轮次也删旧卡（即使磁盘旧总结未被覆盖）：按卡面锁定决策「重新总结时先删」字面执行，避免失败后遗留过期卡片；页面表现退化为设计不变式 1（无卡 → 无 og:image）。
 - **下一步唯一动作**：红验（改坏 llm_ops 写入点确认转红）后提交收尾、推送、开 draft PR。
+
+## 段 3：红验完成，收尾
+
+- **当前阶段**：verifying-done（三处红验全部转红且为断言失败型；已还原，工作树与 Commit 4 一致）
+- **本段结论**：红验 1（注释 _atomic_write_json 写入调用）→ test_generated_writes_contract_file 断言 False 红；红验 2（share_card_touched 门取反）→ calibrate_only 保留/失败删卡/重总结替换多条 AssertionError 红；红验 3（去掉 "share_card" in result_dict 守卫）→ test_legacy_result_dict_never_probes_cache 红（get_cache 被调用）。最终 make test 唯一失败为继承红（AF_UNIX path too long，基线 552f496e 复跑同样红）。
+- **关键决策与已否决方案**：无（按卡面固定条款执行）。
+- **下一步唯一动作**：推送分支、开 draft PR、写报告。
