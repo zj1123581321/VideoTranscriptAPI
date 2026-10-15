@@ -148,6 +148,41 @@ class SpeakerInferencer:
     _TOP_SPEAKER_SAMPLE_COUNT = 8
     _TOP_SPEAKER_MAX_CHARS = 1200
 
+    # ------------------------------------------------------------------
+    # 第三人提及旁证常量（gate 修复轮第 5 轮①）
+    # ------------------------------------------------------------------
+
+    # 呼叫-回应发现窗口：他人呼叫段 P 之后最多看 3 段。窗口内首个发言段的
+    # 说话人即「应答者」，应答者必须恰好是被采样说话人本人（收紧判据，见
+    # _collect_call_response_evidence docstring）。coerce 后的对话无空文本
+    # 段，首个发言段即 P 的紧邻下一段；窗口常数对含空文本段的原始输入
+    # 保留「3 段内」语义。
+    _CALL_RESPONSE_WINDOW = 3
+
+    # 单条旁证短句截断上限（字符）。旁证只承担「别人怎么称呼他」的指向
+    # 作用，截到短句足够。
+    _MAX_CHARS_PER_CORROBORATION_ENTRY = 80
+
+    # 每说话人至多收录的旁证条数（卡面锁定：每说话人至多 2 条短句）。
+    _MAX_CORROBORATION_PER_SPEAKER = 2
+
+    # 旁证区全局条数上限。diarization 污染产生大量说话人时，旁证若无全局
+    # 上限会以 2×N 膨胀；24 条 ×（≤80 字符 + 渲染标注）≈ 2500 字符，与全局
+    # 采样预算（默认 8000）同量级的可预期开销。按呼叫发生时间先到先得，
+    # 超限后停止收集（不裁已收录的）。
+    _MAX_CORROBORATION_ENTRIES_TOTAL = 24
+
+    # 疑似称呼 token 判据（启发式白名单，宽松过滤：多收无妨，核对侧
+    # fail-closed）。不按元数据人名索引（codex 收紧要求：「Adrian Punk」与
+    # 「胖哥」无字面对应）——旁证发现机制就是呼叫-回应模式本身，token
+    # 判据只负责排除「纯闲聊段落」：中文常见称呼后缀（X哥/X姐/X总/老师…）、
+    # 平台 @提及、昵称后缀（酱/桑/君/大大/神）。
+    _MENTION_TOKEN_PATTERN = re.compile(
+        r"[\u4e00-\u9fa5A-Za-z0-9_·]{1,12}(?:哥|姐|总|叔|姑|姨|爷|奶|酱|桑|君|大大|神)"
+        r"|(?:老师|老板|师傅|先生|女士|同学|兄弟|老铁|大夫|教授|博士|医生|经理)"
+        r"|@[\w\u4e00-\u9fa5-]{1,20}"
+    )
+
     @staticmethod
     def resolve_dialog_speaker(dialog: Dict) -> Optional[object]:
         """解析单条 dialog 的说话人标签，遍历 speaker/spk/speaker_id 别名链，
@@ -437,6 +472,9 @@ class SpeakerInferencer:
 
         context_snippets = self._format_sample_dialogs(sample_groups)
 
+        corroboration = self._collect_call_response_evidence(dialogs, sample_groups)
+        corroboration_snippets = self._format_corroboration_section(corroboration)
+
         # ci-gate review（第5轮）：这里必须用 sample_groups 的 key（预算裁剪后
         # 保留的说话人），而不是原始完整的 speakers 列表。_apply_global_sample_budget
         # 已经把采样片段区控制在预算内，但如果标签列表本身仍塞入全部 speakers，
@@ -456,6 +494,7 @@ class SpeakerInferencer:
             author=author,
             description=description,
             platform=platform,
+            corroboration_snippets=corroboration_snippets,
         )
         # quote 核对分区（gate 审查修复②）：与 user_prompt 同参同源构建，
         # 核对收窄到 evidence_type 对应分区，防止「仅出现在描述参会名单里的
@@ -517,6 +556,7 @@ class SpeakerInferencer:
                 sampled=sampled,
                 quote_sections=quote_sections,
                 dialog_sections_by_speaker=dialog_sections_by_speaker,
+                corroboration_by_speaker=corroboration,
             )
             # 本轮真实调用了 LLM 并成功产出新映射——见 infer() 顶部 docstring
             # "source" 一节，唯一允许下游"补层刷新"触碰既有展示产物的来源。
@@ -746,6 +786,105 @@ class SpeakerInferencer:
             total_chars += speaker_chars
 
         return kept
+
+    def _collect_call_response_evidence(
+        self, dialogs: List[Dict], sample_groups: Dict[str, Dict]
+    ) -> Dict[str, List[Dict]]:
+        """收集「他人呼叫、紧邻本人应答」的第三人提及旁证。
+
+        生产案例：主持人 Speaker1 从不自称、称呼（「胖哥」）全部出现在他人
+        段落且本人采样覆盖不到——只有旁证能让这类称呼进入模型输入。
+
+        对每个被采样的说话人 S（sample_groups 的 key；被全局预算裁掉的
+        说话人不进 prompt，也不收集旁证），扫描全时间轴：
+
+        - 段 P 是他人段落且文本含疑似称呼 token（_MENTION_TOKEN_PATTERN，
+          启发式白名单；不按元数据人名索引——发现机制就是呼叫-回应模式
+          本身）
+        - P 之后 _CALL_RESPONSE_WINDOW 段窗口内，首个发言段的说话人恰为
+          S（「呼叫后紧邻本人应答」）。刻意收紧为「首个应答者必须是被
+          采样人」，而非「窗口内任意位置出现 S 发言」：宽松版会让同一条
+          呼叫句同时归属窗口内多个说话人（如呼叫 A 后 B 插话），旁证
+          条目可归属多人时「呼叫-回应核对」的程序证明力塌陷，卡面锁定
+          测试「呼叫后非本人应答不成立」也无法程序化。
+        - 每说话人至多 _MAX_CORROBORATION_PER_SPEAKER 条，全局至多
+          _MAX_CORROBORATION_ENTRIES_TOTAL 条（按呼叫发生时间先到先得），
+          单条截断到 _MAX_CHARS_PER_CORROBORATION_ENTRY 字符。
+
+        Returns:
+            {speaker: [{"speaker": 他人标签, "text": 定稿短句,
+                        "index": 段号, "time": HH:MM:SS 或 None}]}
+            只含有旁证条目的说话人。
+        """
+        speakers = list(sample_groups.keys())
+        if not speakers or not dialogs:
+            return {}
+
+        speaker_set = set(speakers)
+        entries: Dict[str, List[Dict]] = {speaker: [] for speaker in speakers}
+        total = 0
+        for idx, dialog in enumerate(dialogs):
+            if total >= self._MAX_CORROBORATION_ENTRIES_TOTAL:
+                break
+            call_speaker = dialog.get("speaker", "")
+            call_text = (dialog.get("text") or "").strip()
+            if not call_text or not call_speaker:
+                continue
+            # 窗口内首个发言段即应答者（空文本段跳过：coerce 后不存在，
+            # 容忍直接喂原始形态输入的调用方）。
+            responder = None
+            window_end = min(idx + 1 + self._CALL_RESPONSE_WINDOW, len(dialogs))
+            for j in range(idx + 1, window_end):
+                if (dialogs[j].get("text") or "").strip():
+                    responder = dialogs[j].get("speaker", "")
+                    break
+            # 应答者不是被采样说话人（含呼叫者自答）：这条呼叫不构成任何
+            # 被采样说话人的旁证——「呼叫后非本人应答不成立」。
+            if not responder or responder not in speaker_set or responder == call_speaker:
+                continue
+            if not self._MENTION_TOKEN_PATTERN.search(call_text):
+                continue
+            if len(entries[responder]) >= self._MAX_CORROBORATION_PER_SPEAKER:
+                continue
+            entries[responder].append(
+                {
+                    "speaker": str(call_speaker),
+                    "text": self._truncate(
+                        call_text, self._MAX_CHARS_PER_CORROBORATION_ENTRY
+                    ),
+                    "index": idx,
+                    "time": self._format_timestamp(dialog.get("start_time")),
+                }
+            )
+            total += 1
+
+        return {speaker: items for speaker, items in entries.items() if items}
+
+    def _format_corroboration_section(self, corroboration: Dict[str, List[Dict]]) -> str:
+        """渲染第三人提及旁证区（独立区，不混入任何说话人的本人分组）。
+
+        每条标注实际发言者、段号与时间，并标注程序已核实的呼叫对象；
+        说话人按其首条旁证的段号排序。无任何旁证时返回空串（整区不出现，
+        prompt 与无旁证的旧输出逐字一致）。
+        """
+        if not corroboration:
+            return ""
+        ordered = sorted(
+            corroboration.items(),
+            key=lambda kv: min(entry["index"] for entry in kv[1]),
+        )
+        lines = [
+            "**第三人提及旁证**（程序已核实：以下每条他人发言的紧邻回应者就是所标注的呼叫对象；"
+            "这些句子只能作为其呼叫对象的 dialog_address 证据引用来源，程序会记录来源说话人与段号）："
+        ]
+        for speaker, speaker_entries in ordered:
+            for entry in speaker_entries:
+                time_tag = f"，{entry['time']}" if entry.get("time") else ""
+                lines.append(
+                    f"- 段{entry['index']}{time_tag} [{entry['speaker']}]: {entry['text']}"
+                    f" → 呼叫对象：{speaker}"
+                )
+        return "\n".join(lines)
 
     def _collect_context_before(
         self, dialogs: List[Dict[str, str]], first_index: int, speaker: str
@@ -1077,7 +1216,9 @@ class SpeakerInferencer:
 
     @staticmethod
     def _verify_candidates(
-        candidates, quote_sections: Optional[Dict[str, str]] = None
+        candidates,
+        quote_sections: Optional[Dict[str, str]] = None,
+        corroboration_entries: Optional[List[Dict]] = None,
     ) -> Tuple[List[Dict], List[str]]:
         """逐条核对 LLM 候选的引用，返回 (核对通过的候选, 作废原因列表)。
 
@@ -1092,17 +1233,25 @@ class SpeakerInferencer:
           build_speaker_quote_sections，与 user prompt 组装同源），不做
           strip/归一化——LLM 摇抄不逐字就是证据不合格；分区缺失或为空串
           时任何 quote 都核对不过
-          （gate 审查修复②：correctness-speaker-evidence-quote-scope）
+          （gate 审查修复②：correctness-speaker-evidence-quote-scope）。
+          gate 修复轮第 5 轮②扩展：dialog_address 的 quote 允许来自第三人
+          提及旁证条目（corroboration_entries，本人片段分区核对不到时的
+          第二通道）——quote 必须逐字出现在本说话人的某条旁证条目文本内，
+          且该条目在收集时已被程序证明「呼叫后紧邻本人应答」；quote 与
+          呼叫对象的一致性由条目归属（只传入本说话人的条目）保证。通道
+          只对 dialog_address 开放，静态行分类仍以自身分区为唯一核对对象。
         - dialog_address 的 evidence_quote 必须包含候选名本身（英文忽略
-          大小写）——归属核对只证明文本属于该说话人，不证明文本支持该
-          姓名；整段发言里没提过这个名字，该文本对本名无证据力
+          大小写）——本人片段与旁证两条通道同样适用；归属核对只证明文本
+          属于该说话人，不证明文本支持该姓名
           （gate 审查修复④：correctness-dialog-candidate-name-not-bound-
           to-quote）。静态行（title_credit/author_host/description_roster）
           核对不变：复合名侧已有双证据 + 推测标注兜住关联性。
 
         作废原因（quote_missing / name_not_in_quote / invalid_candidate /
         unknown_evidence_type）返回给调用方写入 meta 供诊断；候选级原因中
-        quote_missing 是轴表点名的必须可观测的一项。
+        quote_missing 是轴表点名的必须可观测的一项。旁证通道核对通过的
+        候选附带 corroboration 元数据（来源说话人、段号、时间）——evidence
+        meta 如实标注 quote 来源（gate 修复轮第 5 轮②）。
         """
         verified: List[Dict] = []
         rejected: List[str] = []
@@ -1129,22 +1278,44 @@ class SpeakerInferencer:
             if len(stripped) < 2 or not any(ch.isalnum() for ch in stripped):
                 rejected.append("quote_missing")
                 continue
+            corroboration_meta: Optional[Dict] = None
             if quote not in sections.get(evidence_type, ""):
-                rejected.append("quote_missing")
-                continue
-            # gate 审查修复④：dialog_address 的名字绑定判据（见 docstring）。
+                # 本人/静态分区核对不过：仅 dialog_address 允许第二通道
+                # （第三人提及旁证条目），其余类型直接作废。
+                if evidence_type != "dialog_address":
+                    rejected.append("quote_missing")
+                    continue
+                entry = next(
+                    (
+                        e
+                        for e in (corroboration_entries or [])
+                        if isinstance(e, dict) and quote in (e.get("text") or "")
+                    ),
+                    None,
+                )
+                if entry is None:
+                    rejected.append("quote_missing")
+                    continue
+                corroboration_meta = {
+                    "source_speaker": str(entry.get("speaker", "")),
+                    "segment_index": entry.get("index"),
+                    "quote_time": entry.get("time"),
+                }
+            # gate 审查修复④：dialog_address 的名字绑定判据（见 docstring），
+            # 本人片段与旁证两条通道同样适用。
             if evidence_type == "dialog_address":
                 bound_name = name.strip()
                 if bound_name.casefold() not in quote.casefold():
                     rejected.append("name_not_in_quote")
                     continue
-            verified.append(
-                {
-                    "name": name.strip(),
-                    "evidence_type": evidence_type,
-                    "evidence_quote": quote,
-                }
-            )
+            verified_candidate = {
+                "name": name.strip(),
+                "evidence_type": evidence_type,
+                "evidence_quote": quote,
+            }
+            if corroboration_meta is not None:
+                verified_candidate["corroboration"] = corroboration_meta
+            verified.append(verified_candidate)
         return verified, rejected
 
     @staticmethod
@@ -1210,6 +1381,7 @@ class SpeakerInferencer:
         quote_sections: Optional[Dict[str, str]] = None,
         *,
         dialog_sections_by_speaker: Dict[str, str],
+        corroboration_by_speaker: Optional[Dict[str, List[Dict]]] = None,
     ) -> Dict:
         """证据裁决：按核对通过的引用决定显示名，confidence 只入 meta。
 
@@ -1228,6 +1400,12 @@ class SpeakerInferencer:
                 fail-closed（该 speaker 的 dialog_address 候选一律核对不过），
                 与静态分区缺失的既有语义一致。title_credit/author_host/
                 description_roster 三类静态行核对不受影响（与说话人无关）。
+            corroboration_by_speaker: speaker→第三人提及旁证条目列表
+                （gate 修复轮第 5 轮②，_collect_call_response_evidence 的
+                输出）。dialog_address 的 quote 在本人片段分区核对不过时，
+                允许逐字命中本说话人的旁证条目（收集时已程序核实呼叫-回应）；
+                核对通过后候选附带 corroboration 元数据（来源说话人/段号）。
+                None 或映射缺失 speaker 时按空列表 fail-closed。
 
         Returns:
             {"mapping", "meta", "low_confidence"}；low_confidence 语义
@@ -1270,7 +1448,11 @@ class SpeakerInferencer:
             effective_sections["dialog_address"] = dialog_sections_by_speaker.get(
                 speaker, ""
             )
-            verified, rejected = self._verify_candidates(candidates, effective_sections)
+            verified, rejected = self._verify_candidates(
+                candidates,
+                effective_sections,
+                corroboration_entries=(corroboration_by_speaker or {}).get(speaker),
+            )
             display_name, reason = self._decide_display_name(verified, speaker, speakers)
             inferred_name = raw_mapping.get(speaker, speaker)
 
