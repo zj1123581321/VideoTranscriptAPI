@@ -12,18 +12,20 @@ push `main` 后自动完成构建与部署：`.github/workflows/deploy.yml` 调�
 
 接入 D3 前的手动部署脚本 `docker/pull_and_deploy.sh` 已于 2026-10-15 删除：它以同目录种子为模板做部署目录自迁移，要求 digest-env 形态，与 D3 的本地 tag 形态种子互斥，D3 上位后失去存在意义（锁旧脚本行为的测试随退）。`docker/push_to_ghcr.sh` 保留，仅作 ghcr 公开镜像构建口：从干净主干构建 `ghcr.io/<owner>/video-transcript-api:<主干12位短SHA>` 并推送，不部署。
 
-自动链路不可用时的灾备兜底（在部署目录手工执行，不再依赖仓内脚本；部署目标见 `docker/deploy_targets.json`）。日常灾备直接重建容器（compose 用宿主已有的本地 tag `video-transcript-api:latest`，该 tag 由每次 D3 部署 retag 维持；**不要用 `docker compose pull`**——本地 tag 形态下它会去 registry 找名为 `video-transcript-api` 的镜像，不存在）：
+自动链路不可用时的灾备兜底（在部署目录手工执行，不再依赖仓内脚本；部署目标见 `docker/deploy_targets.json`）。灾备同样尊重忙锁、使用排他锁，超时失败属预期（等在飞任务清空而非强行恢复，避免打断转写）。
+
+日常灾备直接重建容器（compose 用宿主已有的本地 tag `video-transcript-api:latest`，该 tag 由每次 D3 部署 retag 维持；**不要用 `docker compose pull`**——本地 tag 形态下它会去 registry 找名为 `video-transcript-api` 的镜像，不存在）：
 
 ```bash
-docker compose up -d
+flock -w 600 -x .deploy-state/busy.lock -c "docker compose up -d"
 ```
 
-需要钉定版本时，从 ACR 手动拉取指定 SHA 并 retag 到本地 tag（ACR 全路径 = ci-templates 默认 registry/namespace + `image_name`，与本卡 deploy.yml 的实际值一致）：
+需要钉定版本时，从 ACR 手动拉取指定 SHA 并 retag 到本地 tag（ACR 全路径 = ci-templates 默认 registry/namespace + `image_name`，与本卡 deploy.yml 的实际值一致），同样带忙锁：
 
 ```bash
 docker pull crpi-0vsre5argteykh9m.cn-guangzhou.personal.cr.aliyuncs.com/zlx-personal/video-transcript-api:<git-sha> \
   && docker tag crpi-0vsre5argteykh9m.cn-guangzhou.personal.cr.aliyuncs.com/zlx-personal/video-transcript-api:<git-sha> video-transcript-api:latest \
-  && docker compose up -d
+  && flock -w 600 -x .deploy-state/busy.lock -c "docker compose up -d"
 ```
 
 入口地址、Tailscale 直连信息等基础设施细节维护在私有部署记忆中，不写入本公开仓。

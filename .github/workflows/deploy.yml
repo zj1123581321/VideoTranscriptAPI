@@ -81,8 +81,16 @@ jobs:
             echo "::error::pre-flight host busy.lock missing: ${host_lock}"
             exit 1
           fi
+          if [ ! -f "$host_lock" ]; then
+            echo "::error::pre-flight host busy.lock not regular file: ${host_lock}"
+            exit 1
+          fi
           if ! docker exec "$CONTAINER_NAME" test -e "$container_lock"; then
             echo "::error::pre-flight container busy.lock missing: ${container_lock}"
+            exit 1
+          fi
+          if ! docker exec "$CONTAINER_NAME" test -f "$container_lock"; then
+            echo "::error::pre-flight container busy.lock not regular file: ${container_lock}"
             exit 1
           fi
           host_inode="$(stat -c %i "$host_lock")"
@@ -224,6 +232,30 @@ jobs:
           SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
           ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' IMAGE_NAME='$IMAGE_NAME' bash -s" <<'REMOTE'
           set -euo pipefail
+          # 回滚前置对账（gate 第 10 轮）：inode 分裂场景宿主锁与容器锁不互斥，不能安全
+          # 回滚时必须显式停机而非带伤回滚（不回滚不打断，人工介入）。
+          host_lock="${DEPLOY_DIR}/.deploy-state/busy.lock"
+          container_lock="/app/.deploy-state/busy.lock"
+          mismatch_reason=""
+          if ! docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+            mismatch_reason="container missing: ${CONTAINER_NAME}"
+          elif [ ! -f "$host_lock" ]; then
+            mismatch_reason="host busy.lock missing or not regular file: ${host_lock}"
+          elif ! docker exec "$CONTAINER_NAME" test -f "$container_lock"; then
+            mismatch_reason="container busy.lock missing or not regular file: ${container_lock}"
+          else
+            host_inode="$(stat -c %i "$host_lock" 2>/dev/null || true)"
+            container_inode="$(docker exec "$CONTAINER_NAME" stat -c %i "$container_lock" 2>/dev/null || true)"
+            if [ -z "$host_inode" ] || [ -z "$container_inode" ]; then
+              mismatch_reason="busy.lock inode empty host=${host_inode:-none} container=${container_inode:-none}"
+            elif [ "$host_inode" != "$container_inode" ]; then
+              mismatch_reason="busy.lock inode mismatch host=${host_inode} container=${container_inode}"
+            fi
+          fi
+          if [ -n "$mismatch_reason" ]; then
+            echo "::error::rollback_aborted_mount_mismatch: ${mismatch_reason}"
+            exit 1
+          fi
           # 只读唯一事实源：最近一次对账通过时记录的镜像（tmp+rename 原子写，无半截读）。
           last_good_file="${DEPLOY_DIR}/.deploy-state/last_verified_good"
           if [ ! -s "$last_good_file" ]; then
@@ -244,11 +276,6 @@ jobs:
           # 用法与上游 pull_and_deploy.sh 一致：只读 fd 打开（宿主部署用户对锁文件常只
           # 有读权限，锁互斥作用在 inode 上，只读 fd 即可申请排他锁）；rc=1 是等待超时
           # （任务仍持共享锁），其余非零是锁命令本身故障（配置/主机问题）。
-          host_lock="${DEPLOY_DIR}/.deploy-state/busy.lock"
-          if [ ! -e "$host_lock" ]; then
-            echo "::error::rollback_failed: busy lock file missing: ${host_lock}"
-            exit 1
-          fi
           exec 8<"$host_lock"
           _frc=0; flock -w 600 -x 8 || _frc=$?
           if [ "$_frc" -eq 1 ]; then
@@ -263,10 +290,24 @@ jobs:
           docker compose up -d
           now="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME")"
           if [ "$now" != "$last_good" ]; then
+            flock -u 8 || true
             echo "::error::rollback_failed: container image ${now} != last good ${last_good} after compose up"
             exit 1
           fi
           flock -u 8
+          # 回滚后健康探针（gate 第 10 轮）：循环 30 次 × 间隔 2s
+          health_ok=0
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:8200/livez >/dev/null 2>&1; then
+              health_ok=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$health_ok" -ne 1 ]; then
+            echo "::error::rollback_failed: health probe timed out after rollback (service unavailable, manual intervention required)"
+            exit 1
+          fi
           echo "rollback ok: container redeployed on last good image ${last_good}"
           REMOTE
 
