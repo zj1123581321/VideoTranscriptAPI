@@ -1,9 +1,9 @@
 # ci-templates 已迁移到 zlxlabs org；部署工作流与脚本钉到同一移动版本 tag，随上游 v2 被动升级。
 # push main 自动 build→ACR→SSH n305→探针→部署。
 #
-# 第一阶段（VideoTranscriptAPI-20261015-01）：不启用忙锁门禁。忙锁要求服务侧先持有
-# 锁文件才有保护（锁缺失时部署脚本 warn-and-proceed 不拦截，形同虚设）；第二阶段
-# 服务侧忙锁 + compose 挂载就位后，再在 with: 里补门禁路径与超时两个开关（另卡打开）。
+# 忙锁门禁已启用：服务侧持锁由后续卡 VideoTranscriptAPI-20261015-02 落地（服务侧
+# BusyLock + compose 挂载）；未落地前锁文件不存在时部署脚本自动创建并 WARN 后继续
+# （warn-and-proceed，行为等价无锁、门禁空转），服务侧持锁上线后自动生效。
 name: deploy
 on:
   push:
@@ -25,6 +25,8 @@ jobs:
       dockerfile: docker/Dockerfile                     # Dockerfile 在 docker/ 子目录(build_context 默认仓根:COPY 的 pyproject/uv.lock/src 都在根)
       host: 100.68.21.80                                # n305 的 Tailscale IP
       deploy_dir: /opt/media/VideoTranscriptAPI
+      busy_lock_file: /opt/media/VideoTranscriptAPI/.deploy-state/busy.lock   # 服务侧持锁落地前由部署脚本自动创建(门禁空转)，见顶部注释
+      busy_lock_timeout: "600"
       runner: self                                      # self-hosted fleet;显式钉死不随上游默认漂移(该形态下 runner 内直连 tailnet 目标机,临时入网步骤整体跳过)
       healthcheck_url: http://localhost:8200/livez      # 宿主发布端口 8200(容器内 8000);探针用 /livez 纯存活恒 200,不用深度检查的 /health(依赖下游,抖动误触发回滚)
       healthcheck_warmup: "20"                          # 生产实测启动到 healthy 约 10-25s(startup ~10s 内完成),warmup 给 2 倍裕度

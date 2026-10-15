@@ -51,3 +51,11 @@ Task-Id: VideoTranscriptAPI-20261015-01 · dispatch: dlg-20261015-151234-61378b 
 - 关键决策与已否决方案：①保留测试不止指令点名的 test_build_script_uses_only_git_sha_tag，还保留 test_compose_template_uses_legacy_compatible_env_file_syntax 与 test_compose_template_sets_stop_grace_period——两者测的是种子 compose 文件静态形态（env_file 语法、优雅关闭预算），不测 pull 脚本行为且在新形态下仍绿，属「非 pull 脚本测试」，不在「删除全部 pull 脚本测试」范围内；②文件名采纳指令建议 test_push_to_ghcr.py（docstring 已说明覆盖范围：push 构建脚本守卫 + 种子模板守卫）；③README 除指令点名的 92 行命令外，同步收窄 87 行段落与 95 行大段——脚本删除后该段全是对已删行为的悬空描述，按反熵条款改事实而非留假引用。tests/README.md 无该文件引用，无需同步。
 - 证据（2026-10-15，随本段提交 @ 889671d2 后重取）：`make test` FAILED 清单仅 `FAILED tests/unit/test_asr_monitor_alert_delivery.py::TestNetworkGuard::test_unix_domain_socket_is_not_blocked`；`ls docker/pull_and_deploy.sh` → No such file or directory；tests/deployment 套件 4 项全绿；README/DEPLOY/tests 无 pull_and_deploy 活引用（仅 DEPLOY.md 退役声明与测试 docstring 背景两处史实陈述）。
 - 下一步唯一动作：push 更新 PR #246，正文「仲裁请求」节改为裁决结果。
+
+## 段7：gate primary 两条 major 裁决落地（续修卡 dlg-20261015-163618-62a47e）
+
+- 当前阶段：implementing（两条 finding 均采纳、就地修复完成，验证全绿）
+- 本段结论：①deploy.yml 直接带忙锁参数（busy_lock_file=/opt/media/VideoTranscriptAPI/.deploy-state/busy.lock、timeout 600），顶部注释改为「忙锁已启用，服务侧持锁由卡 VideoTranscriptAPI-20261015-02 落地，落地前锁文件由部署脚本自动创建、门禁空转」；②DEPLOY.md 灾备兜底修正——删去错误命令 docker compose pull（本地 tag 形态下会去 registry 找不存在的同名镜像），改为日常灾备 docker compose up -d（宿主已有本地 tag）+ 钉版命令（ACR 全路径拉 SHA 后 docker tag 到本地 tag）；D3 节忙锁状态句同步为已启用/空转现状。
+- 关键决策与已否决方案：裁决依据已独立核实——v2 tag pull_and_deploy.sh 684-689 行：锁文件缺失时 log WARN + mkdir -p + 创建空文件后继续（设计内降级，服务侧持锁上线后自动生效）；ACR 全路径按 build-deploy.yml 组装规则 ACR_REGISTRY/ACR_NAMESPACE/IMAGE_NAME 推出（本卡未覆盖两个默认 input）；否决「DEPLOY.md 只改命令不动 D3 节忙锁句」——原句「自动部署不感知在飞任务」与启用后现实矛盾，属同一事实的文档面。
+- 证据（2026-10-15）：yaml parse ok；Accept-Check 新口径 busy_lock_file=1、livez=1、本地 tag=1、digest env=0；DEPLOY.md 无 compose pull && 残留；tests/ 无任何测试读取 deploy.yml/DEPLOY.md（仅引用未改动的 docker-compose.deploy.yml）——make test 不重跑全量的理由：本轮 diff 零测试耦合，上轮全量基线（唯一红 AF_UNIX）输入文件均未动。
+- 下一步唯一动作：push 更新 PR #246 正文（差异表忙锁行、验证口径、后续节）。
