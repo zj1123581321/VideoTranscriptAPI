@@ -1,8 +1,9 @@
 """OG share-card rendering: llm_share_card.json -> 1200x630 PNG.
 
 Contract (written by the LLM share-card pipeline, read here):
-  {"version": 1, "headline": str, "points": [str, ...] (1..3),
-   "generated_at": "ISO8601"}
+  {"version": 1, "headline": str (weight <= 30), "points": [str, ...]
+  (1..3, each weight <= 40; CJK counts 1, other chars 0.5),
+   "generated_at": non-empty ISO8601 str}
 
 A cache directory without a contract-valid llm_share_card.json has no card:
 load_share_card returns None and the /og route must answer 404. There is no
@@ -15,12 +16,15 @@ import json
 import os
 import tempfile
 import unicodedata
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from PIL import Image, ImageDraw, ImageFont
 
+from ...llm.processors.share_card_processor import _validate_card
+from ...llm.prompts.schemas.share_card import SHARE_CARD_FORMAT_VERSION
 from ..logging import setup_logger
 
 logger = setup_logger("og_card")
@@ -57,12 +61,19 @@ POINT_NUMBER_INDENT = 56
 POINT_TOP = 296
 FOOTER_FONT_SIZE = 30
 FOOTER_TOP = HEIGHT - 54
+FOOTER_GAP = 24  # min gap between the footer host text and the AI label
 
+AI_LABEL = "AI 总结"
 ELLIPSIS = "…"
 
 
 def load_share_card(cache_dir: str | Path) -> Optional[Dict[str, Any]]:
-    """Read and validate llm_share_card.json from a task cache directory.
+    """Read and strictly validate llm_share_card.json from a cache dir.
+
+    Mirrors card A's writer-side checks: version must equal
+    SHARE_CARD_FORMAT_VERSION, headline/points must pass the shared
+    contract validation (same length rules as share_card_processor), and
+    generated_at must be a non-empty ISO8601-parsable string.
 
     Returns the normalized card dict, or None when the file is missing or
     violates the contract (invalid cards are treated as "no card").
@@ -76,28 +87,30 @@ def load_share_card(cache_dir: str | Path) -> Optional[Dict[str, Any]]:
         logger.warning("分享卡片 JSON 读取失败 {}: {}", path, exc)
         return None
 
-    if not isinstance(data, dict) or data.get("version") != 1:
-        logger.warning("分享卡片不合契约 {}: version 必须为 1", path)
+    if not isinstance(data, dict):
+        logger.warning("分享卡片不合契约 {}: 顶层必须是对象", path)
         return None
-    headline = data.get("headline")
-    points = data.get("points")
-    if not isinstance(headline, str) or not headline.strip():
-        logger.warning("分享卡片不合契约 {}: headline 必须为非空字符串", path)
+    if data.get("version") != SHARE_CARD_FORMAT_VERSION:
+        logger.warning(
+            "分享卡片不合契约 {}: version 必须为 {}", path, SHARE_CARD_FORMAT_VERSION
+        )
         return None
-    if (
-        not isinstance(points, list)
-        or not 1 <= len(points) <= 3
-        or not all(isinstance(p, str) and p.strip() for p in points)
-    ):
-        logger.warning("分享卡片不合契约 {}: points 必须为 1 到 3 条非空字符串", path)
+    contract_error = _validate_card(data)
+    if contract_error:
+        logger.warning("分享卡片不合契约 {}: {}", path, contract_error)
         return None
     generated_at = data.get("generated_at")
-    if generated_at is not None and not isinstance(generated_at, str):
-        logger.warning("分享卡片不合契约 {}: generated_at 必须为字符串", path)
+    if not isinstance(generated_at, str) or not generated_at.strip():
+        logger.warning("分享卡片不合契约 {}: generated_at 必须为非空字符串", path)
+        return None
+    try:
+        datetime.fromisoformat(generated_at)
+    except ValueError:
+        logger.warning("分享卡片不合契约 {}: generated_at 无法解析: {!r}", path, generated_at)
         return None
     return {
-        "headline": headline.strip(),
-        "points": [p.strip() for p in points],
+        "headline": data["headline"].strip(),
+        "points": [p.strip() for p in data["points"]],
         "generated_at": generated_at,
     }
 
@@ -186,6 +199,21 @@ def truncate_lines(
     return kept
 
 
+def layout_header(
+    platform_display: str, author: str, draw: ImageDraw.ImageDraw, font
+) -> str:
+    """Header line ("platform · author"), truncated to the content width."""
+    header = " · ".join(part for part in (platform_display, author) if part)
+    return truncate_lines(header, font, CONTENT_WIDTH, draw, 1)[0]
+
+
+def layout_footer_host(host: str, draw: ImageDraw.ImageDraw, font) -> str:
+    """Footer host, truncated to clear the right-aligned "AI 总结" label."""
+    label_width = _text_width(draw, AI_LABEL, font)
+    available = WIDTH - 2 * MARGIN - label_width - FOOTER_GAP
+    return truncate_lines(host, font, available, draw, 1)[0]
+
+
 def _load_font(path: str | Path, size: int):
     """Load a font, failing loudly when the configured file is missing.
 
@@ -233,8 +261,8 @@ def render_og_card(
     # Brand accent bar across the top.
     draw.rectangle([0, 0, WIDTH, 8], fill=ACCENT_COLOR)
 
-    header = " · ".join(part for part in (platform_display, author) if part)
-    draw.text((MARGIN, 52), header, font=header_font, fill=HEADER_COLOR)
+    header_line = layout_header(platform_display, author, draw, header_font)
+    draw.text((MARGIN, 52), header_line, font=header_font, fill=HEADER_COLOR)
 
     for i, line in enumerate(
         truncate_lines(card["headline"], title_font, CONTENT_WIDTH, draw, TITLE_MAX_LINES)
@@ -257,12 +285,12 @@ def render_og_card(
         y += POINT_LINE_HEIGHT * len(lines) + POINT_GAP
 
     host = urlparse(site_url).hostname or site_url
-    draw.text((MARGIN, FOOTER_TOP), host, font=footer_font, fill=FOOTER_COLOR)
-    ai_label = "AI 总结"
-    label_width = _text_width(draw, ai_label, footer_font)
+    host_line = layout_footer_host(host, draw, footer_font)
+    draw.text((MARGIN, FOOTER_TOP), host_line, font=footer_font, fill=FOOTER_COLOR)
+    label_width = _text_width(draw, AI_LABEL, footer_font)
     draw.text(
         (WIDTH - MARGIN - label_width, FOOTER_TOP),
-        ai_label,
+        AI_LABEL,
         font=footer_font,
         fill=ACCENT_COLOR,
     )

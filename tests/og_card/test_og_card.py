@@ -18,6 +18,8 @@ from video_transcript_api.utils.rendering import og_card
 from video_transcript_api.utils.rendering.og_card import (
     CONTENT_WIDTH,
     TITLE_MAX_LINES,
+    layout_footer_host,
+    layout_header,
     load_share_card,
     render_og_card,
     truncate_lines,
@@ -108,10 +110,26 @@ class TestLoadShareCard:
         (tmp_path / og_card.CARD_FILENAME).write_text("{not json", encoding="utf-8")
         assert load_share_card(tmp_path) is None
 
-    def test_generated_at_optional_passthrough(self, tmp_path):
+    def test_generated_at_missing_returns_none(self, tmp_path):
         card = {k: v for k, v in CARD.items() if k != "generated_at"}
         _write_card(tmp_path, card)
-        assert load_share_card(tmp_path)["generated_at"] is None
+        assert load_share_card(tmp_path) is None
+
+    @pytest.mark.parametrize(
+        "override",
+        [
+            pytest.param({"headline": ""}, id="headline-empty"),
+            pytest.param({"headline": "标" * 31}, id="headline-too-long"),
+            pytest.param({"points": ["x" * 81]}, id="point-too-long"),
+            pytest.param({"generated_at": ""}, id="generated-at-empty"),
+            pytest.param(
+                {"generated_at": "not-a-timestamp"}, id="generated-at-invalid"
+            ),
+        ],
+    )
+    def test_contract_violation_returns_none(self, tmp_path, override):
+        _write_card(tmp_path, {**CARD, **override})
+        assert load_share_card(tmp_path) is None
 
 
 class TestWrapText:
@@ -170,6 +188,42 @@ class TestTruncateLines:
         )
         assert len(lines) == TITLE_MAX_LINES
         assert lines[-1].endswith(og_card.ELLIPSIS)
+
+
+class TestLayoutBounds:
+    """F4: header and footer host must truncate to stay inside the canvas
+    and clear of the footer AI label. Asserted on the same layout helpers
+    the renderer calls (no pixel comparison)."""
+
+    def test_long_author_header_fits_content_width(self, draw, regular_font):
+        line = layout_header("哔哩哔哩", "超长作者名称测试" * 30, draw, regular_font)
+        assert draw.textlength(line, font=regular_font) <= CONTENT_WIDTH
+        assert line.endswith(og_card.ELLIPSIS)
+
+    def test_long_host_stays_clear_of_ai_label(self, draw):
+        font = ImageFont.truetype(str(REGULAR_FONT), og_card.FOOTER_FONT_SIZE)
+        host = layout_footer_host(
+            "very-long-subdomain." * 24 + "example.com", draw, font
+        )
+        host_right = og_card.MARGIN + draw.textlength(host, font=font)
+        label_left = (
+            og_card.WIDTH - og_card.MARGIN - draw.textlength(og_card.AI_LABEL, font=font)
+        )
+        assert host_right + og_card.FOOTER_GAP <= label_left
+
+    def test_render_with_long_header_and_host_smoke(self, tmp_path):
+        out = tmp_path / "og_card.png"
+        render_og_card(
+            CARD,
+            platform_display="哔哩哔哩",
+            author="超长作者名称测试" * 30,
+            site_url="https://very-long-subdomain." + "x" * 200 + ".example.com",
+            font_path=REGULAR_FONT,
+            font_bold_path=BOLD_FONT,
+            output_path=out,
+        )
+        with Image.open(out) as img:
+            assert img.size == (og_card.WIDTH, og_card.HEIGHT)
 
 
 class TestRenderOgCard:
