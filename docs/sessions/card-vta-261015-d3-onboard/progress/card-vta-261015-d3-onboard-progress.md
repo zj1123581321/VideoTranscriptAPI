@@ -25,3 +25,14 @@ Task-Id: VideoTranscriptAPI-20261015-01 · dispatch: dlg-20261015-151234-61378b 
 - 本段结论：DEPLOY.md 新增「D3 自动部署（主链路）」节（链路、/livez 选型理由、忙锁属第二阶段、部署目录 compose 形态前置条件），旧两脚本节降为「手动部署（备用）」；Narrow-Verify 全绿：两个 YAML parse ok，`docker compose config -q` 在临时目录复刻服务器布局下通过。
 - 关键决策与已否决方案：否决「在 DEPLOY.md 里写死主脑后续迁移步骤/时间点」——文档只写不随时间过期的形态约束（本地 tag 形态前置条件），迁移执行主体留给主脑会话。
 - 下一步唯一动作：跑 make test 全量基线验证 + 红验，然后 push 开 PR。
+
+## 段4：基线验证暴露种子双消费者冲突（阻塞上行）
+
+- 当前阶段：implementing（产物已全部落盘；发现卡面未交代的结构性冲突，已如实上报待主脑仲裁）
+- 本段结论：make test 出现 13 个非卡面已知清单的失败（tests/deployment/test_pull_and_deploy.py）；单变量 A/B 钉死根因是本卡锁定决策①（种子迁本地 tag）：旧 `docker/pull_and_deploy.sh` 把同目录种子当部署目录自迁移模板（121-135 行），要求模板渲染出候选 digest，只在 digest-env 形态下成立。种子文件被新旧两条链路要求互斥形态，卡面范围内（禁改 tests/、禁改旧脚本）无双绿解。决策：保持锁定决策与 Accept-Check 闸，新红如实上报；DEPLOY.md 手动备用节已补写形态耦合事实。
+- 关键决策与已否决方案：否决「回退种子保 make test 绿」——那会让 D3 首次部署在镜像对账处必挂，卡片目标整体落空；否决「顺手改 tests/ 跳过旧脚本测试」——越出禁止边界。
+- 证据（单变量 A/B，2026-10-15，仅切换种子文件其余不动）：
+  - base 版种子（digest-env）：`uv run pytest -q tests/deployment/test_pull_and_deploy.py -p no:warnings --tb=no` → `...................                                                      [100%]`（19 passed）
+  - 本卡种子（本地 tag）：同命令 → `FAILED tests/deployment/test_pull_and_deploy.py::test_legacy_image_without_docker_health_uses_api_probe` 等 13 个 FAILED（完整清单见 report.md）
+  - 旧脚本判据原文（docker/pull_and_deploy.sh:121-135）：`rendered_image != CANDIDATE_DIGEST` → 换用 `${SCRIPT_DIR}/docker-compose.deploy.yml` 重写后再验，仍不等则 `[ERROR] Migrated compose file does not render the candidate digest.` exit 1
+- 下一步唯一动作：push 分支开 PR，正文单独列出继承红与新红，等主脑验收仲裁。
