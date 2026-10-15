@@ -87,3 +87,19 @@ implementing：服务侧 fail-closed 已落盘并窄验通过，待红验与 dep
 
 ### 下一步唯一动作
 红验：init-OSError 分支注入 return True 转 red 取证，仅还原注入行后 commit。
+
+## 2026-10-16 里程碑6：post-verify 回滚 + ssh_user repo variable
+
+### 当前阶段
+implementing：deploy.yml 三处改造已落盘，yaml/actionlint 通过，待 make test 与 push。
+
+### 本段结论
+①pre-flight 在 inode 对账通过后把当前运行镜像 ID 写入宿主 `.deploy-state/last_good_image`（跨 job 锚点，与 ci-templates 同目录）。②verify 步骤加 `id: verify`，其后新增回滚步骤（`if: steps.verify.outcome == 'failure'`）：读锚点→sha256 格式校验→`docker tag` 锚点为 `video-transcript-api:latest`→`cd DEPLOY_DIR && docker compose up -d`→复查容器镜像 ID==锚点；任一步失败报 `rollback_failed` 且 job 双重失败，锚点缺失/格式坏同报。③删除两个 job 的 ci-templates checkout+正则解析，workflow 级 `env.SSH_USER: vars.VTA_DEPLOY_SSH_USER` 供两个 SSH job，ship 的 `ssh_user:` 输入钉同一变量；变量未配置时 pre-flight 守卫立即失败并给配置指引。
+
+### 关键决策与已否决方案
+- grep 计数约束（VTA_DEPLOY_SSH_USER 恰好 2 行）→ 用 workflow 级 env 一行供两个 job，ship `with:` 钉变量占第二行；代价是守卫报错文案不能带变量名字面量（否则 3 行），文案改为指向 deploy.yml env 块。否决「per-job env 各一行」——那样 ship 无法钉变量，违背「全部 SSH 使用处」。
+- 回滚锚点用镜像 ID 而非复用上游 `last_good_tag`：workflow 拿不到 ACR registry/namespace（是 ci-templates 侧 secrets），无法拼 `${ACR_IMAGE}:${tag}`；且卡面锁定决策明确指定镜像 ID 机制。retag→compose up 的机制与上游 deploy_tag 完全同款（本地 tag 存在即不触发 pull）。
+- 回滚成功不改变 job 结论（对账失败已红）；否决「回滚成功则转绿」——坏镜像曾上线的事实不能被回滚洗掉。
+
+### 下一步唯一动作
+make test 全量（预期仅继承红 AF_UNIX），commit 本段，push fast-forward 更新 PR 正文。

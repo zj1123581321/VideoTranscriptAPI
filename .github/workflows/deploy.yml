@@ -1,9 +1,13 @@
 # ci-templates 已迁移到 zlxlabs org；部署工作流与脚本钉到同一移动版本 tag，随上游 v2 被动升级。
 # push main 自动 build→ACR→SSH n305→探针→部署。
 #
-# 忙锁门禁已启用：服务侧 BusyLock 持共享 flock（本 PR）；部署脚本对同一文件申请排他锁。
-# 事前 pre-flight：对当前运行容器对账宿主/容器 busy.lock 的 stat -c %i；失败则 ship 不跑（fail-closed）。
-# 事后 verify-busy-lock-inode：ship 成功后对账新容器。双闸，不静默降级。
+# 忙锁门禁 fail-closed 全链：服务侧 BusyLock 锁基础设施异常即拒绝新任务（HTTP 503）；
+# 部署脚本对同一文件申请排他锁。事前 pre-flight：对当前运行容器对账宿主/容器 busy.lock 的
+# stat -c %i，并把当前运行镜像 ID 记为回滚锚点（.deploy-state/last_good_image）；失败则 ship
+# 不跑。事后 verify-busy-lock-inode：ship 成功后对账新容器，失败则 retag 回滚锚点镜像并
+# compose up -d 回滚（不自动重试部署，回滚后人工判断）。双闸 + 回滚，不静默降级。
+# SSH 身份不再正则解析 ci-templates default：全部 SSH 使用处读 repo variable（见下方 env
+# 与 ship 的 ssh_user 输入，同名变量）；未配置时 pre-flight 第一步即失败并给配置指引。
 name: deploy
 on:
   push:
@@ -17,20 +21,18 @@ on:
   # 手动触发口:paths-ignore 排除了 .github/**,workflow 自身修复后需手动补发部署
   workflow_dispatch:
 
+# 部署 SSH 身份唯一来源：repo variable（Settings > Secrets and variables > Actions >
+# Variables，key 见下方引用处）。vars 为空时 pre-flight 守卫立即失败，不会带空用户名
+# 碰生产。workflow 级 env 同时供 pre-flight / verify 两个 job 的 SSH 使用。
+env:
+  SSH_USER: ${{ vars.VTA_DEPLOY_SSH_USER }}
+
 jobs:
-  # 替换前对当前运行容器做 inode 对账。失败 → ship 不执行（首次无挂载/inode 不一致/容器不存在均 fail-closed）。
+  # 替换前对当前运行容器做 inode 对账并记录回滚锚点。失败 → ship 不执行（首次无挂载/inode 不一致/容器不存在均 fail-closed）。
   pre-flight:
     runs-on: [self-hosted, linux, x64, codex]
     timeout-minutes: 5
     steps:
-      - name: Checkout ci-templates (ssh_user default)
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          repository: zlxlabs/ci-templates
-          ref: v2
-          path: .ci-templates
-          persist-credentials: false
-
       - name: Set up SSH
         env:
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
@@ -50,21 +52,11 @@ jobs:
           CONTAINER_NAME: video-transcript-api
         run: |
           set -euo pipefail
+          if [ -z "${SSH_USER:-}" ]; then
+            echo "::error::SSH_USER is empty: set the repo variable that feeds the workflow-level env block in .github/workflows/deploy.yml (Settings > Secrets and variables > Actions > Variables); value = deploy host login user"
+            exit 1
+          fi
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
-          SSH_USER="$(python3 - <<'PY'
-          from pathlib import Path
-          import re
-          text = Path(".ci-templates/.github/workflows/build-deploy.yml").read_text()
-          match = re.search(
-              r"ssh_user:\n(?:.*\n)*?^[ ]{8}default:[ ]*\"([A-Za-z0-9_-]+)\"",
-              text,
-              re.M,
-          )
-          if not match:
-              raise SystemExit("ci-templates ssh_user default not found")
-          print(match.group(1))
-          PY
-          )"
           [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
           SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
           ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' bash -s" <<'REMOTE'
@@ -93,7 +85,11 @@ jobs:
             echo "::error::pre-flight busy.lock inode mismatch host=${host_inode} container=${container_inode}"
             exit 1
           fi
-          echo "pre-flight busy.lock inode ok ${host_inode}"
+          # 回滚锚点：ship 替换前先记下当前运行镜像 ID（宿主侧持久文件，verify job 可读）。
+          # 只在全部对账通过后记录；本步失败同样 fail-closed 阻止 ship。
+          running_image="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME")"
+          printf '%s\n' "$running_image" > "${DEPLOY_DIR}/.deploy-state/last_good_image"
+          echo "pre-flight busy.lock inode ok ${host_inode}; last good image recorded: ${running_image}"
           REMOTE
 
   ship:
@@ -111,6 +107,7 @@ jobs:
       healthcheck_warmup: "20"                          # 生产实测启动到 healthy 约 10-25s(startup ~10s 内完成),warmup 给 2 倍裕度
       healthcheck_interval: "3"                         # 默认 5 次探针,末次最晚 ~35s,覆盖 25s 上界
       ci_templates_ref: v2
+      ssh_user: ${{ vars.VTA_DEPLOY_SSH_USER }}         # 与上方 env 同一 repo variable，替代 ci-templates default 的隐式耦合
     secrets:                                            # 逐个显式传,最小权限
       ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
       ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
@@ -121,20 +118,14 @@ jobs:
       FEISHU_CI_WEBHOOK: ${{ secrets.FEISHU_CI_WEBHOOK }}   # 未配置时通知层打 warning 跳过,不影响部署结论
 
   # reusable ship job 无法插入步骤；本 job 在健康探针已通过之后、workflow 宣告成功之前
-  # 对账 inode。同一 host / key / deploy_dir（新 SSH 会话）。挂载失败 → job failure。
+  # 对账 inode。同一 host / key / deploy_dir（新 SSH 会话）。挂载失败 → job failure，
+  # 且自动 retag pre-flight 记录的回滚锚点镜像并 compose up -d 回滚；回滚本身失败则
+  # 双重失败（workflow 红 + rollback failed 错误行），不吞错、不自动重试部署。
   verify-busy-lock-inode:
     needs: ship
     runs-on: [self-hosted, linux, x64, codex]
     timeout-minutes: 5
     steps:
-      - name: Checkout ci-templates (ssh_user default)
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          repository: zlxlabs/ci-templates
-          ref: v2
-          path: .ci-templates
-          persist-credentials: false
-
       - name: Set up SSH
         env:
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
@@ -148,27 +139,18 @@ jobs:
           chmod 644 ~/.ssh/known_hosts
 
       - name: Verify busy.lock host/container inode
+        id: verify
         env:
           DEPLOY_HOST: 100.68.21.80
           DEPLOY_DIR: /opt/media/VideoTranscriptAPI
           CONTAINER_NAME: video-transcript-api
         run: |
           set -euo pipefail
+          if [ -z "${SSH_USER:-}" ]; then
+            echo "::error::SSH_USER is empty: set the repo variable that feeds the workflow-level env block in .github/workflows/deploy.yml (Settings > Secrets and variables > Actions > Variables); value = deploy host login user"
+            exit 1
+          fi
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
-          SSH_USER="$(python3 - <<'PY'
-          from pathlib import Path
-          import re
-          text = Path(".ci-templates/.github/workflows/build-deploy.yml").read_text()
-          match = re.search(
-              r"ssh_user:\n(?:.*\n)*?^[ ]{8}default:[ ]*\"([A-Za-z0-9_-]+)\"",
-              text,
-              re.M,
-          )
-          if not match:
-              raise SystemExit("ci-templates ssh_user default not found")
-          print(match.group(1))
-          PY
-          )"
           [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
           SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
           ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' bash -s" <<'REMOTE'
@@ -195,3 +177,47 @@ jobs:
           fi
           echo "busy.lock inode ok ${host_inode}"
           REMOTE
+
+      # 对账失败 → 回滚到 pre-flight 记录的镜像锚点（同一 host / key，新 SSH 会话）。
+      # 仅在对账步骤实际失败时运行；对账失败本身已让 job 变红，回滚成功也不改变结论
+      # （回滚后人工判断，不自动重试部署）。回滚自身任何一步失败都报 rollback failed。
+      - name: Rollback to last good image (post-verify failed)
+        if: steps.verify.outcome == 'failure'
+        env:
+          DEPLOY_HOST: 100.68.21.80
+          DEPLOY_DIR: /opt/media/VideoTranscriptAPI
+          CONTAINER_NAME: video-transcript-api
+          IMAGE_NAME: video-transcript-api
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
+          [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
+          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
+          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' IMAGE_NAME='$IMAGE_NAME' bash -s" <<'REMOTE'
+          set -euo pipefail
+          last_good_file="${DEPLOY_DIR}/.deploy-state/last_good_image"
+          if [ ! -s "$last_good_file" ]; then
+            echo "::error::rollback_failed: last good image record missing or empty: ${last_good_file}"
+            exit 1
+          fi
+          last_good="$(cat "$last_good_file")"
+          case "$last_good" in
+            sha256:*) ;;
+            *) echo "::error::rollback_failed: malformed last good image id: ${last_good}"; exit 1 ;;
+          esac
+          current="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME" 2>/dev/null || true)"
+          if [ "$current" = "$last_good" ]; then
+            echo "rollback skipped: container already on recorded last good image ${last_good}"
+            exit 0
+          fi
+          docker tag "$last_good" "${IMAGE_NAME}:latest"
+          cd "$DEPLOY_DIR"
+          docker compose up -d
+          now="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME")"
+          if [ "$now" != "$last_good" ]; then
+            echo "::error::rollback_failed: container image ${now} != last good ${last_good} after compose up"
+            exit 1
+          fi
+          echo "rollback ok: container redeployed on last good image ${last_good}"
+          REMOTE
+
