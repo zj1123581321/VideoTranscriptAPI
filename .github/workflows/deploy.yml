@@ -1,0 +1,40 @@
+# ci-templates 已迁移到 zlxlabs org；部署工作流与脚本钉到同一移动版本 tag，随上游 v2 被动升级。
+# push main 自动 build→ACR→SSH n305→探针→部署。
+#
+# 第一阶段（VideoTranscriptAPI-20261015-01）：不启用忙锁门禁。忙锁要求服务侧先持有
+# 锁文件才有保护（锁缺失时部署脚本 warn-and-proceed 不拦截，形同虚设）；第二阶段
+# 服务侧忙锁 + compose 挂载就位后，再在 with: 里补门禁路径与超时两个开关（另卡打开）。
+name: deploy
+on:
+  push:
+    branches: [main]            # 本仓默认分支是 main（live-recorder 先例是 master，勿抄错）
+    # 仅改 CI/文档不触发生产部署:改 workflow/文档不该扇出一次 D3 应用部署。
+    # 真实 src 改动(不在下列路径)照常部署。
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+  # 手动触发口:paths-ignore 排除了 .github/**,workflow 自身修复后需手动补发部署
+  workflow_dispatch:
+
+jobs:
+  ship:
+    uses: zlxlabs/ci-templates/.github/workflows/build-deploy.yml@v2
+    with:
+      image_name: video-transcript-api                  # == ACR 镜像名 == 宿主 compose 的 image(本地 tag 形态,见 docker/docker-compose.deploy.yml)
+      dockerfile: docker/Dockerfile                     # Dockerfile 在 docker/ 子目录(build_context 默认仓根:COPY 的 pyproject/uv.lock/src 都在根)
+      host: 100.68.21.80                                # n305 的 Tailscale IP
+      deploy_dir: /opt/media/VideoTranscriptAPI
+      runner: self                                      # self-hosted fleet;显式钉死不随上游默认漂移(该形态下 runner 内直连 tailnet 目标机,临时入网步骤整体跳过)
+      healthcheck_url: http://localhost:8200/livez      # 宿主发布端口 8200(容器内 8000);探针用 /livez 纯存活恒 200,不用深度检查的 /health(依赖下游,抖动误触发回滚)
+      healthcheck_warmup: "20"                          # 生产实测启动到 healthy 约 10-25s(startup ~10s 内完成),warmup 给 2 倍裕度
+      healthcheck_interval: "3"                         # 默认 5 次探针,末次最晚 ~35s,覆盖 25s 上界
+      ci_templates_ref: v2
+    secrets:                                            # 逐个显式传,最小权限
+      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+      SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+      KNOWN_HOSTS: ${{ secrets.KNOWN_HOSTS }}
+      TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+      CI_TEMPLATES_PAT: ${{ secrets.CI_TEMPLATES_PAT }}
+      FEISHU_CI_WEBHOOK: ${{ secrets.FEISHU_CI_WEBHOOK }}   # 未配置时通知层打 warning 跳过,不影响部署结论
