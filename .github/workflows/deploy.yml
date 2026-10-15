@@ -22,6 +22,15 @@ on:
   # 手动触发口:paths-ignore 排除了 .github/**,workflow 自身修复后需手动补发部署
   workflow_dispatch:
 
+# 部署 run 全局串行（PR #246 gate 第 8 轮两条 major 的消解手段）:组名固定不掺分支名,
+# 跨分支互斥排队(main push 与 workflow_dispatch 不并发);不设取消语义(排队而不是取消,
+# 取消会让先到的部署静默丢失)。串行后后一 run 的 pre-flight 对账
+# 前一 run 的最终状态(锚点时序自然正确),回滚也不会与其他 run 的镜像替换并发;
+# 回滚与替换的互斥由「run 全局串行」+ ship 内 host 部署锁共同保证。
+concurrency:
+  group: video-transcript-api-deploy
+  cancel-in-progress: false
+
 # 部署 SSH 身份唯一来源：repo variable（Settings > Secrets and variables > Actions >
 # Variables，key 见下方引用处）。vars 为空时 pre-flight 守卫立即失败，不会带空用户名
 # 碰生产。workflow 级 env 同时供 pre-flight / verify 两个 job 的 SSH 使用。
