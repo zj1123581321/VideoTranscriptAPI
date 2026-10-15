@@ -36,3 +36,10 @@ Task-Id: VideoTranscriptAPI-20261015-01 · dispatch: dlg-20261015-151234-61378b 
   - 本卡种子（本地 tag）：同命令 → `FAILED tests/deployment/test_pull_and_deploy.py::test_legacy_image_without_docker_health_uses_api_probe` 等 13 个 FAILED（完整清单见 report.md）
   - 旧脚本判据原文（docker/pull_and_deploy.sh:121-135）：`rendered_image != CANDIDATE_DIGEST` → 换用 `${SCRIPT_DIR}/docker-compose.deploy.yml` 重写后再验，仍不等则 `[ERROR] Migrated compose file does not render the candidate digest.` exit 1
 - 下一步唯一动作：push 分支开 PR，正文单独列出继承红与新红，等主脑验收仲裁。
+
+## 段5：push 被 public-scan 拦截，去掉明文用户名后重推
+
+- 当前阶段：implementing（deploy.yml 去掉部署账号显式项，重推中）
+- 本段结论：首次 push 被 pre-push public-scan 闸拦——扫描器在 deploy.yml 第 27 行命中身份类明文模式（命中原文不在本文引用，以免本文件再次触发同一扫描模式，详见 report.md）；处理方式是删掉该行——ci-templates v2 该 input 默认值与被删值相同（v2 build-deploy.yml inputs 21-24 行），行为完全等价，非闸绕过；未使用环境变量旁路开关。
+- 关键决策与已否决方案：否决「开扫描旁路环境变量」——闸绕行需主脑批准，本卡无授权；否决「注释里保留该身份值说明」——扫描按模式匹配，注释同样可能命中，净删最稳；本段措辞也刻意避开命中字面量（第一次重推即因此再被拦，同文件第 43 行，已二次改写）。
+- 下一步唯一动作：重推并开 PR。
