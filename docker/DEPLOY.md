@@ -8,16 +8,17 @@ push `main` 后自动完成构建与部署：`.github/workflows/deploy.yml` 调�
 - 在飞任务保护（忙锁门禁）属第二阶段：服务侧持锁 + compose 挂载就位前，自动部署不感知在飞任务，部署窗口需人工确认无长转写任务（事故背景：2026-10-15 手动部署打断在飞转写任务）。
 - 部署目录的 compose 必须与本仓种子同形态（本地 tag）：ci-templates 部署脚本从 ACR 拉取不可变 SHA 镜像后在本机 retag 成 `video-transcript-api:latest`，镜像对账也认这个本地名；旧的 digest-env 形态（registry digest env 占位）与之不兼容，首次自动部署前需先确认部署目录已换成本仓种子。
 
-## 手动部署（备用）
+## 旧手动链路（已退役）
 
-以下两个脚本是接入 D3 前的手动链路，保留为备用（不经忙锁与探针门，仅在自动链路不可用时使用）。注意：`pull_and_deploy.sh` 以同目录的 `docker-compose.deploy.yml` 为模板做部署目录自迁移，要求模板渲染出目标 digest（digest-env 形态前提）；种子已迁为本地 tag 形态（D3 需要），该自迁移前提随之失效——旧脚本链路只能在部署目录仍为 digest-env 形态且使用旧模板副本时使用，属迁移完成前的过渡备份。
+接入 D3 前的手动部署脚本 `docker/pull_and_deploy.sh` 已于 2026-10-15 删除：它以同目录种子为模板做部署目录自迁移，要求 digest-env 形态，与 D3 的本地 tag 形态种子互斥，D3 上位后失去存在意义（锁旧脚本行为的测试随退）。`docker/push_to_ghcr.sh` 保留，仅作 ghcr 公开镜像构建口：从干净主干构建 `ghcr.io/<owner>/video-transcript-api:<主干12位短SHA>` 并推送，不部署。
 
-镜像构建与部署由两个脚本完成：
+自动链路不可用时的灾备兜底（在部署目录手工执行，不再依赖仓内脚本；部署目标见 `docker/deploy_targets.json`）：
 
-- `push_to_ghcr.sh`：从干净主干构建 `ghcr.io/<owner>/video-transcript-api:<主干12位短SHA>` 并推送到 GHCR。
-- `pull_and_deploy.sh`：在部署机上按**不可变 digest** 部署——先跑配置预检（`main.py --check-config`），再替换容器并等待健康检查，失败自动回滚到上一 digest；状态记录在部署目录 `.deploy-image`。
+```bash
+docker compose pull && docker compose up -d
+```
 
-部署目标（服务器别名与目录）记录在 `docker/deploy_targets.json`；入口地址、Tailscale 直连信息等基础设施细节维护在私有部署记忆中，不写入本公开仓。
+入口地址、Tailscale 直连信息等基础设施细节维护在私有部署记忆中，不写入本公开仓。
 
 ## 入口分层与 Cloudflare 请求体上限
 
