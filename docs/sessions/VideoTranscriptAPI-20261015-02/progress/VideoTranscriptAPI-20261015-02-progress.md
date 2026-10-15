@@ -16,3 +16,27 @@ implementing：生产代码与 `tests/unit/test_busy_lock.py` 已落地，narrow
 
 ### 下一步唯一动作
 先 commit 本段真修复，再做「acquire 在 LOCK_EX 下改返回 True」红验，然后 `make test`。
+
+## 2026-10-16 里程碑2：红验转红 + make test 仅继承红
+
+### 当前阶段
+implementing 收尾：红验已还原，准备 push PR #246。
+
+### 本段结论
+红验只改 BusyLock.acquire 的 BlockingIOError 分支 `return False` → `return True`：`test_exclusive_holder_makes_acquire_return_false` 断言失败 `assert True is False`；HTTP 用例 `assert 200 == 503`。类型是 AssertionError。还原该一行后 working tree 与 HEAD 一致。`make test` 4003 collected，唯一失败为继承红 `test_asr_monitor_alert_delivery.py::TestNetworkGuard::test_unix_domain_socket_is_not_blocked`（AF_UNIX path too long），无新红。
+
+红验原文：
+```
+E   assert True is False
+E    +  where True = acquire()
+```
+```
+E   assert 200 == 503
+E    +  where 200 = <Response [200 OK]>.status_code
+```
+
+### 关键决策与已否决方案
+无。
+
+### 下一步唯一动作
+commit 本段 progress，push fast-forward 到 origin/card/VideoTranscriptAPI-261015-d3，写报告。
