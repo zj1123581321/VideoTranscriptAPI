@@ -289,13 +289,16 @@ async def transcribe_video(
     try:
         try:
             if not acquire_for_task(task_id):
+                # Fail-closed admission：False 既可能是部署排他锁在持，也可能是
+                # 锁基础设施故障（BusyLock 拒绝新任务），对调用方同一拒绝路径。
                 logger.warning(
-                    "deployment in progress, reject transcription task: {}",
+                    "deployment in progress or lock unavailable, "
+                    "reject transcription task: {}",
                     url,
                 )
                 raise HTTPException(
                     status_code=503,
-                    detail="deployment in progress, retry shortly",
+                    detail="service busy or lock unavailable, retry shortly",
                 )
             task_info = cache_manager.create_task(
                 task_id=task_id,

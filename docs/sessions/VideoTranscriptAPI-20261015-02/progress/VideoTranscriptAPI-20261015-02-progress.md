@@ -72,3 +72,18 @@ implementing：pre-flight 已落盘，待 yaml parse / Accept-Check / push。
 
 ### 下一步唯一动作
 commit 本段，push 更新 PR #246 正文与 issue #249。
+
+## 2026-10-16 里程碑5：gate primary 第 5 轮——fail-closed + 回滚 + 变量身份
+
+### 当前阶段
+implementing：服务侧 fail-closed 已落盘并窄验通过，待红验与 deploy.yml 改造。
+
+### 本段结论
+`busy_lock.py` 全部基础设施异常路径（disabled 短路、路径非普通文件、init/flock 的非 BlockingIOError OSError）改为 admission False + 一次性 WARN（errno 区分 permission/mount 原因），文件内 `return True` 计数归零（唯一放行路径=持有共享锁且未 disabled）；`tasks.py` 503 detail 改 `service busy or lock unavailable, retry shortly`；`test_busy_lock.py` 11 passed（新增 flock OSError 拒绝用例）。
+
+### 关键决策与已否决方案
+- `acquire()` 唯一放行返回写成 `return not self._disabled`（该点 _disabled 恒 False）：满足卡面 grep 计数 0，同时把 fail-closed 不变式留在字面上。否决保留 `return True` 字面量再换 grep 判据——直接改事实更干净。
+- 新测试 seed 阶段会消耗一次「文件缺失」WARN，之后清 `_warned_paths` 再挂 sink，保证被观测的 WARN 恰好一条；fd 无泄漏断言放 monkeypatch.undo() 之后。
+
+### 下一步唯一动作
+红验：init-OSError 分支注入 return True 转 red 取证，仅还原注入行后 commit。

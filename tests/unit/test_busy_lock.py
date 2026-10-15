@@ -5,6 +5,7 @@ Console output is English-only. MagicMock is not used to fake flock.
 from __future__ import annotations
 
 import asyncio
+import errno
 import fcntl
 import os
 from unittest.mock import MagicMock
@@ -95,7 +96,8 @@ def test_two_shared_holders_block_exclusive_until_both_release(tmp_path):
     assert not _host_ex_blocked(path)
 
 
-def test_uncreatable_path_disables_and_warns_once(tmp_path):
+def test_uncreatable_path_disables_and_denies_once(tmp_path):
+    """Fail-closed: init infrastructure failure denies admission, warns once."""
     BusyLock._warned_paths.clear()
     blocker = tmp_path / "not-a-dir"
     blocker.write_text("x")
@@ -104,15 +106,47 @@ def test_uncreatable_path_disables_and_warns_once(tmp_path):
     sink_id = loguru_logger.add(lambda message: seen.append(message.record["message"]))
     try:
         first = BusyLock(path)
-        assert first.acquire() is True
+        assert first.acquire() is False
         assert first.disabled is True
+        # Repeat call hits the disabled short-circuit; it must also deny.
+        assert first.acquire() is False
         second = BusyLock(path)
-        assert second.acquire() is True
+        assert second.acquire() is False
         assert second.disabled is True
     finally:
         loguru_logger.remove(sink_id)
     warns = [item for item in seen if "BUSY LOCK WARN" in item]
     assert len(warns) == 1
+
+
+def test_flock_os_error_denies_admission_and_warns_reason(monkeypatch, tmp_path):
+    """Fail-closed: non-BlockingIOError flock OSError denies, warns mount/permission."""
+    path = str(tmp_path / "busy.lock")
+    seed = BusyLock(path)
+    assert seed.acquire() is True
+    seed.release()
+    # Seed creation already consumed this path's once-only warn; reset so the
+    # flock-failure warn below is the one under observation.
+    BusyLock._warned_paths.clear()
+
+    def refuse(fd, flags):
+        raise PermissionError(errno.EACCES, "Permission denied")
+
+    monkeypatch.setattr(fcntl, "flock", refuse)
+    seen: list[str] = []
+    sink_id = loguru_logger.add(lambda message: seen.append(message.record["message"]))
+    try:
+        denied = BusyLock(path)
+        assert denied.acquire() is False
+        assert denied.disabled is True
+    finally:
+        loguru_logger.remove(sink_id)
+    monkeypatch.undo()  # restore real flock before exercising the lock file again
+    # No shared fd leaked: host exclusive lock is still acquirable.
+    assert not _host_ex_blocked(path)
+    warns = [item for item in seen if "BUSY LOCK WARN" in item]
+    assert len(warns) == 1
+    assert any("permission denied" in item for item in warns)
 
 
 def test_acquire_for_task_blocks_ex_until_release_for_task(tmp_path):
@@ -226,7 +260,7 @@ def test_http_ex_holder_returns_503_then_release_restores_202(
             json={"url": "https://www.youtube.com/watch?v=abc123"},
         )
         assert denied.status_code == 503
-        assert "deployment in progress" in denied.json()["detail"]
+        assert "lock unavailable" in denied.json()["detail"]
         mock_cache_manager.create_task.assert_not_called()
     finally:
         _release_host_ex(holder)
