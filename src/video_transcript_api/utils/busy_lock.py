@@ -21,7 +21,9 @@ from .logging import setup_logger
 
 logger = setup_logger("busy_lock")
 
-BUSY_LOCK_PATH = "/app/.deploy-state/busy.lock"
+# 覆盖口仅给无 /app 挂载的沙箱/开发环境（集成实验 local_upload_capacity.py、本地调试）
+# 显式 opt-in；生产不设置，走默认路径，deploy.yml 双闸对账的就是这个真实路径。
+BUSY_LOCK_PATH = os.environ.get("VTA_BUSY_LOCK_PATH") or "/app/.deploy-state/busy.lock"
 
 
 class BusyLock:

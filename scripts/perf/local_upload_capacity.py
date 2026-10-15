@@ -351,6 +351,9 @@ def run_experiment(duration_seconds: int) -> int:
                 "PYTHONPATH": str(PROJECT_ROOT / "src"),
                 "VTAPI_USERS_JSON": str(users_path),
                 "VTA_UPLOADS_ENABLED": "true",
+                # fail-closed busy lock needs a writable lock path in the sandbox
+                # (no /app mount here); explicit opt-in via the env override.
+                "VTA_BUSY_LOCK_PATH": str(root / "data" / "busy.lock"),
             }
             service_log_path = root / "sandbox-api.log"
             with service_log_path.open("wb") as service_log:

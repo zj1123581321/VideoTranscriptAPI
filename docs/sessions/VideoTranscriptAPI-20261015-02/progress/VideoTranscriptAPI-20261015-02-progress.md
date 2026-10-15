@@ -103,3 +103,19 @@ implementing：deploy.yml 三处改造已落盘，yaml/actionlint 通过，待 m
 
 ### 下一步唯一动作
 make test 全量（预期仅继承红 AF_UNIX），commit 本段，push fast-forward 更新 PR 正文。
+
+## 2026-10-16 里程碑7：fail-closed 测试涟漪同步（超出卡面枚举的用例面）
+
+### 当前阶段
+implementing：全量 make test 已收敛到卡面预告的唯一继承红，待 push。
+
+### 本段结论
+fail-closed 落地后 make test 新红 21 条（test_api_routes 15、test_processing_options 4、integration 沙箱实验 1）：这些用例此前只在 fail-open 放行下才能通过（本机无 /app 挂载→锁基础设施故障→旧行为 admission True），属锁定决策 #2 所指「fail-open 假设的用例」。同步方式：test_api_routes 加模块级 autouse fixture 钉 BUSY_LOCK_PATH 到 tmp（该模块 3 个类各自内联建 client，逐方法改更大）；test_processing_options 同法钉 client fixture；busy_lock.py 增加 `VTA_BUSY_LOCK_PATH` env 覆盖口（显式 opt-in，空值回落默认），integration 沙箱实验（scripts/perf/local_upload_capacity.py 以白名单 env 拉起真实 main.py）在 clean_env 加一行注入可写锁路径。断言零改动。收敛后 make test 仅剩继承红 AF_UNIX 一条。
+
+### 关键决策与已否决方案
+- 越界披露：test_api_routes.py、test_processing_options.py、local_upload_capacity.py 不在卡面 Scope-Globs 内，但锁定决策 #1（fail-closed）的机械后果落在它们身上，不同步则 gate 第 6 轮必然红 21 条；改动全部是路径钉扎/env 注入，不改任何断言语义。已在 report.md「与卡面的偏差」完整申报，由主脑复核。
+- 否决「本地 sudo 建 /app 让用例过」——掩盖语义变更而非同步测试，且环境依赖不可复现。
+- VTA_BUSY_LOCK_PATH 第二消费者：集成沙箱实验 + 无挂载开发环境的显式逃生口；不设置即默认路径并 fail-closed，生产面不变。
+
+### 下一步唯一动作
+push fast-forward 到 card/VideoTranscriptAPI-261015-d3，更新 PR #246 正文 findings 处置节。

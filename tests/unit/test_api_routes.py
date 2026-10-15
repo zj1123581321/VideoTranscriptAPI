@@ -148,6 +148,18 @@ def mock_base_url():
         yield
 
 
+@pytest.fixture(autouse=True)
+def _pin_busy_lock_path(tmp_path, monkeypatch):
+    """Busy lock is fail-closed: with the real /app default uncreatable
+    off-container every admission would 503. These tests cover API flows,
+    not lock infrastructure (see test_busy_lock); pin the lock path to tmp
+    for every test in this module."""
+    monkeypatch.setattr(
+        "video_transcript_api.utils.busy_lock.BUSY_LOCK_PATH",
+        str(tmp_path / "busy.lock"),
+    )
+
+
 @pytest.fixture()
 def client(
     mock_audit_logger,

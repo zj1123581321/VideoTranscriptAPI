@@ -279,7 +279,15 @@ def client(
     mock_task_queue,
     mock_send_notification,
     mock_notification_router,
+    tmp_path,
+    monkeypatch,
 ):
+    # Busy lock is fail-closed: pin the lock path to tmp so admission tracks
+    # the flow under test, not the absent /app mount (see test_busy_lock).
+    monkeypatch.setattr(
+        "video_transcript_api.utils.busy_lock.BUSY_LOCK_PATH",
+        str(tmp_path / "busy.lock"),
+    )
     app = _build_test_app()
     return TestClient(app)
 
