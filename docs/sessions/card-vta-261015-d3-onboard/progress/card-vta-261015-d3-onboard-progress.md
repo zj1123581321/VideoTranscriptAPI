@@ -66,3 +66,10 @@ Task-Id: VideoTranscriptAPI-20261015-01 · dispatch: dlg-20261015-151234-61378b 
 - 本段结论：主脑将 reliability-deploy-during-active-task 拆两半——(a) 挂载/权限异常静默降级采纳修复：ship 成功后 `verify-busy-lock-inode` 对账宿主 `.deploy-state/busy.lock` 与容器 `/app/.deploy-state/busy.lock` 的 `stat -c %i` inode，不一致或缺失则 workflow failure；(b) 首次自动部署空档走答辩不入码（旧容器无持锁代码，任何新代码都无法让旧进程持锁；缓解=首次部署由主脑 workflow_dispatch，触发前确认非终态任务为 0，见 #249）。minor finding design-production-latest-policy-contradiction：README 把 registry 可变 tag 禁令与部署机本地 retag 别名分开写。
 - 关键决策与已否决方案：reusable workflow 无法在 caller 插入「同一 TCP 会话、探针之前」的步骤，验证只能做 ship 成功后的 sibling job（同一 host/key/deploy_dir，新会话）。否决改 ci-templates（跨仓）。否决在本公开仓写部署账号字面量（public-scan）；ssh_user 运行时从 ci-templates v2 default 解析。
 - 下一步唯一动作：yaml parse + Accept-Check（busy_lock_file≥1、stat -c %i 可 grep），commit 本段，push 并更新 PR 正文。
+
+## 段9：gate primary 第 4 轮裁决——事前+事后双闸（续修卡 dlg-20261015-182148-ad0d7a）
+
+- 当前阶段：implementing（pre-flight 已落盘，ship needs pre-flight，事后 verify-busy-lock-inode 保留）
+- 本段结论：主审「inode 对账是事后报警、替换前不保护」成立，采纳事前门禁。`pre-flight` 对当前运行容器做替换前 `stat -c %i` 对账；容器不存在 / 容器内路径不存在 / inode 不一致 → job 失败、ship 不跑（fail-closed）。事后 `verify-busy-lock-inode` 不动，形成事前+事后双闸。首次容器重建改走主脑 ssh `docker compose up -d`（不走 deploy.yml）；pre-flight 从第二次部署起自然通过。
+- 关键决策与已否决方案：依赖方向固定 pre-flight → ship → verify，否决「只改 post-deploy 或把 pre-flight 放 ship 之后」。否决改 ci-templates 把检查塞进 reusable job。否决首次部署仍走 workflow_dispatch——旧容器无挂载时 pre-flight 必红，自动路径会 defer 到人工，不如一开始就 ssh compose up。
+- 下一步唯一动作：yaml parse + Accept-Check（pre-flight 可 grep），commit 本段，push 并更新 PR 正文与 issue #249。

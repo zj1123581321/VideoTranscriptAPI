@@ -56,3 +56,19 @@ implementing：第 3 轮两条 finding 已按主脑裁决落盘，待 yaml parse
 
 ### 下一步唯一动作
 跑 yaml parse 与 Accept-Check，commit 本段，push 更新 PR #246 正文 findings 处置节。
+
+## 2026-10-16 里程碑4：gate primary 第 4 轮——事前+事后双闸
+
+### 当前阶段
+implementing：pre-flight 已落盘，待 yaml parse / Accept-Check / push。
+
+### 本段结论
+`deploy.yml` 新增 `pre-flight` job，`ship` 以 `needs: pre-flight` 卡住替换；对当前运行容器对账宿主/容器 `busy.lock` inode，失败则 ship 不执行。事后 `verify-busy-lock-inode` 保留。首次部署改为主脑 ssh `docker compose up -d`，不走自动路径。
+
+### 关键决策与已否决方案
+- 依赖方向：pre-flight → ship → verify。否决只保留事后对账。
+- 首次部署不走 workflow_dispatch：旧容器无挂载时 pre-flight 必失败，自动路径无意义。
+- ssh_user 仍运行时从 ci-templates v2 default 解析（与事后 job 相同手法）。
+
+### 下一步唯一动作
+commit 本段，push 更新 PR #246 正文与 issue #249。
