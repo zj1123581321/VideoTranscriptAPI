@@ -288,6 +288,28 @@ def test_finalize_releases_lock_on_cas_loss_and_defer(monkeypatch, tmp_path):
     assert not _host_ex_blocked(path)
 
 
+def test_finalize_releases_lock_on_post_cas_exception(monkeypatch, tmp_path):
+    """Gate round 11: post-CAS exception path releases busy lock via idempotent finally."""
+    path = str(tmp_path / "busy.lock")
+    _provision(path)
+    assert acquire_for_task("task-post-cas-exc", path=path) is True
+    assert _host_ex_blocked(path)
+
+    cache_manager = MagicMock()
+    cache_manager.update_task_status.return_value = True
+
+    monkeypatch.setattr(
+        ts.logger, "info", MagicMock(side_effect=RuntimeError("post-cas crash"))
+    )
+
+    with pytest.raises(RuntimeError, match="post-cas crash"):
+        finalize_terminal_status_and_notify(
+            "task-post-cas-exc", TaskStatus.SUCCESS, cache_manager=cache_manager,
+        )
+
+    assert not _host_ex_blocked(path)
+
+
 # ---------------------------------------------------------------------------
 # HTTP admission: real flock, mocked task persistence
 # ---------------------------------------------------------------------------
