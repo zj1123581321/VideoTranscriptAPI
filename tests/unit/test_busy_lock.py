@@ -51,6 +51,21 @@ def _release_host_ex(fd: int) -> None:
     os.close(fd)
 
 
+def _provision(path: str) -> None:
+    """Pre-create the lock file the way the deployment side does.
+
+    The service itself never creates the lock file or its directory (gate
+    round 7: self-provisioning lands on the container layer with a foreign
+    inode, silently voiding mutual exclusion); tests stand in for the deploy
+    side here.
+    """
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    if not os.path.exists(path):
+        os.close(os.open(path, os.O_CREAT | os.O_RDWR, 0o666))
+
+
 # ---------------------------------------------------------------------------
 # BusyLock + mapping: real flock
 # ---------------------------------------------------------------------------
@@ -58,6 +73,7 @@ def _release_host_ex(fd: int) -> None:
 
 def test_shared_lock_blocks_host_ex_and_release_allows_it(tmp_path):
     path = str(tmp_path / ".deploy-state" / "busy.lock")
+    _provision(path)
     shared = BusyLock(path)
     assert shared.acquire() is True
     assert shared.disabled is False
@@ -68,6 +84,7 @@ def test_shared_lock_blocks_host_ex_and_release_allows_it(tmp_path):
 
 def test_exclusive_holder_makes_acquire_return_false(tmp_path):
     path = str(tmp_path / ".deploy-state" / "busy.lock")
+    _provision(path)
     seed = BusyLock(path)
     assert seed.acquire() is True
     seed.release()
@@ -85,6 +102,7 @@ def test_exclusive_holder_makes_acquire_return_false(tmp_path):
 
 def test_two_shared_holders_block_exclusive_until_both_release(tmp_path):
     path = str(tmp_path / ".deploy-state" / "busy.lock")
+    _provision(path)
     first = BusyLock(path)
     second = BusyLock(path)
     assert first.acquire() is True
@@ -122,6 +140,7 @@ def test_uncreatable_path_disables_and_denies_once(tmp_path):
 def test_flock_os_error_denies_admission_and_warns_reason(monkeypatch, tmp_path):
     """Fail-closed: non-BlockingIOError flock OSError denies, warns mount/permission."""
     path = str(tmp_path / "busy.lock")
+    _provision(path)
     seed = BusyLock(path)
     assert seed.acquire() is True
     seed.release()
@@ -149,8 +168,35 @@ def test_flock_os_error_denies_admission_and_warns_reason(monkeypatch, tmp_path)
     assert any("permission denied" in item for item in warns)
 
 
+def test_missing_lock_file_denies_and_warns(monkeypatch, tmp_path):
+    """Round 7: the service never self-provisions the lock file.
+
+    File missing (dir exists) and parent dir missing are both ENOENT ->
+    disabled + admission False + one-shot "lock file missing" warn.
+    """
+    for path in (
+        str(tmp_path / "busy.lock"),
+        str(tmp_path / "no-such-dir" / "busy.lock"),
+    ):
+        BusyLock._warned_paths.clear()
+        seen: list[str] = []
+        sink_id = loguru_logger.add(
+            lambda message: seen.append(message.record["message"])
+        )
+        try:
+            denied = BusyLock(path)
+            assert denied.acquire() is False
+            assert denied.disabled is True
+        finally:
+            loguru_logger.remove(sink_id)
+        warns = [item for item in seen if "BUSY LOCK WARN" in item]
+        assert len(warns) == 1
+        assert any("lock file missing" in item for item in warns)
+
+
 def test_acquire_for_task_blocks_ex_until_release_for_task(tmp_path):
     path = str(tmp_path / "busy.lock")
+    _provision(path)
     assert acquire_for_task("task-a", path=path) is True
     assert _host_ex_blocked(path)
     release_for_task("task-a")
@@ -160,6 +206,7 @@ def test_acquire_for_task_blocks_ex_until_release_for_task(tmp_path):
 
 def test_exclusive_holder_rejects_acquire_for_task_without_storing(tmp_path):
     path = str(tmp_path / "busy.lock")
+    _provision(path)
     seed = BusyLock(path)
     assert seed.acquire() is True
     seed.release()
@@ -177,6 +224,7 @@ def test_exclusive_holder_rejects_acquire_for_task_without_storing(tmp_path):
 
 def test_finalize_releases_held_shared_lock(tmp_path):
     path = str(tmp_path / "busy.lock")
+    _provision(path)
     assert acquire_for_task("task-term", path=path) is True
     assert _host_ex_blocked(path)
     cache_manager = MagicMock()
@@ -248,6 +296,7 @@ def test_http_ex_holder_returns_503_then_release_restores_202(
     successful 202 must keep shared flock until terminal write.
     """
     path = str(tmp_path / "busy.lock")
+    _provision(path)
     client = _transcribe_client(monkeypatch, tmp_path, mock_cache_manager)
     seed = BusyLock(path)
     assert seed.acquire() is True

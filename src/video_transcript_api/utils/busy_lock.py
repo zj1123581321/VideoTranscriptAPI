@@ -1,13 +1,17 @@
 """Deploy busy lock: each in-flight transcription task holds a shared flock.
 
 The deploy script takes an exclusive flock on the same bind-mounted file.
-This module only does non-blocking shared admission. A False return means
-the caller must not create a task row. Fail-closed: when the lock directory,
-the lock file, or flock itself is unavailable (old environments without the
-mount, permission problems), the instance disables itself, logs one grep-able
-BUSY LOCK WARN, and admission DENIES new tasks — a broken lock must never
-degrade into an unprotected admission path (deploy/task mutual exclusion
-would silently vanish).
+This module only does non-blocking shared admission against an EXISTING
+lock file: the service never creates the lock file or its directory. A
+self-created file would land on the container layer with a different inode
+than the host deploy lock, silently voiding mutual exclusion — equivalent
+to fail-open. Provisioning is the deployment side's job (host deploy
+script / first-manual-deploy ``touch busy.lock``).
+
+Fail-closed: when the lock file is missing, not a regular file, or flock
+itself fails (permission problems), the instance disables itself, logs one
+grep-able BUSY LOCK WARN, and admission DENIES new tasks — a broken lock
+must never degrade into an unprotected admission path.
 """
 from __future__ import annotations
 
@@ -23,6 +27,8 @@ logger = setup_logger("busy_lock")
 
 # 覆盖口仅给无 /app 挂载的沙箱/开发环境（集成实验 local_upload_capacity.py、本地调试）
 # 显式 opt-in；生产不设置，走默认路径，deploy.yml 双闸对账的就是这个真实路径。
+# 契约：锁文件由部署侧预建（部署脚本/首次人工部署 touch busy.lock），服务侧永不自建——
+# 自建文件落在容器层时与宿主部署锁不同 inode，互斥静默失效，等价 fail-open。
 BUSY_LOCK_PATH = os.environ.get("VTA_BUSY_LOCK_PATH") or "/app/.deploy-state/busy.lock"
 
 
@@ -69,25 +75,10 @@ class BusyLock:
         """
         if self._disabled:
             return False
-        parent = os.path.dirname(self.path) or "."
+        # 只读打开既有文件：不 makedirs、不带 O_CREAT（契约见模块注释）。
+        # 目录不存在与文件不存在同为 ENOENT，同走「缺失」分支。
         try:
-            existed = os.path.isdir(parent)
-            file_existed = os.path.exists(self.path)
-            os.makedirs(parent, mode=0o755, exist_ok=True)
-            if not existed:
-                self._warn(
-                    f"directory {parent} was missing; created it; deployment "
-                    "admission may be unprotected until the host mount is fixed"
-                )
-            # Read-only fd is enough for flock. Mode 0666 plus umask yields a
-            # host-deploy-user-readable file; a 0600 root-created file would
-            # block the host exclusive flock.
-            fd = os.open(self.path, os.O_CREAT | os.O_RDONLY, 0o666)
-            if not file_existed:
-                self._warn(
-                    f"lock file {self.path} was missing; created it; verify the "
-                    "host deploy-state bind mount before enabling caller gate"
-                )
+            fd = os.open(self.path, os.O_RDONLY)
             if not os.path.isfile(self.path):
                 os.close(fd)
                 self._disabled = True
@@ -99,11 +90,18 @@ class BusyLock:
                 return False
         except OSError as exc:
             self._disabled = True
-            self._warn(
-                f"cannot initialize {self.path} "
-                f"({self._os_error_reason(exc)}: {exc}); "
-                "admission now denies new tasks until it is fixed"
-            )
+            if exc.errno == errno.ENOENT:
+                self._warn(
+                    f"lock file missing — deployment mount likely broken: "
+                    f"{self.path} ({exc}); "
+                    "admission now denies new tasks until the mount is fixed"
+                )
+            else:
+                self._warn(
+                    f"cannot initialize {self.path} "
+                    f"({self._os_error_reason(exc)}: {exc}); "
+                    "admission now denies new tasks until it is fixed"
+                )
             return False
 
         try:
