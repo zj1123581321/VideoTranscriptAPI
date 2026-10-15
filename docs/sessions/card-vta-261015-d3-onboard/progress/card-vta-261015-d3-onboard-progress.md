@@ -43,3 +43,11 @@ Task-Id: VideoTranscriptAPI-20261015-01 · dispatch: dlg-20261015-151234-61378b 
 - 本段结论：首次 push 被 pre-push public-scan 闸拦——扫描器在 deploy.yml 第 27 行命中身份类明文模式（命中原文不在本文引用，以免本文件再次触发同一扫描模式，详见 report.md）；处理方式是删掉该行——ci-templates v2 该 input 默认值与被删值相同（v2 build-deploy.yml inputs 21-24 行），行为完全等价，非闸绕过；未使用环境变量旁路开关。
 - 关键决策与已否决方案：否决「开扫描旁路环境变量」——闸绕行需主脑批准，本卡无授权；否决「注释里保留该身份值说明」——扫描按模式匹配，注释同样可能命中，净删最稳；本段措辞也刻意避开命中字面量（第一次重推即因此再被拦，同文件第 43 行，已二次改写）。
 - 下一步唯一动作：重推并开 PR。
+
+## 段6：主脑仲裁落地——旧手动链路退役（续修卡 dlg-20261015-160700-3a051b）
+
+- 当前阶段：implementing（仲裁结论已落地，验证全绿）
+- 本段结论：主脑仲裁接受种子迁本地 tag 形态（锁定决策①维持），旧手动链路退役；解除禁改 docker/pull_and_deploy.sh 与 tests/deployment/**。已执行：删除 docker/pull_and_deploy.sh（285 行）；test_pull_and_deploy.py 改名 test_push_to_ghcr.py，删全部 pull 脚本测试与只为它们服务的 fixture（_fake_docker/_run 等），保留 3 个非 pull 脚本守卫；test_healthcheck_route.py 删 legacy fallback 探测对齐测试（无孤立 import 产生）；README 生产部署节收窄为 push_to_ghcr + D3 指向；DEPLOY.md 旧链路节标注退役并补部署目录灾备兜底（docker compose pull && docker compose up -d）。make test 全量：唯一红为 AF_UNIX 继承红，上卡 13 个新红全部消失。
+- 关键决策与已否决方案：①保留测试不止指令点名的 test_build_script_uses_only_git_sha_tag，还保留 test_compose_template_uses_legacy_compatible_env_file_syntax 与 test_compose_template_sets_stop_grace_period——两者测的是种子 compose 文件静态形态（env_file 语法、优雅关闭预算），不测 pull 脚本行为且在新形态下仍绿，属「非 pull 脚本测试」，不在「删除全部 pull 脚本测试」范围内；②文件名采纳指令建议 test_push_to_ghcr.py（docstring 已说明覆盖范围：push 构建脚本守卫 + 种子模板守卫）；③README 除指令点名的 92 行命令外，同步收窄 87 行段落与 95 行大段——脚本删除后该段全是对已删行为的悬空描述，按反熵条款改事实而非留假引用。tests/README.md 无该文件引用，无需同步。
+- 证据（2026-10-15，随本段提交 @ 889671d2 后重取）：`make test` FAILED 清单仅 `FAILED tests/unit/test_asr_monitor_alert_delivery.py::TestNetworkGuard::test_unix_domain_socket_is_not_blocked`；`ls docker/pull_and_deploy.sh` → No such file or directory；tests/deployment 套件 4 项全绿；README/DEPLOY/tests 无 pull_and_deploy 活引用（仅 DEPLOY.md 退役声明与测试 docstring 背景两处史实陈述）。
+- 下一步唯一动作：push 更新 PR #246，正文「仲裁请求」节改为裁决结果。
