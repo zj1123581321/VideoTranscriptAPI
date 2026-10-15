@@ -27,3 +27,13 @@
 - **本段结论**：红验 1（注释 _atomic_write_json 写入调用）→ test_generated_writes_contract_file 断言 False 红；红验 2（share_card_touched 门取反）→ calibrate_only 保留/失败删卡/重总结替换多条 AssertionError 红；红验 3（去掉 "share_card" in result_dict 守卫）→ test_legacy_result_dict_never_probes_cache 红（get_cache 被调用）。最终 make test 唯一失败为继承红（AF_UNIX path too long，基线 552f496e 复跑同样红）。
 - **关键决策与已否决方案**：无（按卡面固定条款执行）。
 - **下一步唯一动作**：推送分支、开 draft PR、写报告。
+
+## 段 4：门禁主审 2 条 major 修复（F1 异常隔离 + F2 静默丢失留痕）
+
+- **当前阶段**：implementing（PR #248 review 反馈轮，2 条 major 均已修复并锁死）
+- **本段结论**：F1——卡片落盘段（get_cache/unlink/_atomic_write_json）整体包进 try/except Exception，异常时 opt(exception=True).error 记 task_id+异常类型+信息+traceback，总结与后续结构化落盘不受影响；F2——get_cache 空或缺 file_path 时不再静默跳过，记 error（带 task_id 与 card_generated）。新增 3 条测试（F1 一条 + F2 参数化两条），share_card 全量 36 条绿，相关套件 136 条绿；两处红验均转红且为断言失败型。
+- **关键决策与已否决方案**：
+  - F1 的 exc_info=True 用 loguru 习语 logger.opt(exception=True).error(...)：消息文本带类型+信息，opt 带 traceback；否决直接传 exc_info=True kwarg（loguru 会当成 format kwarg 静默丢弃，不留 traceback）。
+  - 隔离范围严格只包卡片段：try 块从 get_cache 起、到写入/记日志止，后面的结构化/chapters 落盘段异常行为不变（主审修法原文）。
+  - F2 的 card_generated=isinstance(share_card_data, dict)：区分「新卡生成成功但定位不到缓存路径」（数据丢失，最严重）与「本轮本就无新卡」。
+- **下一步唯一动作**：推送分支（PR #248 自动更新）、写报告。
