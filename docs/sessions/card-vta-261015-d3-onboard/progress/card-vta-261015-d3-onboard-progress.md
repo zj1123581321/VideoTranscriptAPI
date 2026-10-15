@@ -18,3 +18,10 @@ Task-Id: VideoTranscriptAPI-20261015-01 · dispatch: dlg-20261015-151234-61378b 
 - 本段结论：镜像行从 digest env 占位改为 `image: video-transcript-api:latest`，头部注释改写为 D3 本地 tag 形态的来源说明（retag + 对账都认本地名），其余字节不变（env_file/ports/stop_grace_period/volumes 等均保持原样）；`docker compose config -q` 按服务器真实布局（种子拷为项目根 docker-compose.yml + 同目录 .env）验证通过。
 - 关键决策与已否决方案：本地验证不用仓内路径直接跑（compose 的 env_file 相对路径按项目目录解析，仓内无 .env 会假红）——用临时目录复刻部署目录布局，跑完即删；否决「顺手给种子加 compose healthcheck 块」：Dockerfile 已有内置 HEALTHCHECK（curl /livez），宿主侧探针由 ci-templates 脚本承担，再加一层是无第二消费者的重复配置。
 - 下一步唯一动作：更新 docker/DEPLOY.md。
+
+## 段3：DEPLOY.md 更新与 Narrow-Verify
+
+- 当前阶段：implementing（DEPLOY.md 已随本段提交）
+- 本段结论：DEPLOY.md 新增「D3 自动部署（主链路）」节（链路、/livez 选型理由、忙锁属第二阶段、部署目录 compose 形态前置条件），旧两脚本节降为「手动部署（备用）」；Narrow-Verify 全绿：两个 YAML parse ok，`docker compose config -q` 在临时目录复刻服务器布局下通过。
+- 关键决策与已否决方案：否决「在 DEPLOY.md 里写死主脑后续迁移步骤/时间点」——文档只写不随时间过期的形态约束（本地 tag 形态前置条件），迁移执行主体留给主脑会话。
+- 下一步唯一动作：跑 make test 全量基线验证 + 红验，然后 push 开 PR。

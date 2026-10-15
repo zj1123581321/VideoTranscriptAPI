@@ -1,5 +1,17 @@
 # 部署流程与入口链路
 
+## D3 自动部署（主链路）
+
+push `main` 后自动完成构建与部署：`.github/workflows/deploy.yml` 调用 `zlxlabs/ci-templates` 的 `build-deploy.yml@v2`（self-hosted runner）：构建镜像（`docker/Dockerfile`，构建上下文为仓根）→ 推送 ACR（不可变 12 位短 SHA tag）→ SSH 到 n305 → 健康探针通过后在部署目录 `/opt/media/VideoTranscriptAPI` 按本地 tag `video-transcript-api:latest` 切换容器，探针失败自动回滚上一健康版本。`paths-ignore` 排除 `**.md`、`docs/**`、`.github/**`——只改文档或 CI 不扇出生产部署；workflow 自身修复后用 `workflow_dispatch` 手动补发。
+
+- 健康探针用 `http://localhost:8200/livez`（宿主 8200 → 容器 8000），不用 `/health`：`/livez` 是纯存活探针、恒 200、不依赖下游，专为部署探针设计；`/health` 的深度检查依赖转写后端等下游服务，下游抖动会把健康的新版本误判为不健康并触发无谓回滚。
+- 在飞任务保护（忙锁门禁）属第二阶段：服务侧持锁 + compose 挂载就位前，自动部署不感知在飞任务，部署窗口需人工确认无长转写任务（事故背景：2026-10-15 手动部署打断在飞转写任务）。
+- 部署目录的 compose 必须与本仓种子同形态（本地 tag）：ci-templates 部署脚本从 ACR 拉取不可变 SHA 镜像后在本机 retag 成 `video-transcript-api:latest`，镜像对账也认这个本地名；旧的 digest-env 形态（registry digest env 占位）与之不兼容，首次自动部署前需先确认部署目录已换成本仓种子。
+
+## 手动部署（备用）
+
+以下两个脚本是接入 D3 前的手动链路，保留为备用（不经忙锁与探针门，仅在自动链路不可用时使用）：
+
 镜像构建与部署由两个脚本完成：
 
 - `push_to_ghcr.sh`：从干净主干构建 `ghcr.io/<owner>/video-transcript-api:<主干12位短SHA>` 并推送到 GHCR。
