@@ -1,0 +1,267 @@
+{
+  "task_id": "synthetic-fixture-00000000-0000-0000-0000-000000000000",
+  "file_name": "synthetic_space_dialog.m4a",
+  "file_hash": "synthetic-not-a-real-file-hash",
+  "duration": 136.0,
+  "segments": [
+    {
+      "start_time": 0.0,
+      "end_time": 4.0,
+      "text": "能听到我声音吗？我是风哥，能的话发个表情让我知道一下。",
+      "speaker": "Speaker1",
+      "words": null
+    },
+    {
+      "start_time": 4.0,
+      "end_time": 8.0,
+      "text": "刚才进来不少新朋友，欢迎欢迎，大家先把表情刷起来等开场。",
+      "speaker": "Speaker1",
+      "words": null
+    },
+    {
+      "start_time": 8.0,
+      "end_time": 12.0,
+      "text": "柠姐，我邀请你做共同主持人了，你看能不能接一下麦。今天是青柠姐的专场，我们先让她说。",
+      "speaker": "Speaker1",
+      "words": null
+    },
+    {
+      "start_time": 12.0,
+      "end_time": 16.0,
+      "text": "大家好，我是柠姐，麦能听到了吗？",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 16.0,
+      "end_time": 20.0,
+      "text": "能听见，声音很清楚。",
+      "speaker": "Speaker1",
+      "words": null
+    },
+    {
+      "start_time": 20.0,
+      "end_time": 24.0,
+      "text": "那我开始了，今天主要聊聊我这两年做播客的一些笨办法。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 24.0,
+      "end_time": 28.0,
+      "text": "你说你的就可以，我这边帮你控场。",
+      "speaker": "Speaker1",
+      "words": null
+    },
+    {
+      "start_time": 28.0,
+      "end_time": 32.0,
+      "text": "先说结论：三十天拉新一万这件事，没有捷径，全是重复劳动。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 32.0,
+      "end_time": 36.0,
+      "text": "先打个表情，青柠姐讲得很实在。",
+      "speaker": "Speaker3",
+      "words": null
+    },
+    {
+      "start_time": 36.0,
+      "end_time": 40.0,
+      "text": "蹲一个回放，这个讲得太细了。",
+      "speaker": "Speaker4",
+      "words": null
+    },
+    {
+      "start_time": 40.0,
+      "end_time": 44.0,
+      "text": "第一步是选题，我只写自己踩过坑的题目，不追热点。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 44.0,
+      "end_time": 48.0,
+      "text": "小满提问：选题周期一般要多久？",
+      "speaker": "Speaker5",
+      "words": null
+    },
+    {
+      "start_time": 48.0,
+      "end_time": 52.0,
+      "text": "一般一周磨一个题目，快的也要三天。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 52.0,
+      "end_time": 56.0,
+      "text": "阿凯举手，想问设备清单在哪里看？",
+      "speaker": "Speaker6",
+      "words": null
+    },
+    {
+      "start_time": 56.0,
+      "end_time": 60.0,
+      "text": "置顶评论里有，都是入门款，不用一步到位。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 60.0,
+      "end_time": 64.0,
+      "text": "我插一句，大家问题先攒着，让柠姐先讲完方法论部分。",
+      "speaker": "Speaker1",
+      "words": null
+    },
+    {
+      "start_time": 64.0,
+      "end_time": 68.0,
+      "text": "第二步是分发，一条音频剪成三条短内容，各平台错峰发。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 68.0,
+      "end_time": 72.0,
+      "text": "学到了，怪不得你的更新一直那么稳。",
+      "speaker": "Speaker3",
+      "words": null
+    },
+    {
+      "start_time": 72.0,
+      "end_time": 76.0,
+      "text": "第三步最笨：每条评论都回。前一千条评论是我一条条回出来的。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 76.0,
+      "end_time": 80.0,
+      "text": "小满追问：评论回复有模板吗？",
+      "speaker": "Speaker5",
+      "words": null
+    },
+    {
+      "start_time": 80.0,
+      "end_time": 84.0,
+      "text": "有原则没模板：先解决提问，再顺带提一句下周的主题。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 84.0,
+      "end_time": 88.0,
+      "text": "说到这个，陈柠姐上次的粉丝群运营拆解我也听了，方法论是相通的。",
+      "speaker": "Speaker1",
+      "words": null
+    },
+    {
+      "start_time": 88.0,
+      "end_time": 92.0,
+      "text": "对，群运营那套我照搬了一半，效果确实有。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 92.0,
+      "end_time": 96.0,
+      "text": "潜水很久了，今天冒个泡，这一段讲得很细。",
+      "speaker": "Speaker4",
+      "words": null
+    },
+    {
+      "start_time": 96.0,
+      "end_time": 100.0,
+      "text": "最后一条：数据只看趋势，不看单日，单日波动会骗人。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 100.0,
+      "end_time": 104.0,
+      "text": "阿凯追问：短内容的转化率大概多少？",
+      "speaker": "Speaker6",
+      "words": null
+    },
+    {
+      "start_time": 104.0,
+      "end_time": 108.0,
+      "text": "百分之几的量级，但胜在稳定，积少成多。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 108.0,
+      "end_time": 112.0,
+      "text": "时间过得好快，已经一个半小时了。",
+      "speaker": "Speaker3",
+      "words": null
+    },
+    {
+      "start_time": 112.0,
+      "end_time": 116.0,
+      "text": "是的，我们再答两个问题就收尾。",
+      "speaker": "Speaker1",
+      "words": null
+    },
+    {
+      "start_time": 116.0,
+      "end_time": 120.0,
+      "text": "小满最后问：下期什么时候？",
+      "speaker": "Speaker5",
+      "words": null
+    },
+    {
+      "start_time": 120.0,
+      "end_time": 124.0,
+      "text": "下周四晚上八点，还是这个时间，主题已经定了。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 124.0,
+      "end_time": 128.0,
+      "text": "感谢大家，今天的回放会剪出来，关注不迷路。",
+      "speaker": "Speaker1",
+      "words": null
+    },
+    {
+      "start_time": 128.0,
+      "end_time": 132.0,
+      "text": "谢谢风哥捧场，也谢谢大家，我们下周见。",
+      "speaker": "Speaker2",
+      "words": null
+    },
+    {
+      "start_time": 132.0,
+      "end_time": 136.0,
+      "text": "下周见，晚安各位。",
+      "speaker": "Speaker1",
+      "words": null
+    }
+  ],
+  "speakers": [
+    "Speaker1",
+    "Speaker2",
+    "Speaker3",
+    "Speaker4",
+    "Speaker5",
+    "Speaker6"
+  ],
+  "created_at": "2026-10-15T00:00:00",
+  "processing_time": 3.0,
+  "error": null,
+  "metadata": {
+    "engine": "funasr",
+    "diarize": true,
+    "word_align": false,
+    "language": null,
+    "projected": false,
+    "segment_merge_max_span_sec": 120.0,
+    "synthetic": true,
+    "note": "Hand-written synthetic dialogue (fictional names/content) replacing a real X Space production transcript for public-repo data governance. See README.md in this directory."
+  }
+}
