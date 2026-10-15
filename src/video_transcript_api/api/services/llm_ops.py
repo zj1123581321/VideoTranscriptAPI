@@ -15,6 +15,7 @@ import os
 import queue
 import re
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -1234,6 +1235,24 @@ def _restore_cached_summary_for_notification(result_dict: dict, merged_snapshot:
     logger.info("本轮未生成总结，已从缓存回填真实总结文本用于通知")
 
 
+def _atomic_write_json(path: Path, data: dict) -> None:
+    """tmp + os.replace 原子写 JSON，避免消费方（og 卡 B 的出图接口）读到
+    写了一半的文件（og 卡 A 卡面约束；与 cache_manager._atomic_write 同一
+    模式，不在其上加间接层只因 cache_manager.py 不在本卡修改范围内）。
+
+    Raises:
+        Exception: 序列化或替换失败时原样向上抛。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(temp_path, path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 def _should_backfill_summary(cache_data: dict, calibrate_only: bool) -> bool:
     """判断是否需要在 recalibrate 流程里顺手补跑一次 summary。
 
@@ -2242,6 +2261,68 @@ def _save_llm_results(
             logger.info(f"总结层已存在且本轮未请求生成总结，保留原有总结文件: {task_id}")
         else:
             logger.warning(f"总结状态未知或仍在处理中({summary_status})，跳过保存总结文件: {task_id}")
+
+        # ---- share card 文案落盘（og 大图卡片，卡 A；与 llm_summary.txt 始终对应）----
+        # 保留路径（不动文件）：仅校对模式（calibrate_only 且未 backfill）、
+        # 本轮未请求总结且协调器未尝试（summary_status None）——两种情况下磁盘总结
+        # 未被触碰，旧卡仍对应当前总结。
+        # 其余（本轮真实尝试总结）先删旧卡：无论本轮总结成败，旧卡都不再保证对应
+        # 新总结（SKIPPED_SHORT 会覆盖写校对文本；FAILED 时按锁定决策
+        # 「重新总结时先删旧卡」，不留过期卡片）。
+        # 本轮 GENERATED 且协调器产出新卡时再原子写入新文件；卡片生成失败只记
+        # error 日志（带 task_id 与原因），不写文件、不改终态、不重试。
+        # 磁盘触碰前提：result_dict 带 "share_card" 键（即本轮经过 coordinator 的
+        # 生产路径）——手工构造的旧式 result_dict（无此键）不动卡片，也不为此
+        # 多探一次缓存（保持「全流程默认不探缓存」的分层缓存性能约定）。
+        share_card_data = result_dict.get("share_card")
+        share_card_error = result_dict.get("share_card_error")
+        share_card_touched = not (calibrate_only and not summary_backfill) and (
+            summarize_requested or summary_status is not None
+        )
+        if share_card_touched and "share_card" in result_dict:
+            # 设计不变式 2：卡片落盘段（探缓存、删旧卡、原子写）的任何异常都
+            # 不得冒泡——任务终态与总结落盘与卡片无关（门禁主审 F1）。隔离
+            # 范围只包本段，后面的结构化/chapters 落盘不受影响；异常必须留
+            # error 痕迹（task_id + 异常类型 + 信息 + traceback，loguru 的
+            # exc_info 等价写法是 opt(exception=True)）。
+            try:
+                artifact_cache_for_card = cache_manager.get_cache(
+                    platform, media_id,
+                    use_speaker_recognition=use_speaker_recognition,
+                )
+                if artifact_cache_for_card and artifact_cache_for_card.get("file_path"):
+                    share_card_path = (
+                        Path(artifact_cache_for_card["file_path"]) / "llm_share_card.json"
+                    )
+                    if share_card_path.exists():
+                        share_card_path.unlink()
+                        logger.info(
+                            f"removed stale share card (summary regenerated): {task_id}"
+                        )
+                    if summary_status == SummaryStatus.GENERATED and isinstance(
+                        share_card_data, dict
+                    ):
+                        _atomic_write_json(share_card_path, share_card_data)
+                        logger.info(f"share card saved: {task_id}")
+                    elif share_card_data is None and share_card_error:
+                        logger.error(
+                            f"share card generation failed, task continues without card: "
+                            f"task_id={task_id} reason={share_card_error}"
+                        )
+                else:
+                    # 缓存定位失败（get_cache 空或缺 file_path）：静默跳过会让
+                    # 已生成的卡片文案无声丢失（门禁主审 F2），必须留 error；
+                    # card_generated 区分「新卡丢失」与「无新卡只是定位不到」。
+                    logger.error(
+                        f"share card cache path unavailable, card not persisted: "
+                        f"task_id={task_id} "
+                        f"card_generated={isinstance(share_card_data, dict)}"
+                    )
+            except Exception as exc:
+                logger.opt(exception=True).error(
+                    f"share card persistence failed, task continues without card: "
+                    f"task_id={task_id} {type(exc).__name__}: {exc}"
+                )
 
         # 保存结构化数据（同样受校对层抑制保护，避免覆盖已有的真实说话人校对结果）。
         # T8 S4：落盘 gate 由仅 use_speaker_recognition 放宽为「或本轮命中 plain
