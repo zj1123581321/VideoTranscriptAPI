@@ -29,3 +29,12 @@ Dispatch: dlg-20261015-161551-bd7bb2
 - 本段结论：pillow 从 [dependency-groups].dev 移入 [project].dependencies，uv.lock 同步（组间迁移，版本不变 12.3.0）；Dockerfile apt 增加 fonts-noto-cjk；config.example.jsonc web 段新增 og_font_path/og_font_bold_path（Debian Noto CJK 默认路径，commentjson 解析验证通过）。样图 og-card-sample.png 入库。测试 29 条全绿。
 - 关键决策与已否决方案：踩了一个真坑——字体子集先生成、SAMPLE_CARD 后写，样图首次出现大片空 glyph；修法是把子集脚本的字形扫描源扩为 tests/og_card/*.py + 渲染器源码（含「AI 总结」字面量），并在脚本 docstring 写明「新增中文必须重跑」；否决了手工维护字形清单（会漂移）。样图目检确认：标题两行折行、中英文混排、序号、域名与 AI 总结 均正常。
 - 下一步唯一动作：全量回归（make test）、红验、docker 构建验证 fc-list、推送开 draft PR。
+
+---
+
+## 段4：验证收尾
+
+- 当前阶段：verifying
+- 本段结论：全量回归 4035 passed / 3 skipped（存量） / 1 failed——唯一失败 test_unix_domain_socket_is_not_blocked 为继承环境红（派发框架 TMPDIR 长 109 字符超 AF_UNIX 108 上限），已在 base 552f496e 独立 worktree 复现同错，与本卡无关。红验：改坏 truncate_lines 省略号拼接 → 2 条断言失败转红（AssertionError），还原后 29 条全绿。docker 构建成功，镜像内字体文件与配置路径一致，fc-list（临时容器补装 fontconfig）确认 NotoSansCJK-Regular/Bold.ttc 均含 SC face；容器内用生产默认字体路径端到端渲染 1200x630 PNG 成功。
+- 关键决策与已否决方案：继承红判定依据=base 复现 + 测试与守卫代码均早于 base（d9f2e2c6 是 552f496e 祖先）+ 失败路径与本卡改动零交集；主干基线不可用（gh api failed），故继承红以本地 base 复现取证。
+- 下一步唯一动作：推送分支、开 draft PR、写报告。
