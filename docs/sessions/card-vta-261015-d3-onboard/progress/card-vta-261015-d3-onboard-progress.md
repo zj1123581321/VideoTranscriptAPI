@@ -59,3 +59,10 @@ Task-Id: VideoTranscriptAPI-20261015-01 · dispatch: dlg-20261015-151234-61378b 
 - 关键决策与已否决方案：裁决依据已独立核实——v2 tag pull_and_deploy.sh 684-689 行：锁文件缺失时 log WARN + mkdir -p + 创建空文件后继续（设计内降级，服务侧持锁上线后自动生效）；ACR 全路径按 build-deploy.yml 组装规则 ACR_REGISTRY/ACR_NAMESPACE/IMAGE_NAME 推出（本卡未覆盖两个默认 input）；否决「DEPLOY.md 只改命令不动 D3 节忙锁句」——原句「自动部署不感知在飞任务」与启用后现实矛盾，属同一事实的文档面。
 - 证据（2026-10-15）：yaml parse ok；Accept-Check 新口径 busy_lock_file=1、livez=1、本地 tag=1、digest env=0；DEPLOY.md 无 compose pull && 残留；tests/ 无任何测试读取 deploy.yml/DEPLOY.md（仅引用未改动的 docker-compose.deploy.yml）——make test 不重跑全量的理由：本轮 diff 零测试耦合，上轮全量基线（唯一红 AF_UNIX）输入文件均未动。
 - 下一步唯一动作：push 更新 PR #246 正文（差异表忙锁行、验证口径、后续节）。
+
+## 段8：gate primary 第 3 轮裁决（续修卡 dlg-20261015-180253-09c8dc）
+
+- 当前阶段：implementing（deploy.yml post-deploy inode 对账 + README 本地 latest 别名措辞已落盘）
+- 本段结论：主脑将 reliability-deploy-during-active-task 拆两半——(a) 挂载/权限异常静默降级采纳修复：ship 成功后 `verify-busy-lock-inode` 对账宿主 `.deploy-state/busy.lock` 与容器 `/app/.deploy-state/busy.lock` 的 `stat -c %i` inode，不一致或缺失则 workflow failure；(b) 首次自动部署空档走答辩不入码（旧容器无持锁代码，任何新代码都无法让旧进程持锁；缓解=首次部署由主脑 workflow_dispatch，触发前确认非终态任务为 0，见 #249）。minor finding design-production-latest-policy-contradiction：README 把 registry 可变 tag 禁令与部署机本地 retag 别名分开写。
+- 关键决策与已否决方案：reusable workflow 无法在 caller 插入「同一 TCP 会话、探针之前」的步骤，验证只能做 ship 成功后的 sibling job（同一 host/key/deploy_dir，新会话）。否决改 ci-templates（跨仓）。否决在本公开仓写部署账号字面量（public-scan）；ssh_user 运行时从 ci-templates v2 default 解析。
+- 下一步唯一动作：yaml parse + Accept-Check（busy_lock_file≥1、stat -c %i 可 grep），commit 本段，push 并更新 PR 正文。

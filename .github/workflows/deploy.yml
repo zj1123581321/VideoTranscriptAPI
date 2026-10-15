@@ -1,9 +1,9 @@
 # ci-templates 已迁移到 zlxlabs org；部署工作流与脚本钉到同一移动版本 tag，随上游 v2 被动升级。
 # push main 自动 build→ACR→SSH n305→探针→部署。
 #
-# 忙锁门禁已启用：服务侧持锁由后续卡 VideoTranscriptAPI-20261015-02 落地（服务侧
-# BusyLock + compose 挂载）；未落地前锁文件不存在时部署脚本自动创建并 WARN 后继续
-# （warn-and-proceed，行为等价无锁、门禁空转），服务侧持锁上线后自动生效。
+# 忙锁门禁已启用：服务侧 BusyLock 持共享 flock（本 PR）；部署脚本对同一文件申请排他锁。
+# ship 成功后 verify-busy-lock-inode 用同一套 SSH 身份对账宿主/容器 busy.lock 的
+# stat -c %i inode（证明 bind mount 真生效）。任一检查失败则 workflow failure，不静默降级。
 name: deploy
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
       dockerfile: docker/Dockerfile                     # Dockerfile 在 docker/ 子目录(build_context 默认仓根:COPY 的 pyproject/uv.lock/src 都在根)
       host: 100.68.21.80                                # n305 的 Tailscale IP
       deploy_dir: /opt/media/VideoTranscriptAPI
-      busy_lock_file: /opt/media/VideoTranscriptAPI/.deploy-state/busy.lock   # 服务侧持锁落地前由部署脚本自动创建(门禁空转)，见顶部注释
+      busy_lock_file: /opt/media/VideoTranscriptAPI/.deploy-state/busy.lock   # 与容器 /app/.deploy-state/busy.lock 同 inode（compose bind mount + 本 workflow 对账）
       busy_lock_timeout: "600"
       runner: self                                      # self-hosted fleet;显式钉死不随上游默认漂移(该形态下 runner 内直连 tailnet 目标机,临时入网步骤整体跳过)
       healthcheck_url: http://localhost:8200/livez      # 宿主发布端口 8200(容器内 8000);探针用 /livez 纯存活恒 200,不用深度检查的 /health(依赖下游,抖动误触发回滚)
@@ -40,3 +40,79 @@ jobs:
       TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
       CI_TEMPLATES_PAT: ${{ secrets.CI_TEMPLATES_PAT }}
       FEISHU_CI_WEBHOOK: ${{ secrets.FEISHU_CI_WEBHOOK }}   # 未配置时通知层打 warning 跳过,不影响部署结论
+
+  # reusable ship job 无法插入步骤；本 job 在健康探针已通过之后、workflow 宣告成功之前
+  # 对账 inode。同一 host / key / deploy_dir（新 SSH 会话）。挂载失败 → job failure。
+  verify-busy-lock-inode:
+    needs: ship
+    runs-on: [self-hosted, linux, x64, codex]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout ci-templates (ssh_user default)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: zlxlabs/ci-templates
+          ref: v2
+          path: .ci-templates
+          persist-credentials: false
+
+      - name: Set up SSH
+        env:
+          SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_DEPLOY_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Verify busy.lock host/container inode
+        env:
+          DEPLOY_HOST: 100.68.21.80
+          DEPLOY_DIR: /opt/media/VideoTranscriptAPI
+          CONTAINER_NAME: video-transcript-api
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
+          SSH_USER="$(python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path(".ci-templates/.github/workflows/build-deploy.yml").read_text()
+          match = re.search(
+              r"ssh_user:\n(?:.*\n)*?^[ ]{8}default:[ ]*\"([A-Za-z0-9_-]+)\"",
+              text,
+              re.M,
+          )
+          if not match:
+              raise SystemExit("ci-templates ssh_user default not found")
+          print(match.group(1))
+          PY
+          )"
+          [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
+          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
+          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' bash -s" <<'REMOTE'
+          set -euo pipefail
+          host_lock="${DEPLOY_DIR}/.deploy-state/busy.lock"
+          container_lock="/app/.deploy-state/busy.lock"
+          if [ ! -e "$host_lock" ]; then
+            echo "::error::host busy.lock missing: ${host_lock}"
+            exit 1
+          fi
+          if ! docker exec "$CONTAINER_NAME" test -e "$container_lock"; then
+            echo "::error::container busy.lock missing: ${container_lock}"
+            exit 1
+          fi
+          host_inode="$(stat -c %i "$host_lock")"
+          container_inode="$(docker exec "$CONTAINER_NAME" stat -c %i "$container_lock")"
+          if [ -z "$host_inode" ] || [ -z "$container_inode" ]; then
+            echo "::error::busy.lock inode empty host=${host_inode:-none} container=${container_inode:-none}"
+            exit 1
+          fi
+          if [ "$host_inode" != "$container_inode" ]; then
+            echo "::error::busy.lock inode mismatch host=${host_inode} container=${container_inode}"
+            exit 1
+          fi
+          echo "busy.lock inode ok ${host_inode}"
+          REMOTE

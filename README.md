@@ -84,7 +84,7 @@ docker compose up -d --build
 
 镜像内置 ffmpeg、BBDown、yt-dlp，无需额外安装。
 
-生产部署禁止使用 `latest`。构建脚本会拒绝包含已跟踪或未跟踪修改的脏工作区，只从干净提交以 12 位 Git SHA 生成唯一 tag 并推送 GHCR（公开镜像构建口，不部署）：
+生产部署禁止向任何 registry 推送或使用可变 tag（含 `latest`）。构建脚本会拒绝脏工作区，只从干净提交以 12 位 Git SHA 生成唯一 tag 并推送 GHCR（公开镜像构建口，不部署）。部署机本地的 `video-transcript-api:latest` 不是 registry 可变 tag：它是 D3 部署脚本把 ACR 不可变 SHA 镜像 retag 后的本机别名，只存在于部署机，compose 与镜像对账认这个本地名，不入任何 registry。
 
 ```bash
 ./docker/push_to_ghcr.sh
