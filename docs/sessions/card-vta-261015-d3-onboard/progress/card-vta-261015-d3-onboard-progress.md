@@ -10,4 +10,11 @@ Task-Id: VideoTranscriptAPI-20261015-01 · dispatch: dlg-20261015-151234-61378b 
 - 证据（v2 tag 原文摘录，2026-10-15，tag 随上游移动、验收时不必然可重取）：
   - `git show v2:.github/workflows/build-deploy.yml`：`busy_lock_file` default `""`（86-88 行）、`healthcheck_warmup` default `"10"`（70-72）、`healthcheck_interval` default `"3"`（66-68）、`runner` default `"self"`（103-114 行）。
   - `ci-templates/scripts/pull_and_deploy.sh`：22 行 `# local tag, e.g. ops-dispatcher`；339 行 `"$DOCKER_BIN" tag "$ref" "${IMAGE_NAME}:latest"`（拉 ACR 的 GIT_SHA tag 后本机 retag）；460 行镜像对账 inspect `"${IMAGE_NAME}:latest"`。
-- 下一步唯一动作：迁移 docker/docker-compose.deploy.yml 到本地 tag 形态。
+- 下一步唯一动作：更新 docker/DEPLOY.md（D3 主链路 + /livez 理由 + 旧脚本降为手动备用）。
+
+## 段2：compose 种子迁移到本地 tag 形态
+
+- 当前阶段：implementing（docker/docker-compose.deploy.yml 已随本段提交）
+- 本段结论：镜像行从 digest env 占位改为 `image: video-transcript-api:latest`，头部注释改写为 D3 本地 tag 形态的来源说明（retag + 对账都认本地名），其余字节不变（env_file/ports/stop_grace_period/volumes 等均保持原样）；`docker compose config -q` 按服务器真实布局（种子拷为项目根 docker-compose.yml + 同目录 .env）验证通过。
+- 关键决策与已否决方案：本地验证不用仓内路径直接跑（compose 的 env_file 相对路径按项目目录解析，仓内无 .env 会假红）——用临时目录复刻部署目录布局，跑完即删；否决「顺手给种子加 compose healthcheck 块」：Dockerfile 已有内置 HEALTHCHECK（curl /livez），宿主侧探针由 ci-templates 脚本承担，再加一层是无第二消费者的重复配置。
+- 下一步唯一动作：更新 docker/DEPLOY.md。
