@@ -48,7 +48,10 @@ SPEAKER_MAPPING_SCHEMA = {
             "type": "object",
             "description": (
                 "每个说话人的候选名列表；evidence_quote 必须逐字摘抄自输入文本，"
-                "程序将逐字核对，核对失败的候选作废"
+                "程序将逐字核对，核对失败的候选作废；evidence_type 为 "
+                "dialog_address 时，evidence_quote 必须包含该候选名本身"
+                "（如称呼句「大家好，我是柠姐」支持名字「柠姐」），"
+                "未提及名字的发言段落不构成该名字的证据"
             ),
             "additionalProperties": {
                 "type": "array",

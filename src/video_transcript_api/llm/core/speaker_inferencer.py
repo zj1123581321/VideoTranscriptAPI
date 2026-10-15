@@ -1090,10 +1090,16 @@ class SpeakerInferencer:
           strip/归一化——LLM 摇抄不逐字就是证据不合格；分区缺失或为空串
           时任何 quote 都核对不过
           （gate 审查修复②：correctness-speaker-evidence-quote-scope）
+        - dialog_address 的 evidence_quote 必须包含候选名本身（英文忽略
+          大小写）——归属核对只证明文本属于该说话人，不证明文本支持该
+          姓名；整段发言里没提过这个名字，该文本对本名无证据力
+          （gate 审查修复④：correctness-dialog-candidate-name-not-bound-
+          to-quote）。静态行（title_credit/author_host/description_roster）
+          核对不变：复合名侧已有双证据 + 推测标注兜住关联性。
 
-        作废原因（quote_missing / invalid_candidate / unknown_evidence_type）
-        返回给调用方写入 meta 供诊断；候选级原因中 quote_missing 是轴表
-        点名的必须可观测的一项。
+        作废原因（quote_missing / name_not_in_quote / invalid_candidate /
+        unknown_evidence_type）返回给调用方写入 meta 供诊断；候选级原因中
+        quote_missing 是轴表点名的必须可观测的一项。
         """
         verified: List[Dict] = []
         rejected: List[str] = []
@@ -1123,6 +1129,12 @@ class SpeakerInferencer:
             if quote not in sections.get(evidence_type, ""):
                 rejected.append("quote_missing")
                 continue
+            # gate 审查修复④：dialog_address 的名字绑定判据（见 docstring）。
+            if evidence_type == "dialog_address":
+                bound_name = name.strip()
+                if bound_name.casefold() not in quote.casefold():
+                    rejected.append("name_not_in_quote")
+                    continue
             verified.append(
                 {
                     "name": name.strip(),
@@ -1260,10 +1272,14 @@ class SpeakerInferencer:
             inferred_name = raw_mapping.get(speaker, speaker)
 
             if display_name is None:
-                # 全部候选都因引用不在输入中作废时，作废原因取 quote_missing
-                # （轴表点名的可观测项），否则用裁决规则给出的原因。
-                if not verified and rejected and all(r == "quote_missing" for r in rejected):
-                    reason = "quote_missing"
+                # 全部候选都因引用核对作废（quote_missing / name_not_in_quote，
+                # 修复④新增后者）且无任何核对通过时，作废原因取核对层原因
+                # （quote_missing 是轴表点名的可观测项，混合时优先），否则用
+                # 裁决规则给出的原因。
+                if not verified and rejected and all(
+                    r in ("quote_missing", "name_not_in_quote") for r in rejected
+                ):
+                    reason = "quote_missing" if "quote_missing" in rejected else "name_not_in_quote"
                 fallback_label = self._build_fallback_label(speaker, speakers)
                 mapping[speaker] = fallback_label
                 low_confidence.append(speaker)

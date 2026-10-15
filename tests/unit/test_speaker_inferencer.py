@@ -54,7 +54,8 @@ def _mock_llm_response(speaker_mapping, confidence, reasoning="because", candida
 def _auto_candidates(mapping_quotes):
     """按 {label: [(name, quote), ...]} 快速构造通过核对的 dialog_address 候选。
 
-    quote 必须是该 label 采样文本的逐字子串（调用方负责）。
+    quote 必须是该 label 采样文本的逐字子串，且必须包含 name 本身
+    （gate 修复轮第 4 轮名字绑定判据；调用方负责）。
     """
     return {
         label: [
@@ -664,8 +665,8 @@ class TestConfidenceGating(unittest.TestCase):
             )
         )
         dialogs = [
-            _make_dialog("Speaker1", "hello there", start_time=0.0),
-            _make_dialog("Speaker2", "hi back", start_time=1.0),
+            _make_dialog("Speaker1", "hello there，我是张三", start_time=0.0),
+            _make_dialog("Speaker2", "hi back，我是李四", start_time=1.0),
         ]
         return inferencer.infer(
             speakers=["Speaker1", "Speaker2"],
@@ -680,7 +681,7 @@ class TestConfidenceGating(unittest.TestCase):
             speaker_mapping={"Speaker1": "张三", "Speaker2": "李四"},
             confidence={"Speaker1": 0.1, "Speaker2": 0.9},
             candidates=_auto_candidates(
-                {"Speaker1": [("张三", "hello there")]}
+                {"Speaker1": [("张三", "我是张三")]}
             ),
         )
 
@@ -721,13 +722,13 @@ class TestConfidenceGating(unittest.TestCase):
         response.structured_output = {
             "speaker_mapping": {"Speaker1": "张三", "Speaker2": "李四"},
             "candidates": _auto_candidates(
-                {"Speaker1": [("张三", "hello there")]}
+                {"Speaker1": [("张三", "我是张三")]}
             ),
             "reasoning": "no confidence field at all",
         }
         inferencer.llm_client.call = MagicMock(return_value=response)
         dialogs = [
-            _make_dialog("Speaker1", "hello there", start_time=0.0),
+            _make_dialog("Speaker1", "hello there，我是张三", start_time=0.0),
             _make_dialog("Speaker2", "hi", start_time=1.0),
         ]
 
@@ -747,8 +748,8 @@ class TestConfidenceGating(unittest.TestCase):
             confidence={"Speaker2": 0.9},  # Speaker1 key missing entirely
             candidates=_auto_candidates(
                 {
-                    "Speaker1": [("张三", "hello there")],
-                    "Speaker2": [("李四", "hi back")],
+                    "Speaker1": [("张三", "我是张三")],
+                    "Speaker2": [("李四", "我是李四")],
                 }
             ),
         )
@@ -766,8 +767,8 @@ class TestConfidenceGating(unittest.TestCase):
             confidence={"Speaker1": "not-a-number", "Speaker2": 0.9},
             candidates=_auto_candidates(
                 {
-                    "Speaker1": [("张三", "hello there")],
-                    "Speaker2": [("李四", "hi back")],
+                    "Speaker1": [("张三", "我是张三")],
+                    "Speaker2": [("李四", "我是李四")],
                 }
             ),
         )
@@ -785,8 +786,8 @@ class TestConfidenceGating(unittest.TestCase):
             confidence=0.9,
             candidates=_auto_candidates(
                 {
-                    "Speaker1": [("张三", "hello there")],
-                    "Speaker2": [("李四", "hi back")],
+                    "Speaker1": [("张三", "我是张三")],
+                    "Speaker2": [("李四", "我是李四")],
                 }
             ),
         )
@@ -805,12 +806,12 @@ class TestConfidenceGating(unittest.TestCase):
                 speaker_mapping={"Speaker1": "张三", "Speaker7": "李四"},
                 confidence={"Speaker1": 0.9, "Speaker7": 0.1},
                 candidates=_auto_candidates(
-                    {"Speaker1": [("张三", "hello")]}
+                    {"Speaker1": [("张三", "我是张三")]}
                 ),
             )
         )
         dialogs = [
-            _make_dialog("Speaker1", "hello", start_time=0.0),
+            _make_dialog("Speaker1", "hello，我是张三", start_time=0.0),
             _make_dialog("Speaker7", "hi", start_time=1.0),
         ]
 
@@ -826,12 +827,12 @@ class TestConfidenceGating(unittest.TestCase):
                 speaker_mapping={"alpha": "张三", "beta": "李四"},
                 confidence={"alpha": 0.9, "beta": 0.1},
                 candidates=_auto_candidates(
-                    {"alpha": [("张三", "hello")]}
+                    {"alpha": [("张三", "我是张三")]}
                 ),
             )
         )
         dialogs = [
-            _make_dialog("alpha", "hello", start_time=0.0),
+            _make_dialog("alpha", "hello，我是张三", start_time=0.0),
             _make_dialog("beta", "hi", start_time=1.0),
         ]
 
@@ -854,8 +855,10 @@ class TestUnsampledSpeakerIdentityFallback(unittest.TestCase):
 
     def test_budget_excluded_speaker_keeps_original_label_not_placeholder(self):
         speakers = ["alpha", "beta", "gamma"]
+        # 文本长度保持 100：two_speaker_budget 探测与排除行为不随本修复变化。
+        texts = {"alpha": "x" * 96 + "我是张三", "beta": "x" * 96 + "我是李四"}
         dialogs = [
-            _make_dialog(speaker, "x" * 100, start_time=float(i))
+            _make_dialog(speaker, texts.get(speaker, "x" * 100), start_time=float(i))
             for i, speaker in enumerate(speakers)
         ]
 
@@ -891,8 +894,8 @@ class TestUnsampledSpeakerIdentityFallback(unittest.TestCase):
                 confidence={"alpha": 0.9, "beta": 0.9},
                 candidates=_auto_candidates(
                     {
-                        "alpha": [("张三", "x" * 100)],
-                        "beta": [("李四", "x" * 100)],
+                        "alpha": [("张三", "我是张三")],
+                        "beta": [("李四", "我是李四")],
                     }
                 ),
             )
@@ -920,11 +923,11 @@ class TestUnsampledSpeakerIdentityFallback(unittest.TestCase):
             return_value=_mock_llm_response(
                 speaker_mapping={"alpha": "张三"},
                 confidence={"alpha": 0.9},
-                candidates=_auto_candidates({"alpha": [("张三", "hello there")]}),
+                candidates=_auto_candidates({"alpha": [("张三", "我是张三")]}),
             )
         )
         dialogs = [
-            _make_dialog("alpha", "hello there", start_time=0.0),
+            _make_dialog("alpha", "hello there，我是张三", start_time=0.0),
             _make_dialog("beta", "", start_time=1.0),  # empty text -> no sample at all
         ]
 
@@ -952,11 +955,11 @@ class TestUnsampledSpeakerIdentityFallback(unittest.TestCase):
             return_value=_mock_llm_response(
                 speaker_mapping={"alpha": "张三"},
                 confidence={"alpha": 0.9},
-                candidates=_auto_candidates({"alpha": [("张三", "hello there")]}),
+                candidates=_auto_candidates({"alpha": [("张三", "我是张三")]}),
             )
         )
         dialogs = [
-            _make_dialog("alpha", "hello there", start_time=0.0),
+            _make_dialog("alpha", "hello there，我是张三", start_time=0.0),
             _make_dialog("beta", "", start_time=1.0),
         ]
 
@@ -1084,7 +1087,7 @@ class TestCacheCoverageValidation(unittest.TestCase):
                 confidence={"Speaker1": 0.9, "Speaker2": 0.9},
                 candidates=_auto_candidates(
                     {
-                        "Speaker2": [("李四", "hello")],
+                        "Speaker2": [("李四", "我是李四")],
                     }
                 ),
             )
@@ -1094,7 +1097,7 @@ class TestCacheCoverageValidation(unittest.TestCase):
             speakers=["Speaker1", "Speaker2"],
             dialogs=[
                 _make_dialog("Speaker1", "hi", 0.0),
-                _make_dialog("Speaker2", "hello", 1.0),
+                _make_dialog("Speaker2", "hello，我是李四", 1.0),
             ],
             title="t",
             platform="p",
@@ -1130,7 +1133,7 @@ class TestCacheCoverageValidation(unittest.TestCase):
                 speaker_mapping={"Speaker1": "张三", "Speaker2": "王五"},
                 confidence={"Speaker1": 0.95, "Speaker2": 0.3},
                 candidates=_auto_candidates(
-                    {"Speaker1": [("张三", "hi")]}
+                    {"Speaker1": [("张三", "我是张三")]}
                 ),
             )
         )
@@ -1138,7 +1141,7 @@ class TestCacheCoverageValidation(unittest.TestCase):
         result = inferencer.infer(
             speakers=["Speaker1", "Speaker2"],
             dialogs=[
-                _make_dialog("Speaker1", "hi", 0.0),
+                _make_dialog("Speaker1", "hi，我是张三", 0.0),
                 _make_dialog("Speaker2", "hello", 1.0),
             ],
             title="t",

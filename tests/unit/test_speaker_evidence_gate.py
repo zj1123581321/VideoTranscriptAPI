@@ -332,6 +332,43 @@ class TestRealFixtureEvidenceGate(unittest.TestCase):
         )
         self.assertTrue(result["meta"]["Speaker2"]["applied"])
 
+    def test_dialog_quote_without_name_rejected(self):
+        """gate 修复轮第 4 轮（correctness-dialog-candidate-name-not-bound-to-
+        quote）：归属核对只证明 quote 属于该说话人，不证明 quote 支持该姓名。
+        quote 真实存在于说话人自身片段但不含候选名 → 候选作废、降级说话人N，
+        作废原因记 name_not_in_quote。"""
+        quote = "先说结论：三十天拉新一万这件事，没有捷径，全是重复劳动。"
+        # 前提自证：quote 真实存在于 Speaker2 自身片段（排除假红——若采样没
+        # 覆盖该句，候选会挂在分区核对 quote_missing 而非本判据）。
+        inferencer = _make_inferencer()
+        sample_groups = inferencer._extract_sample_dialogs(self.dialogs, self.speakers)
+        seg2 = inferencer._render_speaker_segment("Speaker2", sample_groups["Speaker2"])
+        self.assertIn(quote, seg2)
+        self.assertNotIn("某主播", quote)
+
+        candidates = {
+            "Speaker2": [_candidate("某主播", "dialog_address", quote)],
+        }
+        result = self._run_infer(candidates, confidence={"Speaker1": 0.9, "Speaker2": 0.9})
+
+        self.assertEqual(result["mapping"]["Speaker2"], "说话人2")
+        self.assertFalse(result["meta"]["Speaker2"]["applied"])
+        self.assertEqual(
+            result["meta"]["Speaker2"]["rejection_reason"], "name_not_in_quote"
+        )
+
+    def test_dialog_quote_containing_name_still_applies(self):
+        """第 4 轮对照：quote 含候选名本身（合成 fixture 中「柠姐」在 Speaker2
+        片段内的自我介绍句）→ applied 保持，新判据不误伤真证据。"""
+        quote = "大家好，我是柠姐，麦能听到了吗？"
+        candidates = {
+            "Speaker2": [_candidate("柠姐", "dialog_address", quote)],
+        }
+        result = self._run_infer(candidates, confidence={"Speaker1": 0.9, "Speaker2": 0.9})
+
+        self.assertEqual(result["mapping"]["Speaker2"], "柠姐")
+        self.assertTrue(result["meta"]["Speaker2"]["applied"])
+
 
 class TestGateRound2QuoteScope(unittest.TestCase):
     """gate 修复轮第 2 轮：dialog_address 的 quote 核对收窄到该说话人自身的
@@ -563,6 +600,24 @@ class TestEvidenceGateRules(unittest.TestCase):
             {"dialog_address": "对话 张三 后文"},
         )
         self.assertEqual(len(verified), 1)
+
+    def test_dialog_name_binding_case_insensitive_for_english(self):
+        """修复④（第 4 轮）边界：dialog_address 的 quote 必须包含候选名本身，
+        英文名忽略大小写（ADRIAN PUNK 支持 Adrian Punk）；不含名的真实
+        quote 对该名字无证据力 → name_not_in_quote。"""
+        verified, rejected = SpeakerInferencer._verify_candidates(
+            [_candidate("Adrian Punk", "dialog_address", "welcome, ADRIAN PUNK speaking")],
+            {"dialog_address": "welcome, ADRIAN PUNK speaking"},
+        )
+        self.assertEqual(len(verified), 1)
+        self.assertEqual(rejected, [])
+
+        verified, rejected = SpeakerInferencer._verify_candidates(
+            [_candidate("张三", "dialog_address", "今天天气不错")],
+            {"dialog_address": "今天天气不错"},
+        )
+        self.assertEqual(verified, [])
+        self.assertEqual(rejected, ["name_not_in_quote"])
 
     def test_quote_in_wrong_section_rejected(self):
         """修复②边界：quote 只存在于另一分区/分区缺失时，逐字存在也不放行。"""

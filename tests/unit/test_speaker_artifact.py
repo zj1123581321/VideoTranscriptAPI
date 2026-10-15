@@ -13,9 +13,11 @@ from video_transcript_api.llm.coordinator import LLMCoordinator
 
 
 def _dialogs():
+    # 文本含说话人自报名：gate 修复轮第 4 轮起 dialog_address 的 quote 必须
+    # 包含候选名本身，候选引用取此处的逐字子串。
     return [
-        {"speaker": "Speaker1", "text": "Hello", "start_time": 0.0},
-        {"speaker": "Speaker2", "text": "World", "start_time": 1.0},
+        {"speaker": "Speaker1", "text": "Hello, I'm Alice", "start_time": 0.0},
+        {"speaker": "Speaker2", "text": "World, Bob here", "start_time": 1.0},
     ]
 
 
@@ -497,13 +499,13 @@ def test_deep_malformed_artifact_falls_back_to_real_inference_not_a_task_failure
     llm.call.return_value = SimpleNamespace(structured_output={
         "speaker_mapping": {"Speaker1": "Alice", "Speaker2": "Bob"},
         "confidence": {"Speaker1": 0.95, "Speaker2": 0.95},
-        # schema v2：引用取自采样文本（_dialogs 的逐字原文），核对可过。
+        # schema v2：引用取自采样文本（_dialogs 的逐字原文）且含候选名本身，核对可过。
         "candidates": {
             "Speaker1": [
-                {"name": "Alice", "evidence_type": "dialog_address", "evidence_quote": "Hello"}
+                {"name": "Alice", "evidence_type": "dialog_address", "evidence_quote": "I'm Alice"}
             ],
             "Speaker2": [
-                {"name": "Bob", "evidence_type": "dialog_address", "evidence_quote": "World"}
+                {"name": "Bob", "evidence_type": "dialog_address", "evidence_quote": "Bob here"}
             ],
         },
     })
@@ -770,13 +772,13 @@ def test_infer_speaker_names_alone_still_calls_llm_for_name_inference(tmp_path):
             return SimpleNamespace(structured_output={
                 "speaker_mapping": {"Speaker1": "Alice", "Speaker2": "Bob"},
                 "confidence": {"Speaker1": 0.95, "Speaker2": 0.95},
-                # schema v2：引用取自采样文本（_dialogs 的逐字原文）。
+                # schema v2：引用取自采样文本（_dialogs 的逐字原文）且含候选名本身。
                 "candidates": {
                     "Speaker1": [
-                        {"name": "Alice", "evidence_type": "dialog_address", "evidence_quote": "Hello"}
+                        {"name": "Alice", "evidence_type": "dialog_address", "evidence_quote": "I'm Alice"}
                     ],
                     "Speaker2": [
-                        {"name": "Bob", "evidence_type": "dialog_address", "evidence_quote": "World"}
+                        {"name": "Bob", "evidence_type": "dialog_address", "evidence_quote": "Bob here"}
                     ],
                 },
             })
