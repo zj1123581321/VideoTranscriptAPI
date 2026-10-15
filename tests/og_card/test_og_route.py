@@ -100,6 +100,20 @@ def _png_dimensions(body: bytes):
         return img.format, img.size
 
 
+def _bad_card_overrides() -> dict:
+    """Contract violations; each key is one dimension (feedback F1)."""
+    return {
+        "version-not-1": {"version": 2},
+        "headline-empty": {"headline": ""},
+        "headline-too-long": {"headline": "标" * 31},
+        "points-empty": {"points": []},
+        "points-four": {"points": ["一", "二", "三", "四"]},
+        "point-empty": {"points": ["ok", ""]},
+        "point-too-long": {"points": ["x" * 81]},
+        "generated-at-invalid": {"generated_at": "not-a-timestamp"},
+    }
+
+
 class TestOgShareCardRoute:
     def test_serves_1200x630_png(self, og_client):
         client, _cache, token, cache_dir = og_client
@@ -147,10 +161,43 @@ class TestOgShareCardRoute:
         response = client.get(f"/og/{token}.png")
         assert response.status_code == 404
 
-    def test_invalid_contract_returns_404(self, og_client):
+    @pytest.mark.parametrize(
+        "case", sorted(_bad_card_overrides()), ids=sorted(_bad_card_overrides())
+    )
+    def test_invalid_card_returns_404(self, og_client, case):
         client, _cache, token, cache_dir = og_client
-        _write_card(cache_dir, {**SAMPLE_CARD, "version": 2})
+        _write_card(cache_dir, {**SAMPLE_CARD, **_bad_card_overrides()[case]})
         assert client.get(f"/og/{token}.png").status_code == 404
+
+    def test_missing_generated_at_returns_404(self, og_client):
+        client, _cache, token, cache_dir = og_client
+        card = {k: v for k, v in SAMPLE_CARD.items() if k != "generated_at"}
+        _write_card(cache_dir, card)
+        assert client.get(f"/og/{token}.png").status_code == 404
+
+    def test_cache_control_is_max_age_300(self, og_client):
+        client, _cache, token, cache_dir = og_client
+        _write_card(cache_dir, SAMPLE_CARD)
+        response = client.get(f"/og/{token}.png")
+        assert response.headers["cache-control"] == "public, max-age=300"
+
+    def test_json_deleted_in_window_returns_404(self, og_client, monkeypatch):
+        """A resummarize deletes the card json between load_share_card and
+        the freshness stat: must 404, not leak FileNotFoundError as 500."""
+        client, _cache, token, cache_dir = og_client
+        _write_card(cache_dir, SAMPLE_CARD)
+        assert client.get(f"/og/{token}.png").status_code == 200
+        real_load = og_card.load_share_card
+
+        def load_then_delete(cache_dir_):
+            card = real_load(cache_dir_)
+            (Path(cache_dir_) / og_card.CARD_FILENAME).unlink()
+            return card
+
+        monkeypatch.setattr(views_routes, "load_share_card", load_then_delete)
+        strict_client = TestClient(client.app, raise_server_exceptions=False)
+        response = strict_client.get(f"/og/{token}.png")
+        assert response.status_code == 404
 
     def test_unknown_token_returns_404(self, og_client):
         client, _cache, _token, cache_dir = og_client

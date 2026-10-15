@@ -1572,7 +1572,16 @@ async def og_share_card(view_token: str):
             return False
         return png_path.stat().st_mtime_ns >= json_path.stat().st_mtime_ns
 
-    if not _cache_is_fresh():
+    try:
+        cache_fresh = _cache_is_fresh()
+    except FileNotFoundError as exc:
+        # A resummarize deletes llm_share_card.json / og_card.png between
+        # load_share_card and the stat: treat as no card. Render errors
+        # (e.g. missing font) must stay loud, so only stat is guarded.
+        logger.warning("OG 卡片缓存文件在发送窗口内消失: view_token={}", view_token)
+        raise HTTPException(status_code=404, detail="share card not found") from exc
+
+    if not cache_fresh:
         web_config = get_config().get("web", {})
         await asyncio.to_thread(
             render_og_card,
@@ -1583,11 +1592,13 @@ async def og_share_card(view_token: str):
             author=cache_data.get("author", ""),
             site_url=get_base_url(),
             font_path=web_config.get("og_font_path", DEFAULT_FONT_PATH),
-            font_bold_path=web_config.get("og_font_bold_path", DEFAULT_FONT_BOLD_PATH),
+            font_bold_path=web_config.get(
+                "og_font_bold_path", DEFAULT_FONT_BOLD_PATH
+            ),
             output_path=png_path,
         )
     return FileResponse(
         png_path,
         media_type="image/png",
-        headers={"Cache-Control": "public, max-age=86400"},
+        headers={"Cache-Control": "public, max-age=300"},
     )
