@@ -38,3 +38,12 @@ Dispatch: dlg-20261015-161551-bd7bb2
 - 本段结论：全量回归 4035 passed / 3 skipped（存量） / 1 failed——唯一失败 test_unix_domain_socket_is_not_blocked 为继承环境红（派发框架 TMPDIR 长 109 字符超 AF_UNIX 108 上限），已在 base 552f496e 独立 worktree 复现同错，与本卡无关。红验：改坏 truncate_lines 省略号拼接 → 2 条断言失败转红（AssertionError），还原后 29 条全绿。docker 构建成功，镜像内字体文件与配置路径一致，fc-list（临时容器补装 fontconfig）确认 NotoSansCJK-Regular/Bold.ttc 均含 SC face；容器内用生产默认字体路径端到端渲染 1200x630 PNG 成功。
 - 关键决策与已否决方案：继承红判定依据=base 复现 + 测试与守卫代码均早于 base（d9f2e2c6 是 552f496e 祖先）+ 失败路径与本卡改动零交集；主干基线不可用（gh api failed），故继承红以本地 base 复现取证。
 - 下一步唯一动作：推送分支、开 draft PR、写报告。
+
+---
+
+## 段5：门禁主审修复（F1-F4）
+
+- 当前阶段：verifying
+- 本段结论：先 merge origin/main（A 卡入库，无冲突），29 条存量测试绿。F1 load_share_card 严格校验：version==SHARE_CARD_FORMAT_VERSION、headline/points 复用 A 卡 _validate_card（同源长度权重规则）、generated_at 必须非空 ISO8601；F2 Cache-Control 收紧为 max-age=300；F3 缓存新鲜度 stat 窗口的 FileNotFoundError 转 404+warning；F4 顶栏与域名经 layout_header/layout_footer_host 截断防溢出。测试 29→47 条全绿；F1/F3 各一次单行注入红验均转 AssertionError 红，还原只改该行。样图重生成后与上轮字节一致（正常输入不触发 F4 截断，本身即无回归证据）。
+- 关键决策与已否决方案：否决「try 包住整个 render+stat」方案——字体缺失也是 FileNotFoundError，会被静默吞成 404，破坏「字体缺失必须 fail loud」锁定决策（实测 test_missing_font_fails_loud 转 404 暴露此问题），改为只包 stat 窗口；否决重写长度判定，直接 import A 卡 _validate_card（feedback 指示复用）。uv.lock 顺带把自版本号 1.1.0 同步为 pyproject 的 1.2.0（main 上已失步，本卡 uv run 重解析暴露，在 Scope 内）。
+- 下一步唯一动作：全量回归（make test）、推送、更新报告。
