@@ -101,42 +101,51 @@ def finalize_terminal_status_and_notify(
             suppress_terminal_notification=suppress_terminal_notification,
             **update_kwargs,
         )
-        if not written:
-            current_task = cache_manager.get_task_by_id(task_id)
-            current_status = current_task.get("status") if current_task else "unknown"
-            logger.warning(
-                f"terminal CAS lost (task already {current_status}), "
-                f"skip status notify: {task_id}"
-            )
-            return False
-
-        logger.info(f"terminal CAS won: {task_id} -> {status}")
-
-        if suppress_terminal_notification:
-            logger.debug(
-                f"caller suppressed terminal status notification at write time: {task_id}"
-            )
-            return True
-
-        if not defer_delivery:
-            deliver_terminal_notification(
-                task_id,
-                status,
-                error_message=error_message,
-                url=url,
-                title=title,
-                author=author,
-                notify_status=notify_status,
-                notify_error=notify_error,
-                channel_name=channel_name,
-                webhooks=webhooks,
-                cache_manager=cache_manager,
-                router=router,
-                notify_via=notify_via,
-            )
-        return True
-    finally:
+    except BaseException:
+        # 终态未能写入的异常路径兜底：忙锁不得跨过本函数泄漏，原样上抛。
         release_for_task(task_id)
+        raise
+
+    if not written:
+        current_task = cache_manager.get_task_by_id(task_id)
+        current_status = current_task.get("status") if current_task else "unknown"
+        logger.warning(
+            f"terminal CAS lost (task already {current_status}), "
+            f"skip status notify: {task_id}"
+        )
+        release_for_task(task_id)
+        return False
+
+    logger.info(f"terminal CAS won: {task_id} -> {status}")
+
+    # 终态已落库：忙锁在通知投递前释放（gate 第 9 轮）——投递及其重试队列
+    # 不该占着忙锁拉长部署侧排他锁的等待。此点之后任何路径都不再持有该锁；
+    # 投递失败由 deliver_terminal_notification 自行记录，不吞、不回滚。
+    release_for_task(task_id)
+
+    if suppress_terminal_notification:
+        logger.debug(
+            f"caller suppressed terminal status notification at write time: {task_id}"
+        )
+        return True
+
+    if not defer_delivery:
+        deliver_terminal_notification(
+            task_id,
+            status,
+            error_message=error_message,
+            url=url,
+            title=title,
+            author=author,
+            notify_status=notify_status,
+            notify_error=notify_error,
+            channel_name=channel_name,
+            webhooks=webhooks,
+            cache_manager=cache_manager,
+            router=router,
+            notify_via=notify_via,
+        )
+    return True
 
 
 def deliver_terminal_notification(

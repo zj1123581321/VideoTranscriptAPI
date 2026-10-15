@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from loguru import logger as loguru_logger
 
+from video_transcript_api.api.services import terminal_status as ts
 from video_transcript_api.api.services.terminal_status import (
     finalize_terminal_status_and_notify,
 )
@@ -236,6 +237,54 @@ def test_finalize_releases_held_shared_lock(tmp_path):
         suppress_terminal_notification=True,
     )
     assert written is True
+    assert not _host_ex_blocked(path)
+
+
+def test_finalize_releases_lock_before_notification_delivery(monkeypatch, tmp_path):
+    """Gate round 9: lock released right after terminal CAS wins, BEFORE
+    delivery runs; moving release back behind delivery turns this red.
+    """
+    path = str(tmp_path / "busy.lock")
+    _provision(path)
+    assert acquire_for_task("task-pre-notify", path=path) is True
+    observed: list[bool] = []
+
+    def probe_delivery(*args, **kwargs):
+        observed.append(not _host_ex_blocked(path))
+
+    monkeypatch.setattr(ts, "deliver_terminal_notification", probe_delivery)
+    cache_manager = MagicMock()
+    cache_manager.update_task_status.return_value = True
+    written = finalize_terminal_status_and_notify(
+        "task-pre-notify", TaskStatus.SUCCESS, cache_manager=cache_manager,
+    )
+    assert written is True
+    assert observed == [True]
+    assert not _host_ex_blocked(path)
+
+
+def test_finalize_releases_lock_on_cas_loss_and_defer(monkeypatch, tmp_path):
+    """Gate round 9: CAS-loss and defer-delivery early exits drop the lock too."""
+    path = str(tmp_path / "busy.lock")
+    _provision(path)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        ts, "deliver_terminal_notification", lambda *a, **k: calls.append("called")
+    )
+    cache_manager = MagicMock()
+    cache_manager.update_task_status.return_value = False
+    assert acquire_for_task("task-cas-loss", path=path) is True
+    assert finalize_terminal_status_and_notify(
+        "task-cas-loss", TaskStatus.SUCCESS, cache_manager=cache_manager,
+    ) is False
+    assert not _host_ex_blocked(path)
+
+    cache_manager.update_task_status.return_value = True
+    assert acquire_for_task("task-defer", path=path) is True
+    assert finalize_terminal_status_and_notify(
+        "task-defer", TaskStatus.SUCCESS, cache_manager=cache_manager, defer_delivery=True,
+    ) is True
+    assert calls == []
     assert not _host_ex_blocked(path)
 
 
