@@ -59,6 +59,16 @@ def _base_result(**overrides):
     return d
 
 
+def _error_messages(mock_logger) -> list[str]:
+    """Collect error-level messages from a patched loguru logger, covering
+    both direct .error(...) and opt(exception=True).error(...) call shapes."""
+    msgs = [str(c.args[0]) for c in mock_logger.error.call_args_list]
+    msgs += [
+        str(c.args[0]) for c in mock_logger.opt.return_value.error.call_args_list
+    ]
+    return msgs
+
+
 def _write_card(tmp_path: Path, card: dict) -> None:
     tmp_path.mkdir(parents=True, exist_ok=True)
     (tmp_path / "llm_share_card.json").write_text(
@@ -204,6 +214,97 @@ class TestShareCardPersistence:
             (tmp_path / "llm_share_card.json").read_bytes().decode("utf-8")
         )
         assert card["headline"] == "untouched"
+
+    def test_persistence_exception_isolated_summary_and_structured_still_saved(
+        self, monkeypatch, tmp_path
+    ):
+        """Review F1: any exception inside the card persistence section
+        (get_cache / unlink / atomic write) must not escape _save_llm_results.
+        The summary save and the structured save that follows the card block
+        must both still run, and the error log must carry task_id and the
+        exception type."""
+        from unittest.mock import patch
+
+        def _boom(path, data):
+            raise OSError("disk full")
+
+        mock_cm = _patch_cm(monkeypatch, tmp_path)
+        monkeypatch.setattr(llm_ops, "_atomic_write_json", _boom)
+
+        with patch("video_transcript_api.api.services.llm_ops.logger") as mock_logger:
+            raised = None
+            result = None
+            try:
+                result = llm_ops._save_llm_results(
+                    task_id="t-f1",
+                    platform="youtube",
+                    media_id="m1",
+                    use_speaker_recognition=False,
+                    result_dict=_base_result(
+                        share_card=dict(VALID_CARD),
+                        structured_data={"dialogs": []},
+                    ),
+                    calibrate_only=False,
+                    plain_structured_active=True,
+                )
+            except Exception as exc:  # noqa: BLE001 - this escape is the bug
+                raised = exc
+
+        assert raised is None, f"card persistence exception escaped: {raised!r}"
+        llm_types = [
+            c.kwargs.get("llm_type") for c in mock_cm.save_llm_result.call_args_list
+        ]
+        assert "summary" in llm_types, "summary save must still happen"
+        assert "structured" in llm_types, (
+            "structured save (after the card block) must still run"
+        )
+        assert result is not None
+        assert result["summary_status"] == SummaryStatus.GENERATED
+        assert not (tmp_path / "llm_share_card.json").exists()
+        errors = "\n".join(_error_messages(mock_logger))
+        assert "t-f1" in errors and "OSError" in errors, (
+            f"expected error log with task_id and exception type, got: {errors}"
+        )
+
+    @pytest.mark.parametrize(
+        "cache_return",
+        [
+            pytest.param(None, id="get_cache_returns_none"),
+            pytest.param({"llm_summary": "cached"}, id="snapshot_without_file_path"),
+        ],
+    )
+    def test_missing_cache_path_logs_error(
+        self, monkeypatch, tmp_path, cache_return
+    ):
+        """Review F2: when the card block runs but the cache path is
+        unavailable (get_cache empty or missing file_path), the generated card
+        must not be dropped silently — an error log with task_id (and
+        card_generated) is required; the task still succeeds."""
+        from unittest.mock import patch
+
+        mock_cm = _patch_cm(monkeypatch, tmp_path)
+        mock_cm.get_cache.return_value = cache_return
+
+        with patch("video_transcript_api.api.services.llm_ops.logger") as mock_logger:
+            result = llm_ops._save_llm_results(
+                task_id="t-f2",
+                platform="youtube",
+                media_id="m1",
+                use_speaker_recognition=False,
+                result_dict=_base_result(share_card=dict(VALID_CARD)),
+                calibrate_only=False,
+            )
+
+        assert result is not None
+        assert result["summary_status"] == SummaryStatus.GENERATED
+        assert not (tmp_path / "llm_share_card.json").exists()
+        errors = _error_messages(mock_logger)
+        matched = [
+            m for m in errors if "t-f2" in m and "card_generated=True" in m
+        ]
+        assert matched, (
+            f"expected error log with task_id and card_generated, got: {errors}"
+        )
 
     def test_not_requested_preserves_card(self, monkeypatch, tmp_path):
         """A round that did not request the summary (layer already exists)

@@ -2280,29 +2280,49 @@ def _save_llm_results(
             summarize_requested or summary_status is not None
         )
         if share_card_touched and "share_card" in result_dict:
-            artifact_cache_for_card = cache_manager.get_cache(
-                platform, media_id,
-                use_speaker_recognition=use_speaker_recognition,
-            )
-            if artifact_cache_for_card and artifact_cache_for_card.get("file_path"):
-                share_card_path = (
-                    Path(artifact_cache_for_card["file_path"]) / "llm_share_card.json"
+            # 设计不变式 2：卡片落盘段（探缓存、删旧卡、原子写）的任何异常都
+            # 不得冒泡——任务终态与总结落盘与卡片无关（门禁主审 F1）。隔离
+            # 范围只包本段，后面的结构化/chapters 落盘不受影响；异常必须留
+            # error 痕迹（task_id + 异常类型 + 信息 + traceback，loguru 的
+            # exc_info 等价写法是 opt(exception=True)）。
+            try:
+                artifact_cache_for_card = cache_manager.get_cache(
+                    platform, media_id,
+                    use_speaker_recognition=use_speaker_recognition,
                 )
-                if share_card_path.exists():
-                    share_card_path.unlink()
-                    logger.info(
-                        f"removed stale share card (summary regenerated): {task_id}"
+                if artifact_cache_for_card and artifact_cache_for_card.get("file_path"):
+                    share_card_path = (
+                        Path(artifact_cache_for_card["file_path"]) / "llm_share_card.json"
                     )
-                if summary_status == SummaryStatus.GENERATED and isinstance(
-                    share_card_data, dict
-                ):
-                    _atomic_write_json(share_card_path, share_card_data)
-                    logger.info(f"share card saved: {task_id}")
-                elif share_card_data is None and share_card_error:
+                    if share_card_path.exists():
+                        share_card_path.unlink()
+                        logger.info(
+                            f"removed stale share card (summary regenerated): {task_id}"
+                        )
+                    if summary_status == SummaryStatus.GENERATED and isinstance(
+                        share_card_data, dict
+                    ):
+                        _atomic_write_json(share_card_path, share_card_data)
+                        logger.info(f"share card saved: {task_id}")
+                    elif share_card_data is None and share_card_error:
+                        logger.error(
+                            f"share card generation failed, task continues without card: "
+                            f"task_id={task_id} reason={share_card_error}"
+                        )
+                else:
+                    # 缓存定位失败（get_cache 空或缺 file_path）：静默跳过会让
+                    # 已生成的卡片文案无声丢失（门禁主审 F2），必须留 error；
+                    # card_generated 区分「新卡丢失」与「无新卡只是定位不到」。
                     logger.error(
-                        f"share card generation failed, task continues without card: "
-                        f"task_id={task_id} reason={share_card_error}"
+                        f"share card cache path unavailable, card not persisted: "
+                        f"task_id={task_id} "
+                        f"card_generated={isinstance(share_card_data, dict)}"
                     )
+            except Exception as exc:
+                logger.opt(exception=True).error(
+                    f"share card persistence failed, task continues without card: "
+                    f"task_id={task_id} {type(exc).__name__}: {exc}"
+                )
 
         # 保存结构化数据（同样受校对层抑制保护，避免覆盖已有的真实说话人校对结果）。
         # T8 S4：落盘 gate 由仅 use_speaker_recognition 放宽为「或本轮命中 plain
