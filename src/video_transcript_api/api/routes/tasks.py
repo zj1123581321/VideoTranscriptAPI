@@ -28,6 +28,7 @@ from ..services.transcription import (
     verify_token,
 )
 from ..services.view_token_resolver import ViewTokenResolver
+from ...utils.busy_lock import acquire_for_task, release_for_task
 from ...utils.llm_status import ChaptersStatus, NotesStatus, SummaryStatus
 from ...utils.notifications import send_view_link_wechat, get_notification_router
 from ...utils.task_status import TaskStatus, http_code_for_status
@@ -284,8 +285,18 @@ async def transcribe_video(
     # future, task_id=task_id) 的调用）——中途任何异常都必须在最下面的
     # finally 里释放，否则这个名额永久占用、无法被后续请求复用。
     registration_owned = True
+    lock_held_for_lifecycle = False
     try:
         try:
+            if not acquire_for_task(task_id):
+                logger.warning(
+                    "deployment in progress, reject transcription task: {}",
+                    url,
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail="deployment in progress, retry shortly",
+                )
             task_info = cache_manager.create_task(
                 task_id=task_id,
                 url=url,
@@ -353,6 +364,7 @@ async def transcribe_video(
                     # 保留的第二道防线（本地 codex review 第 12 轮 P1）。
                     task_queue.put_nowait(task)
                     registration_owned = False
+                    lock_held_for_lifecycle = True
                     logger.info(f"任务已加入队列: {task_id}, URL: {url}")
                 except asyncio.QueueFull:
                     logger.warning("任务队列已满，拒绝任务: {}, task_id={}", url, task_id)
@@ -480,6 +492,8 @@ async def transcribe_video(
     finally:
         if registration_owned:
             inflight_registry.release("transcription", task_id)
+        if not lock_held_for_lifecycle:
+            release_for_task(task_id)
 
 
 @router.get("/task/{task_id}", response_model=TranscribeResponse)

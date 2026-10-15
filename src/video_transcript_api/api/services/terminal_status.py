@@ -40,6 +40,7 @@ import threading
 from typing import Any, Dict, Optional
 
 from ..context import get_cache_manager, get_logger, lazy_resource
+from ...utils.busy_lock import release_for_task
 from ...utils.notifications import get_notification_router, slow_alert
 from ...utils.task_status import TaskStatus
 
@@ -83,56 +84,59 @@ def finalize_terminal_status_and_notify(
     Pass defer_delivery=True to persist the outbox row without inline delivery;
     the caller must deliver it after any content notification.
     """
-    # 先取消计时再写终态，且不论 CAS 成败都执行。到点回调持有同一把锁
-    # 完成 ⏳ 入队，因此若回调先拿锁，⏳ 必先于终态写入及终态通知入队。
-    slow_alert.cancel_all(task_id)
+    try:
+        # 先取消计时再写终态，且不论 CAS 成败都执行。到点回调持有同一把锁
+        # 完成 ⏳ 入队，因此若回调先拿锁，⏳ 必先于终态写入及终态通知入队。
+        slow_alert.cancel_all(task_id)
 
-    if cache_manager is None:
-        cache_manager = get_cache_manager()
+        if cache_manager is None:
+            cache_manager = get_cache_manager()
 
-    written = cache_manager.update_task_status(
-        task_id,
-        status,
-        error_message=error_message,
-        title=title,
-        author=author,
-        suppress_terminal_notification=suppress_terminal_notification,
-        **update_kwargs,
-    )
-    if not written:
-        current_task = cache_manager.get_task_by_id(task_id)
-        current_status = current_task.get("status") if current_task else "unknown"
-        logger.warning(
-            f"terminal CAS lost (task already {current_status}), "
-            f"skip status notify: {task_id}"
-        )
-        return False
-
-    logger.info(f"terminal CAS won: {task_id} -> {status}")
-
-    if suppress_terminal_notification:
-        logger.debug(
-            f"caller suppressed terminal status notification at write time: {task_id}"
-        )
-        return True
-
-    if not defer_delivery:
-        deliver_terminal_notification(
+        written = cache_manager.update_task_status(
             task_id,
             status,
             error_message=error_message,
-            url=url,
             title=title,
             author=author,
-            notify_status=notify_status,
-            notify_error=notify_error,
-            channel_name=channel_name,
-            webhooks=webhooks,
-            cache_manager=cache_manager,
-            router=router,
-            notify_via=notify_via,
+            suppress_terminal_notification=suppress_terminal_notification,
+            **update_kwargs,
         )
-    return True
+        if not written:
+            current_task = cache_manager.get_task_by_id(task_id)
+            current_status = current_task.get("status") if current_task else "unknown"
+            logger.warning(
+                f"terminal CAS lost (task already {current_status}), "
+                f"skip status notify: {task_id}"
+            )
+            return False
+
+        logger.info(f"terminal CAS won: {task_id} -> {status}")
+
+        if suppress_terminal_notification:
+            logger.debug(
+                f"caller suppressed terminal status notification at write time: {task_id}"
+            )
+            return True
+
+        if not defer_delivery:
+            deliver_terminal_notification(
+                task_id,
+                status,
+                error_message=error_message,
+                url=url,
+                title=title,
+                author=author,
+                notify_status=notify_status,
+                notify_error=notify_error,
+                channel_name=channel_name,
+                webhooks=webhooks,
+                cache_manager=cache_manager,
+                router=router,
+                notify_via=notify_via,
+            )
+        return True
+    finally:
+        release_for_task(task_id)
 
 
 def deliver_terminal_notification(

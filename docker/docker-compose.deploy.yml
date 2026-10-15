@@ -21,6 +21,7 @@ services:
     volumes:
       - ./config:/app/config
       - ./data:/app/data
+      - ./.deploy-state:/app/.deploy-state
     mem_limit: 2g
     restart: unless-stopped
     logging:
