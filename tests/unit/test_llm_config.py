@@ -339,3 +339,39 @@ class TestLLMConfigGetModels:
 
         assert config.get_models()["notes_model"] == "notes"
         assert config.get_models()["notes_reasoning_effort"] == "high"
+
+    def test_share_card_fields_fallback_to_summary_for_legacy_config(self):
+        config = LLMConfig.from_dict(
+            {
+                "llm": {
+                    "api_key": "k",
+                    "base_url": "u",
+                    "calibrate_model": "calibrate",
+                    "summary_model": "summary",
+                    "summary_reasoning_effort": "medium",
+                }
+            }
+        )
+
+        assert config.share_card_model == "summary"
+        assert config.share_card_reasoning_effort == "medium"
+        assert config.get_models()["share_card_model"] == "summary"
+        assert config.get_models()["share_card_reasoning_effort"] == "medium"
+
+    def test_share_card_fields_accept_explicit_values(self):
+        config = LLMConfig.from_dict(
+            {
+                "llm": {
+                    "api_key": "k",
+                    "base_url": "u",
+                    "calibrate_model": "calibrate",
+                    "summary_model": "summary",
+                    "summary_reasoning_effort": "low",
+                    "share_card_model": "flash-card",
+                    "share_card_reasoning_effort": "disabled",
+                }
+            }
+        )
+
+        assert config.get_models()["share_card_model"] == "flash-card"
+        assert config.get_models()["share_card_reasoning_effort"] == "disabled"

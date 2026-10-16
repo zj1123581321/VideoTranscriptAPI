@@ -13,7 +13,7 @@ affect the summary artifact.
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 from ...utils.logging import setup_logger
 from ..core.config import LLMConfig
@@ -98,8 +98,9 @@ class ShareCardProcessor:
 
     职责：
     - 基于总结正文生成分享卡片文案（吸睛标题 + 要点）
-    - 模型复用 summary_model / summary_reasoning_effort 配置
-      （含风控覆盖：selected_models 的覆盖逻辑与总结一致）
+    - 模型默认用 share_card_model / share_card_reasoning_effort，
+      未配置时回退 summary 对应项（含风控覆盖：selected_models
+      读 share_card_* 键，写法与 NotesProcessor._resolve_model 同构）
     - 按 llm_share_card.json 契约严格校验模型输出
 
     失败语义：不向调用方抛出任何异常；生成失败或输出不合规时返回
@@ -139,16 +140,7 @@ class ShareCardProcessor:
             if not isinstance(summary_text, str) or not summary_text.strip():
                 return ShareCardResult(card=None, error="empty summary text")
 
-            # 模型选择：与 SummaryProcessor 相同的覆盖逻辑（风控覆盖优先）。
-            if selected_models:
-                model = selected_models.get("summary_model", self.config.summary_model)
-                reasoning_effort = selected_models.get(
-                    "summary_reasoning_effort",
-                    self.config.summary_reasoning_effort,
-                )
-            else:
-                model = self.config.summary_model
-                reasoning_effort = self.config.summary_reasoning_effort
+            model, reasoning_effort = self._resolve_model(selected_models)
 
             response = self.llm_client.call(
                 model=model,
@@ -194,3 +186,21 @@ class ShareCardProcessor:
             # 卡面要求的隔离边界：分享卡片失败绝不冒泡影响任务终态。
             logger.error(f"Share card generation failed: {exc}", exc_info=True)
             return ShareCardResult(card=None, error=f"{type(exc).__name__}: {exc}")
+
+    def _resolve_model(
+        self,
+        selected_models: Optional[Mapping[str, Any]],
+    ) -> Tuple[str, Optional[str]]:
+        """Resolve share-card model and effort, isomorphic to NotesProcessor."""
+        default_model = self.config.share_card_model or self.config.summary_model
+        default_effort = (
+            self.config.share_card_reasoning_effort
+            if self.config.share_card_reasoning_effort is not None
+            else self.config.summary_reasoning_effort
+        )
+        if not selected_models:
+            return default_model, default_effort
+        return (
+            selected_models.get("share_card_model", default_model) or default_model,
+            selected_models.get("share_card_reasoning_effort", default_effort),
+        )

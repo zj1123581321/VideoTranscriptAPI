@@ -141,6 +141,11 @@ class LLMConfig:
     # Summary output budget (prompt + max_tokens + post-hoc cap share one curve).
     summary_budget: SummaryBudgetConfig = field(default_factory=SummaryBudgetConfig)
 
+    # Share-card copy. Appended to preserve legacy positional construction
+    # of LLMConfig (same reason as the notes fields above).
+    share_card_model: Optional[str] = None
+    share_card_reasoning_effort: Optional[str] = None
+
     @classmethod
     def from_dict(cls, config_dict: dict) -> "LLMConfig":
         """从配置字典创建 LLMConfig 实例
@@ -336,6 +341,16 @@ class LLMConfig:
             summary_budget=SummaryBudgetConfig.from_dict(
                 llm_config.get("summary_budget")
             ),
+            # Share-card defaults to the summary model and effort when omitted.
+            share_card_model=llm_config.get(
+                "share_card_model", llm_config["summary_model"]
+            ),
+            share_card_reasoning_effort=normalize_reasoning_effort(
+                llm_config.get(
+                    "share_card_reasoning_effort",
+                    llm_config.get("summary_reasoning_effort"),
+                )
+            ),
         )
 
     def get_models(self) -> dict:
@@ -353,6 +368,12 @@ class LLMConfig:
             "notes_reasoning_effort": (
                 self.notes_reasoning_effort
                 if self.notes_reasoning_effort is not None
+                else self.summary_reasoning_effort
+            ),
+            "share_card_model": self.share_card_model or self.summary_model,
+            "share_card_reasoning_effort": (
+                self.share_card_reasoning_effort
+                if self.share_card_reasoning_effort is not None
                 else self.summary_reasoning_effort
             ),
             "validator_model": self.validator_model,
