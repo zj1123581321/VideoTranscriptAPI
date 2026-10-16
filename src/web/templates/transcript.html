@@ -3,7 +3,14 @@
 {% block title %}{{ title or "视频转录" }} - 视频转录查看器{% endblock %}
 {% block meta_description %}{{ title or "视频转录" }} - {{ platform or "" }} 视频转录校对结果{% endblock %}
 {% block og_title %}{{ title or "视频转录" }} - 视频转录查看器{% endblock %}
-{% block og_description %}{{ title or "视频转录" }} 的转录校对结果{% endblock %}
+{% block og_description %}{% if share_card %}{{ share_card.points[0] }}{% else %}{{ title or "视频转录" }} 的转录校对结果{% endif %}{% endblock %}
+{% block og_image_meta %}{% if share_card %}
+    <meta name="twitter:card" content="summary_large_image">
+    <meta property="og:image" content="{{ og_image_url }}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:image:alt" content="{{ share_card.headline }}">
+{% endif %}{% endblock %}
 
 {% block site_nav %}
 {# Transcript page: fold owner actions into a gear menu; theme toggle stays outside. #}
