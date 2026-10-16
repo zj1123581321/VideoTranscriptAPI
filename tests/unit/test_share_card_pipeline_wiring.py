@@ -44,6 +44,23 @@ def _patch_cm(monkeypatch, tmp_path: Path, *, snapshot=None):
     return mock_cm
 
 
+def _coordinator_result(**overrides):
+    """Coordinator return shape for _build_result_dict (not a result_dict)."""
+    d = {
+        "calibrated_text": "calibrated body",
+        "summary_text": "summary body",
+        "stats": {
+            "calibration_status": "full",
+            "summary_status": SummaryStatus.GENERATED,
+        },
+        "models_used": {},
+        "share_card": dict(VALID_CARD),
+        "share_card_error": None,
+    }
+    d.update(overrides)
+    return d
+
+
 def _base_result(**overrides):
     d = {
         "校对文本": "calibrated body",
@@ -332,3 +349,34 @@ class TestShareCardPersistence:
             (tmp_path / "llm_share_card.json").read_bytes().decode("utf-8")
         )
         assert card["headline"] == "untouched"
+
+
+class TestShareCardBuildResultDictPassthrough:
+    """Coordinator shape -> _build_result_dict -> _save_llm_results."""
+
+    def test_build_result_dict_copies_share_card_and_error(self):
+        coordinator = _coordinator_result(
+            share_card=dict(VALID_CARD),
+            share_card_error="RuntimeError: boom",
+        )
+        result = llm_ops._build_result_dict(coordinator)
+        assert result["share_card"] == VALID_CARD
+        assert result["share_card_error"] == "RuntimeError: boom"
+
+        omitted = dict(coordinator)
+        omitted.pop("share_card")
+        omitted.pop("share_card_error")
+        without = llm_ops._build_result_dict(omitted)
+        assert "share_card" not in without
+        assert "share_card_error" not in without
+
+    def test_build_then_save_writes_share_card_file(self, monkeypatch, tmp_path):
+        coordinator = _coordinator_result(share_card=dict(VALID_CARD))
+        result_dict = llm_ops._build_result_dict(coordinator)
+        _run_save(monkeypatch, tmp_path, result_dict)
+
+        card_file = tmp_path / "llm_share_card.json"
+        assert card_file.exists()
+        card = json.loads(card_file.read_bytes().decode("utf-8"))
+        assert card["headline"] == VALID_CARD["headline"]
+        assert card["points"] == VALID_CARD["points"]
