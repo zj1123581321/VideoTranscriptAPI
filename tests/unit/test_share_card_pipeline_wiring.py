@@ -360,8 +360,8 @@ class TestShareCardBuildResultDictPassthrough:
             share_card_error="RuntimeError: boom",
         )
         result = llm_ops._build_result_dict(coordinator)
-        assert result["share_card"] == VALID_CARD
-        assert result["share_card_error"] == "RuntimeError: boom"
+        assert result.get("share_card") == VALID_CARD
+        assert result.get("share_card_error") == "RuntimeError: boom"
 
         omitted = dict(coordinator)
         omitted.pop("share_card")
