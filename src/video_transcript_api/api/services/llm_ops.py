@@ -1178,6 +1178,9 @@ def _build_result_dict(coordinator_result: dict) -> dict:
         result_dict["structured_data"] = coordinator_result["structured_data"]
     if "artifact_sources" in coordinator_result:
         result_dict["artifact_sources"] = coordinator_result["artifact_sources"]
+    if "share_card" in coordinator_result:
+        result_dict["share_card"] = coordinator_result["share_card"]
+        result_dict["share_card_error"] = coordinator_result.get("share_card_error")
 
     return result_dict
 
