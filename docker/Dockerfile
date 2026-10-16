@@ -1,8 +1,9 @@
-FROM python:3.11-slim
-
 # BBDown 二进制来自项目私有镜像的已知好版本副本（ACR bbdown-base tag）。
 # 开源用户如需自建须提供含 BBDown 的等效镜像（存量限制，非本卡引入）。
 ARG BBDOWN_FROM=crpi-0vsre5argteykh9m.cn-guangzhou.personal.cr.aliyuncs.com/zlx-personal/video-transcript-api:bbdown-base
+FROM ${BBDOWN_FROM} AS bbdown
+
+FROM python:3.11-slim
 
 # ============================================================
 # 1. ffmpeg: copy static binaries from well-maintained image
@@ -31,7 +32,7 @@ ENV LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
 #    To update BBDown version, rebuild from source:
 #    docker build --build-arg BBDOWN_FROM_SOURCE=1 ...
 # ============================================================
-COPY --from=${BBDOWN_FROM} /app/BBDown /app/BBDown
+COPY --from=bbdown /app/BBDown /app/BBDown
 
 # ============================================================
 # 4. Python package manager: uv
