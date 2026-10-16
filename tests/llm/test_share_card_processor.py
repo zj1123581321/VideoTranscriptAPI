@@ -1,7 +1,8 @@
 """Unit tests for ShareCardProcessor (og share-card copy, card A).
 
 Covers the llm_share_card.json contract shape, contract rejections
-(too-long / empty fields), exception isolation, and summary-model reuse.
+(too-long / empty fields), exception isolation, and share_card_model
+selection (explicit / summary fallback / selected_models override).
 All LLM calls are mocked; no real request is ever sent.
 
 Console output must be English only.
@@ -34,11 +35,14 @@ CONFIG_DICT = {
 }
 
 
-def _make_processor() -> tuple[ShareCardProcessor, Mock]:
+def _make_processor(extra_llm: dict | None = None) -> tuple[ShareCardProcessor, Mock]:
     llm_client = Mock()
+    llm_section = dict(CONFIG_DICT["llm"])
+    if extra_llm:
+        llm_section.update(extra_llm)
     processor = ShareCardProcessor(
         llm_client=llm_client,
-        config=LLMConfig.from_dict(CONFIG_DICT),
+        config=LLMConfig.from_dict({"llm": llm_section}),
     )
     return processor, llm_client
 
@@ -82,8 +86,8 @@ class TestContractShape:
         assert parsed.tzinfo is not None
 
     def test_uses_summary_model_and_schema(self):
-        """The share-card call must reuse summary_model config and pass the
-        share-card response schema (locked decision)."""
+        """Unconfigured share_card_model must fall back to summary_model
+        and still pass the share-card response schema."""
         processor, llm_client = _make_processor()
         llm_client.call.return_value = _structured_response(dict(VALID_CARD_DATA))
 
@@ -96,20 +100,45 @@ class TestContractShape:
         assert kwargs["response_schema"] is not None
         assert "headline" in kwargs["response_schema"]["properties"]
 
+    def test_explicit_share_card_model_is_used(self):
+        """Configured share_card_model / effort must reach llm_client.call."""
+        processor, llm_client = _make_processor(
+            {
+                "share_card_model": "flash-card-model",
+                "share_card_reasoning_effort": "disabled",
+            }
+        )
+        llm_client.call.return_value = _structured_response(dict(VALID_CARD_DATA))
+
+        processor.process(summary_text="总结正文" * 50, title="T")
+
+        kwargs = llm_client.call.call_args.kwargs
+        assert kwargs["model"] == "flash-card-model"
+        assert kwargs["reasoning_effort"] == "disabled"
+
     def test_selected_models_override_wins(self):
-        """Risk-control override (selected_models) takes priority, same as
-        the summary call."""
-        processor, llm_client = _make_processor()
+        """selected_models share_card_* keys take priority over config."""
+        processor, llm_client = _make_processor(
+            {
+                "share_card_model": "flash-card-model",
+                "share_card_reasoning_effort": "disabled",
+            }
+        )
         llm_client.call.return_value = _structured_response(dict(VALID_CARD_DATA))
 
         processor.process(
             summary_text="总结正文" * 50,
             title="T",
-            selected_models={"summary_model": "override-model", "summary_reasoning_effort": "high"},
+            selected_models={
+                "share_card_model": "override-card-model",
+                "share_card_reasoning_effort": "high",
+                "summary_model": "must-not-use-summary-key",
+                "summary_reasoning_effort": "medium",
+            },
         )
 
         kwargs = llm_client.call.call_args.kwargs
-        assert kwargs["model"] == "override-model"
+        assert kwargs["model"] == "override-card-model"
         assert kwargs["reasoning_effort"] == "high"
 
     def test_long_summary_input_is_truncated(self):
