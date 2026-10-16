@@ -1528,9 +1528,45 @@ async def view_transcript(
         if view_data["status"] in _CONTENT_VIEW_STATUSES:
             stats = await asyncio.to_thread(_prepare_success_view, view_data)
 
+        def _read_share_card_for_view() -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+            """Load a contract-valid share card for the transcript page.
+
+            Runs in a worker thread (SQLite/file IO). Missing dir, missing
+            json, invalid contract, or a json deleted between load and stat
+            all mean "no card": callers must not emit twitter/og image tags.
+            """
+            cache_dir = view_data.get("cache_dir")
+            if not cache_dir:
+                cache_data = ViewTokenResolver(cache_manager).get_cache_by_view_token(
+                    view_token
+                )
+                cache_dir = (cache_data or {}).get("file_path")
+            if not cache_dir or not os.path.isdir(cache_dir):
+                return None, None
+            card = load_share_card(cache_dir)
+            if not card:
+                return None, None
+            try:
+                mtime_ns = (Path(cache_dir) / CARD_FILENAME).stat().st_mtime_ns
+            except FileNotFoundError:
+                logger.warning(
+                    "分享卡片 JSON 在读取后消失: view_token={}", view_token
+                )
+                return None, None
+            return card, f"{get_base_url()}/og/{view_token}.png?v={mtime_ns}"
+
+        share_card, og_image_url = await asyncio.to_thread(_read_share_card_for_view)
+
         return templates.TemplateResponse(
             "transcript.html",
-            {"request": request, **view_data, "view_token": view_token, "stats": stats},
+            {
+                "request": request,
+                **view_data,
+                "view_token": view_token,
+                "stats": stats,
+                "share_card": share_card,
+                "og_image_url": og_image_url,
+            },
         )
 
     except Exception as exc:
