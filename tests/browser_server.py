@@ -23,6 +23,7 @@ TEMPLATE_DIR = ROOT / "src" / "web" / "templates"
 VIEWS_SOURCE = ROOT / "src" / "video_transcript_api" / "api" / "routes" / "views.py"
 FIXTURE_TOKEN = "browser-fixture-token"
 VIEW_TOKEN = "browser-fixture-view"
+VIEW_TOKEN_WITH_CARD = "browser-fixture-view-og"
 UPLOAD_VIEW_TOKEN = "upload_browser_fixture_view_1"
 UPLOAD_ID = "browser-fixture-upload-1"
 
@@ -515,6 +516,14 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
             "error_message": "夹具失败状态",
             "message": "夹具失败状态",
         }
+        if view_token == VIEW_TOKEN_WITH_CARD:
+            port = self.server.server_address[1]
+            context["share_card"] = {
+                "headline": 'Fixture "headline" & alt',
+                "points": ["First fixture point", "Second fixture point"],
+                "generated_at": "2026-10-16T12:00:00+08:00",
+            }
+            context["og_image_url"] = f"http://127.0.0.1:{port}/og/{view_token}.png?v=1"
         html = TEMPLATES.get_template(template_name).render(**context)
         self.send_bytes(200, html.encode("utf-8"), "text/html; charset=utf-8")
 
