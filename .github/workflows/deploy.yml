@@ -43,13 +43,6 @@ jobs:
     runs-on: [self-hosted, linux, x64, codex]
     timeout-minutes: 5
     steps:
-      - name: Connect to Tailscale
-        # VM201 runner 不在 tailnet，直连 100.68.21.80 走公网 CGNAT 路由会撞上 ISP 内其他设备
-        # （run 38834509231 Host key verification failed）；与 ship 内 ci-templates 同款临时入网，job 结束自动下线。
-        uses: tailscale/github-action@4e4c49acaa9818630ce0bd7a564372c17e33fb4d # v2
-        with:
-          authkey: ${{ secrets.TS_AUTHKEY }}
-
       - name: Set up SSH
         env:
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
@@ -75,8 +68,9 @@ jobs:
           fi
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
           [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
-          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
-          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' bash -s" <<'REMOTE'
+          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20 -v"
+          # TEMP DIAGNOSTIC (run 38834509231 Host key verification failed): ssh -v + known_hosts dump before failing; remove after root cause confirmed
+          if ! ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' bash -s" <<'REMOTE'
           set -euo pipefail
           host_lock="${DEPLOY_DIR}/.deploy-state/busy.lock"
           container_lock="/app/.deploy-state/busy.lock"
@@ -112,6 +106,13 @@ jobs:
           fi
           echo "pre-flight busy.lock inode ok ${host_inode}"
           REMOTE
+          then
+            echo "known_hosts entries: $(wc -l < ~/.ssh/known_hosts)"
+            ssh-keygen -lf ~/.ssh/known_hosts || true
+            ssh-keyscan -T 10 100.68.21.80 2>/dev/null | ssh-keygen -lf - || true
+            ls -la ~/.ssh/
+            exit 1
+          fi
 
   ship:
     needs: pre-flight
@@ -148,13 +149,6 @@ jobs:
     runs-on: [self-hosted, linux, x64, codex]
     timeout-minutes: 5
     steps:
-      - name: Connect to Tailscale
-        # 与 pre-flight 同款：本 job 的 identity 对账 / inode 对账 / 回滚三个 SSH step 都
-        # 需要先入 tailnet 才能到 100.68.21.80（run 38834509231 同因）。
-        uses: tailscale/github-action@4e4c49acaa9818630ce0bd7a564372c17e33fb4d # v2
-        with:
-          authkey: ${{ secrets.TS_AUTHKEY }}
-
       - name: Set up SSH
         env:
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
@@ -181,7 +175,7 @@ jobs:
           fi
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
           [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
-          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
+          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20 -v" # diag: run 38834509231 host key verification
           ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "CONTAINER_NAME='$CONTAINER_NAME' IMAGE_NAME='$IMAGE_NAME' GIT_SHA='$GIT_SHA' bash -s" <<'REMOTE'
           set -euo pipefail
           running_image="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME" 2>/dev/null || true)"
@@ -221,7 +215,7 @@ jobs:
           fi
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
           [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
-          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
+          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20 -v" # diag: run 38834509231 host key verification
           ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' bash -s" <<'REMOTE'
           set -euo pipefail
           host_lock="${DEPLOY_DIR}/.deploy-state/busy.lock"
@@ -283,7 +277,7 @@ jobs:
           fi
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
           [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
-          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20"
+          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20 -v" # diag: run 38834509231 host key verification
           ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' IMAGE_NAME='$IMAGE_NAME' bash -s" <<'REMOTE'
           set -euo pipefail
           # 回滚前置对账（gate 第 10 轮）：inode 分裂场景宿主锁与容器锁不互斥，不能安全
