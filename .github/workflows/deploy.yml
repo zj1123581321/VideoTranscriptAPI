@@ -43,6 +43,13 @@ jobs:
     runs-on: [self-hosted, linux, x64, codex]
     timeout-minutes: 5
     steps:
+      - name: Connect to Tailscale
+        # VM201 runner 不在 tailnet，直连 100.68.21.80 走公网 CGNAT 路由会撞上 ISP 内其他设备
+        # （run 38834509231 Host key verification failed）；与 ship 内 ci-templates 同款临时入网，job 结束自动下线。
+        uses: tailscale/github-action@4e4c49acaa9818630ce0bd7a564372c17e33fb4d # v2
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+
       - name: Set up SSH
         env:
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
@@ -141,6 +148,13 @@ jobs:
     runs-on: [self-hosted, linux, x64, codex]
     timeout-minutes: 5
     steps:
+      - name: Connect to Tailscale
+        # 与 pre-flight 同款：本 job 的 identity 对账 / inode 对账 / 回滚三个 SSH step 都
+        # 需要先入 tailnet 才能到 100.68.21.80（run 38834509231 同因）。
+        uses: tailscale/github-action@4e4c49acaa9818630ce0bd7a564372c17e33fb4d # v2
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+
       - name: Set up SSH
         env:
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
