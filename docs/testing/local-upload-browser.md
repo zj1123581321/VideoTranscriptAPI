@@ -22,4 +22,4 @@
 
 `.github/workflows/ui-browser.yml` 对所有 PR `opened`、`synchronize`、`reopened`、`ready_for_review`、`converted_to_draft` 事件在 `[self-hosted, ci]` 执行 Chromium 与 Vitest；也可 `workflow_dispatch`。本仓没有 push workflow。`.github/workflows/gate.yml` 的 caller 已设置 `has_ui: true`；引用的 `zlxlabs/gate/.github/workflows/gate-v2.yml@v2` 在实际 tag 的 `workflow_call.inputs` 声明 `has_ui: boolean`（tag `v2` 当前解析为 commit `805856b9c6a501145521e8cae06000dc669af8c6`，已通过 GitHub API 读取实际 workflow_call schema 确认）。gate-hub 台账仍待 #1393，不能据本仓 caller 推断登记已生效。
 
-录屏证据不在本阻断 workflow。因无 `PWRS_REPORTER_TOKEN` 且 runner 发布通路未经验证，未接假 workflow；`AGENTS.md` 中有效期 90 天的 `ui-evidence-exempt:` 对应本仓接入待办 #199。该豁免只针对录屏，不豁免真实浏览器行为门禁。
+真实 Chromium 回归保持阻断。本开源仓不接维护者私有 PWRS 服务，也不要求 `PWRS_REPORTER_TOKEN`；失败时由 Browser regression workflow 上传 Playwright `outputDir`，包含失败 trace 与截图，artifact 保留 7 天。该政策取代 #199 的限时豁免和待接 PWRS 待办。
