@@ -176,9 +176,12 @@ test('Chromium uploads raw media through production API, worker, shared ASR/LLM,
   const browserErrors: string[] = [];
   const unexpectedNetwork: string[] = [];
   let observedResponseCount = 0;
-  page.on('pageerror', (error) => browserErrors.push(error.message));
+  page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`));
   page.on('console', (message) => {
-    if (message.type() === 'error') browserErrors.push(message.text());
+    if (message.type() === 'error') {
+      const url = message.location().url || '(unknown URL)';
+      browserErrors.push(`console: ${message.text()} at ${url}`);
+    }
   });
   page.on('requestfailed', (failed) => {
     const path = new URL(failed.url()).pathname;
@@ -389,13 +392,21 @@ test('Chromium uploads raw media through production API, worker, shared ASR/LLM,
   const revoked = (await inspectRealState(request)).uploads[0];
   expect(revoked.revoked_at).toBeTruthy();
   expect(revoked.root_status).toBe('success');
-  expect(browserErrors).toEqual([]);
   const expectedPageAborts = [
     'GET /api/audit/filter-options net::ERR_ABORTED',
     'GET /api/audit/history net::ERR_ABORTED',
   ];
   expect(observedResponseCount).toBeGreaterThan(0);
+  const unexpectedNetworkErrors = unexpectedNetwork.filter((entry) => !expectedPageAborts.includes(entry));
+  const failureReport = [
+    'Browser failure diagnostics',
+    'Console errors:',
+    ...(browserErrors.length ? browserErrors.map((entry) => `  ${entry}`) : ['  none']),
+    'Unexpected network errors:',
+    ...(unexpectedNetworkErrors.length ? unexpectedNetworkErrors.map((entry) => `  ${entry}`) : ['  none']),
+  ].join('\n');
   expect(
-    unexpectedNetwork.filter((entry) => !expectedPageAborts.includes(entry)),
-  ).toEqual([]);
+    { consoleErrors: browserErrors, networkErrors: unexpectedNetworkErrors },
+    failureReport,
+  ).toEqual({ consoleErrors: [], networkErrors: [] });
 });

@@ -16,10 +16,12 @@
 
 `/view/{token}?raw=...` 与 `?page=...` 是阅读页导出目的地，主路径测试通过真实链接点击断言。`/robots.txt`、`/sitemap.xml`、`/sw.js`、manifest 与 API 是资源/接口，不是额外页面；profile 路由是 API JSON，不是 UI。浏览器测试收集 console error、page error、request failed 及 HTTP 4xx/5xx，任一均使 case 失败。
 
+普通断言失败或 Playwright 用例超时、且 Chromium step 正常以失败结束时，failure-only 上传步骤会运行并上传 Playwright `outputDir`。末尾 console/network 汇总仅在业务断言通过后运行；更早失败时应结合原断言消息与 trace 取证。job 超时、手动取消或 runner 终止时不承诺执行 artifact 上传。
+
 ## 运行及 CI
 
 首次运行：`uv sync`、根目录 `npm ci`、`npm --prefix e2e ci`，并安装 Chromium：`cd e2e && npx playwright install chromium`。之后 `npm run test:browser`；保留的 Vitest 契约层单独以 `npm run test:web` 运行。缺 Chromium、服务无法启动或断言不符均非零；无 skip/retry。单一 spec、`fullyParallel: false`、`workers: 1` 避免共享 fixture 并发污染。
 
 `.github/workflows/ui-browser.yml` 对所有 PR `opened`、`synchronize`、`reopened`、`ready_for_review`、`converted_to_draft` 事件在 `[self-hosted, ci]` 执行 Chromium 与 Vitest；也可 `workflow_dispatch`。本仓没有 push workflow。`.github/workflows/gate.yml` 的 caller 已设置 `has_ui: true`；引用的 `zlxlabs/gate/.github/workflows/gate-v2.yml@v2` 在实际 tag 的 `workflow_call.inputs` 声明 `has_ui: boolean`（tag `v2` 当前解析为 commit `805856b9c6a501145521e8cae06000dc669af8c6`，已通过 GitHub API 读取实际 workflow_call schema 确认）。gate-hub 台账仍待 #1393，不能据本仓 caller 推断登记已生效。
 
-录屏证据不在本阻断 workflow。因无 `PWRS_REPORTER_TOKEN` 且 runner 发布通路未经验证，未接假 workflow；`AGENTS.md` 中有效期 90 天的 `ui-evidence-exempt:` 对应本仓接入待办 #199。该豁免只针对录屏，不豁免真实浏览器行为门禁。
+真实 Chromium 回归保持阻断。本开源仓不接维护者私有 PWRS 服务，也不要求 `PWRS_REPORTER_TOKEN`；失败时由 Browser regression workflow 上传 Playwright `outputDir`，包含失败 trace 与截图，artifact 保留 7 天。该政策取代 #199 的限时豁免和待接 PWRS 待办。
