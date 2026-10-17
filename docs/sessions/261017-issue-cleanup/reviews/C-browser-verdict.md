@@ -1,5 +1,11 @@
 <!-- delegate-outcome: succeeded -->
 
+## [codex] 后续裁决
+
+两条 P2 事实成立，但按校准后的验收契约接受不修、不阻断交付。第一条是末尾 console/network 汇总在业务断言通过后运行；更早的断言失败由原断言消息和 Playwright trace 取证，本次不承诺每个失败都输出末尾汇总。第二条是 job 超时、手动取消或 runner 终止不在“测试失败后上传 artifact”的承诺内。`failure-visibility: p2-only` 保持不变。
+
+实证：[workflow run 39003528268](https://github.com/zlxlabs/VideoTranscriptAPI/actions/runs/39003528268) 以预期的 Chromium 404 失败结束，artifact `playwright-test-results`（ID `12090260702`）已实际下载。下载的 trace 在 Trace Viewer 显示失败测试动作及 `http://127.0.0.1:41277/__e2e__/diagnostic-404.png` 的 GET 404。咨询来源：Claude Opus，task `vta-261017-browser-review-scope`；采纳两条 P2 不阻断的结论，不采纳历史取消时序发生在 setup 阶段的猜测。
+
 ## Verdict
 
 审查结论：P2-only；阻断交付：是。真实 Chromium 门禁、正常失败路径的 trace 与截图保存、artifact 路径及长期政策均成立；不变式 1 的错误汇总会被前置断言短路，不变式 2 的 workflow 取消路径不会上传产物。

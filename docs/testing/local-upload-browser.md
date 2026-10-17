@@ -16,6 +16,8 @@
 
 `/view/{token}?raw=...` 与 `?page=...` 是阅读页导出目的地，主路径测试通过真实链接点击断言。`/robots.txt`、`/sitemap.xml`、`/sw.js`、manifest 与 API 是资源/接口，不是额外页面；profile 路由是 API JSON，不是 UI。浏览器测试收集 console error、page error、request failed 及 HTTP 4xx/5xx，任一均使 case 失败。
 
+普通断言失败或 Playwright 用例超时、且 Chromium step 正常以失败结束时，failure-only 上传步骤会运行并上传 Playwright `outputDir`。末尾 console/network 汇总仅在业务断言通过后运行；更早失败时应结合原断言消息与 trace 取证。job 超时、手动取消或 runner 终止时不承诺执行 artifact 上传。
+
 ## 运行及 CI
 
 首次运行：`uv sync`、根目录 `npm ci`、`npm --prefix e2e ci`，并安装 Chromium：`cd e2e && npx playwright install chromium`。之后 `npm run test:browser`；保留的 Vitest 契约层单独以 `npm run test:web` 运行。缺 Chromium、服务无法启动或断言不符均非零；无 skip/retry。单一 spec、`fullyParallel: false`、`workers: 1` 避免共享 fixture 并发污染。
