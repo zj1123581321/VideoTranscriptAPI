@@ -1977,6 +1977,13 @@ def process_transcription(
                         # /送 LLM，否则任务成功了正文却是空串。
                         if not (transcript or "").strip() and yt_api_segments:
                             transcript = _rebuild_text_from_segments(yt_api_segments)
+                        if not (transcript or "").strip():
+                            return _fail_task_and_notify(
+                                "[youtube-api] subtitles are empty",
+                                notify_status="转录失败",
+                                title=video_title,
+                                author_name=author,
+                            )
                         yt_api_extra_json = (
                             {"segments": yt_api_segments}
                             if yt_api_segments

@@ -32,6 +32,7 @@ from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
 from loguru import logger
 
+from ..errors import EmptyTranscriptError
 from ..utils.logging import load_config
 from ..terminology.terminology_db import get_terminology_db
 
@@ -794,6 +795,8 @@ class FunASRSpeakerClient:
                 )
             )
             formatted_text = self.format_transcript_with_speakers(result)
+            if not formatted_text.strip():
+                raise EmptyTranscriptError()
             return {"transcription_result": result, "formatted_text": formatted_text}
         finally:
             loop.close()
