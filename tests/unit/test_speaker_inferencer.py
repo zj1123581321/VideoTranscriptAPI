@@ -200,6 +200,65 @@ class TestSamplingCaps(unittest.TestCase):
         self.assertLessEqual(total_a, 1200)
         self.assertEqual(total_a, 8 * 120)  # 8 条 x 120 字符/条 = 960 <= 1200
 
+    def test_top_speaker_quota_preserves_larger_configured_baselines(self):
+        """top2 配额分别取配置基准与 8 条/1200 字符下限中的较大值。"""
+        speakers = ["A", "B", "C"]
+        dialogs = []
+        for speaker in speakers:
+            for index in range(12):
+                marker = f"{speaker}-{index:02d}-END"
+                text = "x" * (120 - len(marker)) + marker
+                dialogs.append(_make_dialog(speaker, text, start_time=float(len(dialogs))))
+
+        inferencer = _make_inferencer(
+            samples_per_speaker=12,
+            max_chars_per_speaker=2000,
+            context_dialogs=0,
+        )
+        inferencer.llm_client.call.return_value = _mock_llm_response(
+            speaker_mapping={speaker: speaker for speaker in speakers},
+            confidence={speaker: 0.9 for speaker in speakers},
+        )
+
+        inferencer.infer(speakers=speakers, dialogs=dialogs, title="t")
+
+        prompt = inferencer.llm_client.call.call_args.kwargs["user_prompt"]
+        # 12 条各 120 字符，共 1440 字符；末尾标记确认整条样本都进入了
+        # 真实请求。即使配置基准超过 top2 默认值，也不得缩回 8 条/1200 字符。
+        for speaker in speakers:
+            for index in range(12):
+                self.assertIn(f"{speaker}-{index:02d}-END", prompt)
+
+    def test_top_speaker_uses_configured_count_and_minimum_char_boost(self):
+        """较大的条数基准与 top2 字符加额各自生效，不互相覆盖。"""
+        speakers = ["A", "B", "C"]
+        dialogs = []
+        for speaker in speakers:
+            for index in range(12):
+                marker = f"{speaker}-{index:02d}-END"
+                text = "x" * (100 - len(marker)) + marker
+                dialogs.append(_make_dialog(speaker, text, start_time=float(len(dialogs))))
+
+        inferencer = _make_inferencer(
+            samples_per_speaker=12,
+            max_chars_per_speaker=400,
+            context_dialogs=0,
+        )
+        inferencer.llm_client.call.return_value = _mock_llm_response(
+            speaker_mapping={speaker: speaker for speaker in speakers},
+            confidence={speaker: 0.9 for speaker in speakers},
+        )
+
+        inferencer.infer(speakers=speakers, dialogs=dialogs, title="t")
+
+        prompt = inferencer.llm_client.call.call_args.kwargs["user_prompt"]
+        # top2 的 12 x 100 字符恰好用满 1200；普通说话人的 4 x 100
+        # 字符用满配置的 400。标记位于样本文本末尾，证明整个样本进入请求。
+        for speaker, expected_count in (("A", 12), ("B", 12), ("C", 4)):
+            for index in range(expected_count):
+                self.assertIn(f"{speaker}-{index:02d}-END", prompt)
+            self.assertNotIn(f"{speaker}-{expected_count:02d}-END", prompt)
+
     def test_single_sample_truncated_to_120_chars(self):
         inferencer = _make_inferencer(samples_per_speaker=1, max_chars_per_speaker=10000)
         very_long = "y" * 500
@@ -1186,6 +1245,32 @@ class TestNoSamplesAndFailureFallback(unittest.TestCase):
         self.assertEqual(result["mapping"], {"Speaker1": "Speaker1"})
         self.assertFalse(result["meta"]["Speaker1"]["applied"])
         self.assertEqual(result["source"], "identity_fallback")
+
+    def test_zero_sampling_quota_returns_identity_without_calling_llm(self):
+        dialogs = [_make_dialog("Speaker1", "hello", 0.0)]
+        for quota in ("samples_per_speaker", "max_chars_per_speaker"):
+            with self.subTest(quota=quota):
+                cache_manager = MagicMock()
+                cache_manager.get_speaker_mapping.return_value = {
+                    "mapping": {"Speaker1": "Cached Name"},
+                    "meta": {
+                        "Speaker1": {
+                            "name": "Cached Name",
+                            "confidence": 0.95,
+                            "applied": True,
+                        }
+                    },
+                    "low_confidence": [],
+                }
+                inferencer = _make_inferencer(cache_manager=cache_manager, **{quota: 0})
+
+                result = inferencer.infer(
+                    speakers=["Speaker1"], dialogs=dialogs, title="t"
+                )
+
+                self.assertEqual(result["mapping"], {"Speaker1": "Speaker1"})
+                self.assertEqual(result["source"], "identity_fallback")
+                inferencer.llm_client.call.assert_not_called()
 
     def test_llm_call_exception_falls_back_to_identity(self):
         """Local codex review round 6, G4: a transient LLM failure (network
