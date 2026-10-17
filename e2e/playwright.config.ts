@@ -16,6 +16,7 @@ export default defineConfig({
   use: {
     baseURL,
     browserName: 'chromium',
+    trace: 'retain-on-failure',
     ...devices['Desktop Chrome'],
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
