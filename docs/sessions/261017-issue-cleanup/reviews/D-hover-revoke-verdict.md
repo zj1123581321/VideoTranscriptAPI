@@ -1,3 +1,5 @@
+> 更新：本文件中的初始 clean 结论已被后续发现的跨行 debounce 问题和 [E 结论](E-hover-row-verdict.md) 取代。当前审查范围为 `c29326f09df1f7f7b1d8dcfdd3df53f14b6d620f..5fd502e76ee171cb20753017b1e34e70e7dfd08c`；请以 E 结论为准。
+
 <!-- delegate-outcome: succeeded -->
 
 # 撤权后摘要请求审查结论
