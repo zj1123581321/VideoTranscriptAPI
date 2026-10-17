@@ -1189,8 +1189,6 @@ async function stopShare(uploadId) {
 
     try {
         await apiFetch(`/api/uploads/${encodeURIComponent(uploadId)}/share`, {}, privateRequestGeneration, 'DELETE');
-        clearTimeout(summaryDebounce);
-        summaryDebounce = null;
         showStatus('ok', '已停止公开分享');
         const btn = document.querySelector(`.btn-stop-share[data-upload-id="${uploadId}"]`);
         if (btn) {
@@ -1493,7 +1491,9 @@ function onRowHover(e) {
     const rowEl = e.currentTarget;   // 必须在 handler 内先存引用，setTimeout 后 currentTarget 会被置 null
     const vt = rowEl.dataset.vt;
     if (!vt) return;
-    summaryDebounce = setTimeout(() => fetchSummary(vt, rowEl), 300);
+    summaryDebounce = setTimeout(() => {
+        if (rowEl.dataset.vt === vt) fetchSummary(vt, rowEl);
+    }, 300);
 }
 function onRowMove(e) {
     const tooltip = document.getElementById('summaryTooltip');
