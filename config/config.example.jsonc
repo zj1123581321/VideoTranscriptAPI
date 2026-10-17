@@ -367,8 +367,8 @@
         //         避免把低置信度的猜测当作确定结论展示给用户
         // ------------------------------------------------------
         "speaker_inference": {
-            "samples_per_speaker": 3,        // 每个说话人采样的发言条数上限
-            "max_chars_per_speaker": 400,    // 每个说话人采样文本的总字符上限
+            "samples_per_speaker": 3,        // 普通说话人的采样条数基准；发言量 top2 至少 8 条；设为 0 关闭全部采样
+            "max_chars_per_speaker": 400,    // 普通说话人的采样字符基准；发言量 top2 至少 1200 字符；设为 0 关闭全部采样
             "context_dialogs": 2,            // 说话人首次出场前，采集他人发言作为上下文的条数
             "confidence_threshold": 0.6,     // 低于此置信度时不采用推断姓名，降级为"说话人N"
             "max_total_sample_chars": 8000   // 所有说话人采样文本合计的全局字符上限，

@@ -139,11 +139,9 @@ class SpeakerInferencer:
     # 单条采样文本的截断上限（字符数）。未纳入外部配置——过细粒度，固定即可。
     _MAX_CHARS_PER_SAMPLE = 120
 
-    # 发言量 top2 说话人的采样加额（card-vta-261015-speaker-evidence 锁定
-    # 决策 6）：按发言条数取前两名，采样上限提高到 8 条/1200 字符，其余
-    # 维持 samples_per_speaker/max_chars_per_speaker 默认 3 条/400。目的：
-    # 保证对话内称呼片段（生产案例「胖哥」称呼未被 3 条采样覆盖）有更高
-    # 概率进入模型输入。全局预算逻辑不变（_apply_global_sample_budget）。
+    # 发言量 top2 说话人的采样配额下限：普通说话人配置是基准，top2 的条数
+    # 与字符数分别取 max(基准, 此下限)。任一基准为 0 时全员停用采样并走
+    # identity fallback。提高默认基准之上的召回，保留全局预算逻辑不变。
     _TOP_SPEAKER_QUOTA_SLOTS = 2
     _TOP_SPEAKER_SAMPLE_COUNT = 8
     _TOP_SPEAKER_MAX_CHARS = 1200
@@ -316,8 +314,8 @@ class SpeakerInferencer:
             cache_manager: 缓存管理器（可选）
             model: 使用的模型
             reasoning_effort: reasoning effort 参数
-            samples_per_speaker: 每个说话人采样的发言条数上限（默认 3）
-            max_chars_per_speaker: 每个说话人采样文本的总字符上限（默认 400）
+            samples_per_speaker: 普通说话人的采样条数基准（默认 3）；top2 至少 8，0 关闭全部采样
+            max_chars_per_speaker: 普通说话人的采样字符基准（默认 400）；top2 至少 1200，0 关闭全部采样
             context_dialogs: 说话人首次出场前，采集他人发言作为上下文的条数（默认 2）
             confidence_threshold: 置信度阈值，低于此值不采用推断姓名（默认 0.6）
             max_total_sample_chars: 所有说话人采样文本合计的全局字符上限（默认 8000）。
@@ -391,6 +389,10 @@ class SpeakerInferencer:
         """
         if not speakers:
             logger.warning("Speaker list is empty, skipping inference")
+            return self._identity_fallback(speakers)
+
+        if self.samples_per_speaker == 0 or self.max_chars_per_speaker == 0:
+            logger.info("Speaker sampling disabled by zero quota; using identity labels")
             return self._identity_fallback(speakers)
 
         input_fingerprint = self.input_fingerprint(
@@ -637,14 +639,16 @@ class SpeakerInferencer:
 
             candidate_dialogs[speaker].append(text)
 
+        # candidate_dialogs 按 speakers 的首次出现顺序初始化，因此稳定排序会
+        # 在发言条数并列时保留既有顺序。只排序一次，供下面每位说话人复用。
+        top_speakers = self._top_sample_speakers(candidate_dialogs)
+
         for speaker in speakers:
             candidates = candidate_dialogs[speaker]
-            # 发言量 top2 加额：按发言条数降序取前两名（并列按 speakers 列表
-            # 顺序即首次出现顺序），其配额改用加额常量；其余说话人维持构造
-            # 参数不变。
-            if speaker in self._top_sample_speakers(candidate_dialogs, speakers):
-                quota_count = self._TOP_SPEAKER_SAMPLE_COUNT
-                quota_chars = self._TOP_SPEAKER_MAX_CHARS
+            # top2 各自采用配置基准与加额下限的较大值，普通说话人沿用配置。
+            if speaker in top_speakers:
+                quota_count = max(self.samples_per_speaker, self._TOP_SPEAKER_SAMPLE_COUNT)
+                quota_chars = max(self.max_chars_per_speaker, self._TOP_SPEAKER_MAX_CHARS)
             else:
                 quota_count = self.samples_per_speaker
                 quota_chars = self.max_chars_per_speaker
@@ -697,9 +701,7 @@ class SpeakerInferencer:
 
         return self._apply_global_sample_budget(sample_groups)
 
-    def _top_sample_speakers(
-        self, candidate_dialogs: Dict[str, List[str]], speakers: List[str]
-    ) -> set:
+    def _top_sample_speakers(self, candidate_dialogs: Dict[str, List[str]]) -> set:
         """按发言条数选出采样加额的说话人集合（发言量 top2）。
 
         排序键：发言条数降序，并列按首次出现顺序（candidate_dialogs 的键
