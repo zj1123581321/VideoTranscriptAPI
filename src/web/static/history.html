@@ -1491,7 +1491,9 @@ function onRowHover(e) {
     const rowEl = e.currentTarget;   // 必须在 handler 内先存引用，setTimeout 后 currentTarget 会被置 null
     const vt = rowEl.dataset.vt;
     if (!vt) return;
-    summaryDebounce = setTimeout(() => fetchSummary(vt, rowEl), 300);
+    summaryDebounce = setTimeout(() => {
+        if (rowEl.dataset.vt === vt) fetchSummary(vt, rowEl);
+    }, 300);
 }
 function onRowMove(e) {
     const tooltip = document.getElementById('summaryTooltip');
