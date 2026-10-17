@@ -1189,6 +1189,8 @@ async function stopShare(uploadId) {
 
     try {
         await apiFetch(`/api/uploads/${encodeURIComponent(uploadId)}/share`, {}, privateRequestGeneration, 'DELETE');
+        clearTimeout(summaryDebounce);
+        summaryDebounce = null;
         showStatus('ok', '已停止公开分享');
         const btn = document.querySelector(`.btn-stop-share[data-upload-id="${uploadId}"]`);
         if (btn) {

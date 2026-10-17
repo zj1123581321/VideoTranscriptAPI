@@ -374,6 +374,14 @@ test('Chromium uploads raw media through production API, worker, shared ASR/LLM,
   await expect(row.locator('.task-title')).toContainText('全链路浏览器上传样本');
   const stopShare = row.locator('.btn-stop-share');
   await expect(stopShare).toBeVisible();
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  let revokedSummaryRequests = 0;
+  page.on('request', (item) => {
+    if (item.method() === 'GET' && new URL(item.url()).pathname === '/api/audit/summary') {
+      revokedSummaryRequests += 1;
+    }
+  });
   page.once('dialog', async (dialog) => dialog.accept());
   const deleteRequest = page.waitForRequest((item) =>
     item.method() === 'DELETE' && new URL(item.url()).pathname === `/api/uploads/${receipt.upload_id}/share`);
@@ -384,6 +392,8 @@ test('Chromium uploads raw media through production API, worker, shared ASR/LLM,
   expect(ownerDelete.headers().authorization).toBe(`Bearer ${OWNER_TOKEN}`);
   expect(deleteResult.status()).toBe(200);
   expect((await deleteResult.json()).share_active).toBe(false);
+  await page.clock.fastForward(301);
+  expect(revokedSummaryRequests).toBe(0);
   await expect(page.locator('#authStatus')).toContainText('已停止公开分享');
 
   const deniedFreshRead = await request.get(`${realServer.api_url}/view/${receipt.view_token}?raw=transcript`);
