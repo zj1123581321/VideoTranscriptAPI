@@ -55,8 +55,8 @@ describe('preview interpolation points (source-level)', () => {
   it('copyToClipboard escapes the echoed details (Codex R9-1)', () => {
     // the copied URL is dataset-decoded raw text; echoing it unescaped into
     // showStatus' innerHTML would re-open the XSS chain on copy click
-    expect(appJsSource).toContain("showStatus('success', '已复制到剪贴板', escapeHTML(text))");
-    expect(appJsSource).not.toContain("showStatus('success', '已复制到剪贴板', text)");
+    expect(appJsSource).toContain("showStatus('success', window.t('web.copy.success'), escapeHTML(text))");
+    expect(appJsSource).not.toContain("showStatus('success', window.t('web.copy.success'), text)");
   });
 });
 

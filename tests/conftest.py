@@ -301,3 +301,19 @@ def _reset_usage_context():
     usage_context.reset_context_for_testing()
     yield
     usage_context.reset_context_for_testing()
+
+
+# C4: Jinja templates call t()/html_lang()/og_locale(). Install them on every
+# Environment so unit tests that build their own env still render.
+import jinja2
+from video_transcript_api.utils.rendering.i18n_jinja import install_i18n
+
+_orig_jinja_init = jinja2.Environment.__init__
+
+
+def _jinja_init_with_i18n(self, *args, **kwargs):
+    _orig_jinja_init(self, *args, **kwargs)
+    install_i18n(self)
+
+
+jinja2.Environment.__init__ = _jinja_init_with_i18n

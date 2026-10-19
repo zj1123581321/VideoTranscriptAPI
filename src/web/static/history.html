@@ -466,10 +466,10 @@
 <body>
 <div class="container">
     <div class="header">
-        <h1>任务历史</h1>
+        <h1 data-i18n="web.history.heading">任务历史</h1>
         <nav class="site-nav">
-            <a href="/add_task_by_web" class="site-nav-link">📝 提交任务</a>
-            <a href="/" class="site-nav-link">← 返回主页</a>
+            <a href="/add_task_by_web" class="site-nav-link" data-i18n="web.nav.submit">📝 提交任务</a>
+            <a href="/" class="site-nav-link" data-i18n="web.nav.back_home">← 返回主页</a>
             <button type="button" id="pwa-install-btn" class="site-nav-link"
                     style="display:none; min-height:44px; background:none; cursor:pointer; font:inherit;"
                     aria-label="安装应用到桌面">📥 安装应用</button>
@@ -607,8 +607,17 @@
     <div id="tooltipContent"></div>
 </div>
 
+<script src="/i18n.js"></script>
+<script src="/static/js/i18n.js"></script>
 <script src="/static/js/auth-storage.js"></script>
 <script>
+if (typeof window.applyI18n === 'function') {
+    window.applyI18n();
+}
+function t(key, vars) {
+    return window.t(key, vars);
+}
+
 // ===================== 状态 =====================
 const STORAGE_KEY_READ  = () => `vta_read_${getMasked()}`;
 const STORAGE_KEY_ALIAS = () => `vta_webhook_alias_${getMasked()}`;

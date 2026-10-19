@@ -10,7 +10,7 @@ const historySource = readFileSync(
 describe('history page unified auth contract', () => {
   it('loads shared auth before history inline code and removes remember dual-track UI', () => {
     const authIndex = historySource.indexOf('/static/js/auth-storage.js');
-    const inlineIndex = historySource.indexOf('<script>\n// ===================== 状态 =====================');
+    const inlineIndex = historySource.indexOf('// ===================== 状态 =====================');
     expect(authIndex).toBeGreaterThanOrEqual(0);
     expect(authIndex).toBeLessThan(inlineIndex);
     expect(historySource).not.toContain('rememberKey');

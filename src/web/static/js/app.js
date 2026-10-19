@@ -346,7 +346,7 @@ class APIManager {
         const token = authStorage && authStorage.readAuthToken();
 
         if (!token) {
-            throw new Error(authStorage ? '请先设置访问令牌' : AUTH_STORAGE_ERROR_MESSAGE);
+            throw new Error(authStorage ? window.t('web.js.need_token') : AUTH_STORAGE_ERROR_MESSAGE);
         }
 
         const requestBody = {
@@ -369,7 +369,7 @@ class APIManager {
         });
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: '请求失败' }));
+            const errorData = await response.json().catch(() => ({ message: window.t('web.js.request_failed') }));
             throw new Error(errorData.message || `HTTP ${response.status}`);
         }
 
@@ -384,7 +384,7 @@ class APIManager {
         const token = authStorage && authStorage.readAuthToken();
 
         if (!token) {
-            throw new Error(authStorage ? '请先设置访问令牌' : AUTH_STORAGE_ERROR_MESSAGE);
+            throw new Error(authStorage ? window.t('web.js.need_token') : AUTH_STORAGE_ERROR_MESSAGE);
         }
 
         const response = await fetch(`/api/task/${taskId}`, {
@@ -392,7 +392,7 @@ class APIManager {
         });
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: '查询失败' }));
+            const errorData = await response.json().catch(() => ({ message: window.t('web.js.query_failed') }));
             throw new Error(errorData.message || `HTTP ${response.status}`);
         }
 
@@ -425,7 +425,7 @@ class APIManager {
         const token = authStorage && authStorage.readAuthToken();
 
         if (!token) {
-            throw new Error(authStorage ? '请先设置访问令牌' : AUTH_STORAGE_ERROR_MESSAGE);
+            throw new Error(authStorage ? window.t('web.js.need_token') : AUTH_STORAGE_ERROR_MESSAGE);
         }
 
         const encodedMetadata = encodeUploadMetadata(metadata);
@@ -481,7 +481,7 @@ class APIManager {
         const token = authStorage && authStorage.readAuthToken();
 
         if (!token) {
-            throw new Error(authStorage ? '请先设置访问令牌' : AUTH_STORAGE_ERROR_MESSAGE);
+            throw new Error(authStorage ? window.t('web.js.need_token') : AUTH_STORAGE_ERROR_MESSAGE);
         }
 
         const response = await fetch(`/api/uploads/${encodeURIComponent(uploadId)}/share`, {
@@ -519,7 +519,7 @@ class TaskHistoryManager {
                 source: taskData.source || 'url',
                 url: taskData.url || '',
                 original_text: taskData.original_text || '',
-                title: taskData.title || (taskData.url ? this.extractTitleFromURL(taskData.url) : '本地上传'),
+                title: taskData.title || (taskData.url ? this.extractTitleFromURL(taskData.url) : window.t('web.js.local_upload')),
                 timestamp: Date.now(),
                 useSpeakerRecognition: taskData.use_speaker_recognition || false,
                 retention: taskData.retention || null,
@@ -574,7 +574,7 @@ class TaskHistoryManager {
      */
     static deleteTask(taskId) {
         try {
-            if (!confirm('确定要删除这个任务记录吗？')) {
+            if (!confirm(window.t('web.js.delete_confirm'))) {
                 return;
             }
             
@@ -584,11 +584,11 @@ class TaskHistoryManager {
             StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, updatedHistory);
             this.renderHistory();
             
-            UIManager.showStatus('success', '任务记录已删除');
+            UIManager.showStatus('success', window.t('web.js.delete_done'));
             setTimeout(UIManager.hideStatus, 2000);
         } catch (e) {
             console.error('删除任务记录失败:', e);
-            UIManager.showStatus('error', '删除失败', '请稍后重试');
+            UIManager.showStatus('error', window.t('web.js.delete_failed'), window.t('web.js.retry_later'));
             setTimeout(UIManager.hideStatus, 3000);
         }
     }
@@ -602,24 +602,24 @@ class TaskHistoryManager {
             const hostname = urlObj.hostname.replace('www.', '');
             
             if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
-                return 'YouTube视频';
+                return window.t('web.js.title_youtube');
             } else if (hostname.includes('bilibili.com')) {
-                return 'Bilibili视频';
+                return window.t('web.js.title_bilibili');
             } else if (hostname.includes('xiaohongshu.com') || hostname.includes('xhslink.com') || hostname.includes('xhslink.cn')) {
-                return '小红书内容';
+                return window.t('web.js.title_xiaohongshu');
             } else if (hostname.includes('douyin.com')) {
-                return '抖音视频';
+                return window.t('web.js.title_douyin');
             } else if (hostname.includes('xiaoyuzhoufm.com')) {
-                return '小宇宙播客';
+                return window.t('web.js.title_xiaoyuzhou');
             } else if (hostname.includes('weixin.qq.com')) {
-                return '视频号视频';
+                return window.t('web.js.title_wechat');
             } else if (hostname.includes('twitter.com') || hostname === 'x.com' || hostname.endsWith('.x.com')) {
-                return 'X视频';
+                return window.t('web.js.title_x');
             } else {
-                return '视频内容';
+                return window.t('web.js.title_generic');
             }
         } catch (e) {
-            return '视频内容';
+            return window.t('web.js.title_generic');
         }
     }
 
@@ -719,12 +719,12 @@ class ThemeManager {
         if (theme === 'dark') {
             if (themeToggle) {
                 themeToggle.textContent = '☀️';
-                themeToggle.title = '切换到浅色模式';
+                themeToggle.title = window.t('web.theme.to_light');
             }
         } else {
             if (themeToggle) {
                 themeToggle.textContent = '🌙';
-                themeToggle.title = '切换到深色模式';
+                themeToggle.title = window.t('web.theme.to_dark');
             }
         }
     }
@@ -833,7 +833,7 @@ class UIManager {
             disableProtectedActions();
             btn.disabled = true;
             btnIcon.textContent = '🔒';
-            btnText.textContent = '鉴权模块不可用，已禁用提交';
+            btnText.textContent = window.t('web.index.submit_auth_disabled');
             return;
         }
 
@@ -864,13 +864,13 @@ class UIManager {
 
             if (isUploading) {
                 btnIcon.textContent = '⏳';
-                btnText.textContent = '上传中...';
+                btnText.textContent = window.t('web.index.submit_uploading');
             } else if (!selectedUploadFile) {
                 btnIcon.textContent = '📁';
-                btnText.textContent = '开始上传';
+                btnText.textContent = window.t('web.index.submit_upload');
             } else {
                 btnIcon.textContent = '🚀';
-                btnText.textContent = '开始上传';
+                btnText.textContent = window.t('web.index.submit_upload');
             }
             return;
         }
@@ -882,13 +882,13 @@ class UIManager {
         
         if (currentTask) {
             btnIcon.textContent = '⏳';
-            btnText.textContent = '处理中...';
+            btnText.textContent = window.t('web.index.submit_processing');
         } else if (!selectedURL) {
             btnIcon.textContent = '📝';
-            btnText.textContent = '开始转录';
+            btnText.textContent = window.t('web.index.submit_transcribe');
         } else {
             btnIcon.textContent = '🚀';
-            btnText.textContent = '开始转录';
+            btnText.textContent = window.t('web.index.submit_transcribe');
         }
     }
 
@@ -953,7 +953,7 @@ class UIManager {
         StorageManager.remove(APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK);
 
         // 显示提示
-        UIManager.showStatus('success', 'Webhook 地址已清除', '已删除浏览器本地保存的 Webhook 地址');
+        UIManager.showStatus('success', window.t('web.js.webhook_cleared'), window.t('web.js.webhook_cleared_hint'));
         setTimeout(UIManager.hideStatus, 2000);
     }
 
@@ -961,7 +961,7 @@ class UIManager {
      * 显示 Webhook 保存成功提示
      */
     static showWebhookSaved() {
-        UIManager.showStatus('success', '✓ Webhook 地址已保存', '已自动保存到浏览器本地');
+        UIManager.showStatus('success', window.t('web.js.webhook_saved'), window.t('web.js.webhook_saved_hint'));
         setTimeout(UIManager.hideStatus, 1500);
     }
 }
@@ -1051,11 +1051,11 @@ function getSelectedURL() {
 async function copyToClipboard(text) {
     try {
         await navigator.clipboard.writeText(text);
-        UIManager.showStatus('success', '已复制到剪贴板', escapeHTML(text));
+        UIManager.showStatus('success', window.t('web.copy.success'), escapeHTML(text));
         setTimeout(UIManager.hideStatus, 2000);
     } catch (e) {
         console.error('复制失败:', e);
-        UIManager.showStatus('error', '复制失败', '请手动复制链接');
+        UIManager.showStatus('error', window.t('web.copy.failed'), window.t('web.copy.failed_hint'));
         setTimeout(UIManager.hideStatus, 3000);
     }
 }
@@ -1078,10 +1078,10 @@ async function submitTranscription(event) {
     if (!selectedURL) {
         const inputFeedback = document.getElementById('input-feedback');
         if (inputFeedback) {
-            inputFeedback.textContent = '请先选择一个视频链接。';
+            inputFeedback.textContent = window.t('web.js.select_url');
             inputFeedback.hidden = false;
         }
-        UIManager.showStatus('error', '请先选择一个视频链接', '请在上方文本框中输入包含视频链接的内容，系统会自动提取并显示可选的链接');
+        UIManager.showStatus('error', window.t('web.js.select_url_title'), '请在上方文本框中输入包含视频链接的内容，系统会自动提取并显示可选的链接');
         setTimeout(UIManager.hideStatus, 5000);
         return;
     }
@@ -1090,7 +1090,7 @@ async function submitTranscription(event) {
     if (!token) {
         const authPrompt = document.getElementById('auth-missing-prompt');
         if (authPrompt) authPrompt.hidden = false;
-        UIManager.showStatus('error', '请先设置访问令牌', '点击“去设置”展开访问令牌输入框');
+        UIManager.showStatus('error', window.t('web.js.need_token'), '点击“去设置”展开访问令牌输入框');
         setTimeout(UIManager.hideStatus, 5000);
         return;
     }
@@ -1098,7 +1098,7 @@ async function submitTranscription(event) {
     try {
         currentTask = { url: selectedURL };
         UIManager.updateSubmitButton();
-        UIManager.showStatus('loading', '正在提交转录任务...', '请稍候，正在处理您的请求');
+        UIManager.showStatus('loading', window.t('web.js.submitting'), '请稍候，正在处理您的请求');
 
         // 保存设置到本地存储
         StorageManager.set(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION, useSpeakerRecognition);
@@ -1127,7 +1127,7 @@ async function submitTranscription(event) {
             }));
             
             // 根据是否重复显示不同的提示
-            let statusMessage = '任务提交成功！';
+            let statusMessage = window.t('web.js.submit_ok');
             let statusDetails = `任务ID: ${response.data.task_id}<br>转录将在后台进行，完成后会通过配置的企业微信通知您<br>`;
 
             // PWA standalone 检测（T6）：独立窗口里 _blank 会逃逸到浏览器，
@@ -1136,11 +1136,11 @@ async function submitTranscription(event) {
                 || window.navigator.standalone === true;
             
             if (historyResult.isDuplicate) {
-                statusMessage = '任务提交成功！(检测到重复URL)';
+                statusMessage = window.t('web.js.submit_ok_dup');
                 statusDetails += `<span style="color: #f59e0b;">⚠️ 相同链接的旧任务记录已被更新</span><br>`;
             }
             
-            statusDetails += `<a href="/view/${response.data.view_token}" target="${isStandalone ? '_self' : '_blank'}" style="color: #667eea; text-decoration: underline;">点击查看任务进度</a>`;
+            statusDetails += `<a href="/view/${response.data.view_token}" target="${isStandalone ? '_self' : '_blank'}" style="color: #667eea; text-decoration: underline;">${window.t('web.js.view_progress')}</a>`;
             
             UIManager.showStatus('success', statusMessage, statusDetails);
             
@@ -1169,7 +1169,7 @@ async function submitTranscription(event) {
             }
             
         } else {
-            throw new Error(response.message || '提交失败');
+            throw new Error(response.message || window.t('web.js.submit_failed'));
         }
         
     } catch (error) {
@@ -1179,7 +1179,7 @@ async function submitTranscription(event) {
             inputFeedback.textContent = '提交失败，请检查链接和访问令牌后重试。';
             inputFeedback.hidden = false;
         }
-        UIManager.showStatus('error', '提交任务失败', error.message);
+        UIManager.showStatus('error', window.t('web.js.submit_failed_title'), error.message);
     } finally {
         currentTask = null;
         UIManager.updateSubmitButton();
@@ -1551,7 +1551,7 @@ async function submitUploadForm(event) {
             feedback.textContent = '请先选择一个音视频文件。';
             feedback.hidden = false;
         }
-        UIManager.showStatus('error', '请先选择文件', '点击或拖拽选择本地音视频文件后重试');
+        UIManager.showStatus('error', window.t('web.js.select_file_title'), window.t('web.js.select_file_hint'));
         setTimeout(UIManager.hideStatus, 5000);
         return;
     }
@@ -1572,7 +1572,7 @@ async function submitUploadForm(event) {
     if (!token) {
         const authPrompt = document.getElementById('auth-missing-prompt');
         if (authPrompt) authPrompt.hidden = false;
-        UIManager.showStatus('error', '请先设置访问令牌', '点击“去设置”展开访问令牌输入框');
+        UIManager.showStatus('error', window.t('web.js.need_token'), '点击“去设置”展开访问令牌输入框');
         setTimeout(UIManager.hideStatus, 5000);
         return;
     }
@@ -1601,7 +1601,7 @@ async function submitUploadForm(event) {
             try {
                 receipt = await APIManager.getUploadReceipt(intentSnapshot.idempotencyKey);
             } catch (getErr) {
-                UIManager.showStatus('error', '上传状态待核实', `核实回执失败（${getErr.message || getErr.status || '未知'}），当前尚未取得回执记录。请稍后重试核实状态。`);
+                UIManager.showStatus('error', window.t('web.js.upload_unconfirmed'), `核实回执失败（${getErr.message || getErr.status || '未知'}），当前尚未取得回执记录。请稍后重试核实状态。`);
                 return;
             }
         } else {
@@ -1612,7 +1612,7 @@ async function submitUploadForm(event) {
                 const isClientRejection = postErr.status && postErr.status >= 400 && postErr.status < 500;
                 if (isClientRejection) {
                     currentUploadIntent = null;
-                    UIManager.showStatus('error', '上传失败', postErr.message || `HTTP ${postErr.status}`);
+                    UIManager.showStatus('error', window.t('web.js.upload_failed'), postErr.message || `HTTP ${postErr.status}`);
                     return;
                 }
 
@@ -1622,7 +1622,7 @@ async function submitUploadForm(event) {
                 try {
                     receipt = await APIManager.getUploadReceipt(intentSnapshot.idempotencyKey);
                 } catch (receiptErr) {
-                    UIManager.showStatus('error', '上传状态待核实', `服务或网络响应异常（${postErr.message || postErr.status || '未知'}），初次核实回执未确认: ${receiptErr.message}。请稍后重试核实状态。`);
+                    UIManager.showStatus('error', window.t('web.js.upload_unconfirmed'), `服务或网络响应异常（${postErr.message || postErr.status || '未知'}），初次核实回执未确认: ${receiptErr.message}。请稍后重试核实状态。`);
                     return;
                 }
             }
@@ -1653,7 +1653,7 @@ async function submitUploadForm(event) {
         const isStandalone = (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
             || (typeof window !== 'undefined' && window.navigator && window.navigator.standalone === true);
 
-        let statusMessage = '文件上传成功，任务已受理！';
+        let statusMessage = window.t('web.js.upload_accepted');
         let statusDetails = `上传ID: ${escapeHTML(receipt.upload_id)}<br>` +
             (receipt.task_id ? `任务ID: ${escapeHTML(receipt.task_id)}<br>` : '') +
             `状态: ${escapeHTML(receipt.state)}<br>` +
@@ -1698,6 +1698,9 @@ async function submitUploadForm(event) {
  */
 function initializePage() {
     console.log('初始化视频转录Web应用...');
+    if (typeof window.applyI18n === 'function') {
+        window.applyI18n();
+    }
 
     if (!getAuthStorage()) {
         disableProtectedActions();
@@ -1806,12 +1809,12 @@ function initializePage() {
     document.getElementById('speaker-recognition').addEventListener('change', (e) => {
         StorageManager.set(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION, e.target.checked);
         const summary = document.getElementById('transcription-options-summary');
-        if (summary) summary.textContent = e.target.checked ? '已启用说话人识别' : '未启用说话人识别';
+        if (summary) summary.textContent = e.target.checked ? window.t('web.index.speaker_on') : window.t('web.index.speaker_off');
     });
 
     const speakerSummary = document.getElementById('transcription-options-summary');
     if (speakerSummary && savedSpeakerRecognition) {
-        speakerSummary.textContent = '已启用说话人识别';
+        speakerSummary.textContent = window.t('web.index.speaker_on');
     }
     
     // 渲染任务历史

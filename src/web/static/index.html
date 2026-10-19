@@ -10,7 +10,7 @@
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>视频转录 - VideoTranscriptAPI</title>
+    <title data-i18n="web.index.title">视频转录 - VideoTranscriptAPI</title>
     <meta name="description" content="提交视频转录任务，支持 YouTube、Bilibili、抖音、小红书、微信视频号、小宇宙等多平台">
     <meta name="theme-color" content="#4f46e5">
     <meta name="robots" content="noindex">
@@ -170,14 +170,14 @@
                 ☀️
             </button>
             <nav class="site-nav">
-                <a href="/" class="site-nav-link">🏠 主页</a>
-                <a href="/static/history.html" class="site-nav-link">📋 任务历史</a>
+                <a href="/" class="site-nav-link" data-i18n="web.nav.home">🏠 主页</a>
+                <a href="/static/history.html" class="site-nav-link" data-i18n="web.nav.history">📋 任务历史</a>
                 <button type="button" id="pwa-install-btn" class="site-nav-link"
                         style="display:none; min-height:44px; background:none; cursor:pointer; font:inherit;"
                         aria-label="安装应用到桌面">📥 安装应用</button>
             </nav>
-            <h1>🎬 视频转录服务</h1>
-            <p>粘贴链接，快速开始转录</p>
+            <h1 data-i18n="web.index.heading">🎬 视频转录服务</h1>
+            <p data-i18n="web.index.tagline">粘贴链接，快速开始转录</p>
         </header>
 
         <main class="main-content">
@@ -322,7 +322,7 @@
                 <div class="form-group submit-group">
                     <button type="submit" id="submit-btn" class="submit-btn" disabled>
                         <span class="btn-icon">🚀</span>
-                        <span class="btn-text">开始转录</span>
+                        <span class="btn-text" data-i18n="web.index.submit_transcribe">开始转录</span>
                     </button>
                 </div>
 
@@ -414,6 +414,8 @@
         </footer>
     </div>
 
+    <script src="/i18n.js"></script>
+    <script src="/static/js/i18n.js"></script>
     <script src="/static/js/auth-storage.js"></script>
     <script src="/static/js/app.js"></script>
     <script src="/static/js/pwa-share.js"></script>

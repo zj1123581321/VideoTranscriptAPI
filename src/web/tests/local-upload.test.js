@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installI18n } from './install-i18n.js';
 
 const indexSource = readFileSync('src/web/static/index.html', 'utf-8');
 const authSource = readFileSync('src/web/static/js/auth-storage.js', 'utf-8');
@@ -74,6 +75,7 @@ async function installIndexPage({ token = 'test-token', capabilities = undefined
   if (token) {
     window.VideoTranscriptAuthStorage.writeAuthToken(token, { remember: true });
   }
+  installI18n(window);
   window.eval(appSource);
 
   if (token && caps && window.checkUploadCapabilities) {

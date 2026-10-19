@@ -7,9 +7,9 @@ const historySource = readFileSync(
   fileURLToPath(new URL('../static/history.html', import.meta.url)),
   'utf8'
 );
-const inlineScriptStart = historySource.indexOf(
-  '<script>\n// ===================== 状态 ====================='
-);
+const inlineMarker = '// ===================== 状态 =====================';
+const inlineMarkerIndex = historySource.indexOf(inlineMarker);
+const inlineScriptStart = historySource.lastIndexOf('<script>', inlineMarkerIndex);
 const inlineScriptEnd = historySource.indexOf('</script>', inlineScriptStart);
 const inlineScript = historySource.slice(
   inlineScriptStart + '<script>'.length,

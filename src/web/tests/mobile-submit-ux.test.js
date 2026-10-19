@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { installI18n } from './install-i18n.js';
 
 const indexSource = readFileSync(
   'src/web/static/index.html',
@@ -31,6 +32,7 @@ async function installPage({ token = null, search = '' } = {}) {
   const initializeLog = vi.spyOn(window.console, 'log');
   window.eval(authSource);
   if (token) window.VideoTranscriptAuthStorage.writeAuthToken(token, { remember: true });
+  installI18n(window);
   window.eval(appSource);
   window.eval(pwaShareSource);
   window.eval(pwaSource);

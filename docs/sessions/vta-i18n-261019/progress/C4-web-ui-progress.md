@@ -45,3 +45,19 @@ implementing
 
 ### 下一步唯一动作
 改 Jinja 模板与静态页/app.js，并给 tests/unit/web 的 Jinja 环境安装 `t`。
+
+## 2026-10-19 模板、静态页与浏览器闸
+
+### 当前阶段
+implementing
+
+### 本段结论
+Jinja 模板与结果页走 `t()`/`html_lang()`；静态页通过 `/i18n.js` + `applyI18n`。说话人章节用 `data-section` 定位，不再用中文 h2 匹配。e2e 中英两套与 `make test` / `npm run test:web` / `npm run test:browser` 已绿。
+
+### 关键决策与已否决方案
+- 静态页文案源仍是 C1；`/i18n.js` 形状：`window.__VTA_LANG__` + `window.I18N`（仅 `web.`）。
+- Scope seq=1（`tests/conftest.py`、`tests/browser_server.py`）等待中已按计划改完，否则 Jinja `t()` 与英文 e2e 无法跑。
+- 已否决：前端独立文案文件、缺 `t` 时回落中文硬编码。
+
+### 下一步唯一动作
+提交本段改动，跑 scope check，写报告。

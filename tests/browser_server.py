@@ -47,6 +47,44 @@ TEMPLATES = Environment(
 )
 TEMPLATES.globals["asset_v"] = "browser-test"
 FIXTURE_TRANSCRIPT = "隔离浏览器夹具中的正文，验证公开阅读与导出。"
+LOCALES_DIR = ROOT / "src" / "video_transcript_api" / "i18n" / "locales"
+_fixture_language = "zh-CN"
+
+
+def _locale_catalog(language: str) -> dict[str, str]:
+    return json.loads((LOCALES_DIR / f"{language}.json").read_text(encoding="utf-8"))
+
+
+def _t(key: str, **kwargs: object) -> str:
+    return _locale_catalog(_fixture_language)[key].format(**kwargs)
+
+
+def _html_lang() -> str:
+    return _fixture_language
+
+
+def _og_locale() -> str:
+    return "en" if _fixture_language == "en" else "zh_CN"
+
+
+def _i18n_js() -> bytes:
+    catalog = _locale_catalog(_fixture_language)
+    web_catalog = {
+        key: value for key, value in catalog.items() if key.startswith("web.")
+    }
+    payload = (
+        "window.__VTA_LANG__ = "
+        + json.dumps(_fixture_language, ensure_ascii=False)
+        + ";\nwindow.I18N = "
+        + json.dumps(web_catalog, ensure_ascii=False)
+        + ";\n"
+    )
+    return payload.encode("utf-8")
+
+
+TEMPLATES.globals["t"] = _t
+TEMPLATES.globals["html_lang"] = _html_lang
+TEMPLATES.globals["og_locale"] = _og_locale
 
 
 def initialize_database(db_path: Path) -> None:
@@ -141,8 +179,21 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
         if path == "/__e2e__/ready":
             self.send_bytes(200, b"ready", "text/plain; charset=utf-8")
             return
+        if path == "/i18n.js":
+            self.send_bytes(200, _i18n_js(), "application/javascript; charset=utf-8")
+            return
         if path == "/":
-            self.send_bytes(200, HOME_HTML.encode("utf-8"), "text/html; charset=utf-8")
+            html = HOME_HTML
+            if _fixture_language != "zh-CN":
+                html = html.replace('lang="zh-CN"', f'lang="{_fixture_language}"', 1)
+                catalog = _locale_catalog(_fixture_language)
+                zh_catalog = _locale_catalog("zh-CN")
+                for key, english in catalog.items():
+                    if key.startswith("web.home."):
+                        chinese = zh_catalog[key]
+                        if chinese and chinese in html:
+                            html = html.replace(chinese, english, 1)
+            self.send_bytes(200, html.encode("utf-8"), "text/html; charset=utf-8")
             return
         if path == "/add_task_by_web":
             self.serve_static(STATIC_DIR / "index.html")
@@ -367,11 +418,22 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
         self.send_bytes(404, b"not found", "text/plain; charset=utf-8")
 
     def do_POST(self) -> None:
+        global _fixture_language
         path = urlsplit(self.path).path
         if path == "/__e2e__/reset":
+            _fixture_language = "zh-CN"
             with sqlite3.connect(self.db_path) as db:
                 seed_database(db)
             self.send_json(200, {"ok": True})
+            return
+        if path == "/__e2e__/language":
+            payload = self.read_json()
+            language = str(payload.get("language") or "")
+            if language not in ("zh-CN", "en"):
+                self.send_json(400, {"error": "unsupported language"})
+                return
+            _fixture_language = language
+            self.send_json(200, {"ok": True, "language": language})
             return
         if path == "/api/transcribe":
             if not self.authorized():
