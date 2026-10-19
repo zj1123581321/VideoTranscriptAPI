@@ -241,6 +241,22 @@ def test_real_authentication_and_transcription_errors_are_localized(language_con
         "error_code": "authorization_token_invalid",
     }
 
+    cache_manager = MagicMock()
+    cache_manager.get_task_by_id.return_value = None
+    monkeypatch.setattr(tasks, "cache_manager", cache_manager)
+    monkeypatch.setattr(tasks, "audit_logger", MagicMock())
+    monkeypatch.setattr(tasks, "logger", MagicMock())
+    authenticated_app.dependency_overrides[verify_token] = lambda: {
+        "user_id": "test-user",
+        "api_key": "test-key",
+    }
+    missing_task_response = TestClient(authenticated_app).get("/api/task/missing-task")
+    assert missing_task_response.status_code == 404
+    assert missing_task_response.json() == {
+        "detail": "Task not found: missing-task",
+        "error_code": "task_id_not_found",
+    }
+
     submission_app = FastAPI()
     install_api_error_handlers(submission_app)
     submission_app.include_router(tasks.router)
