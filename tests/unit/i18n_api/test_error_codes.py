@@ -1,5 +1,6 @@
 """API error payload and localization contract tests."""
 
+import ast
 import json
 import re
 from pathlib import Path
@@ -83,6 +84,28 @@ _STATIC_BASE_DETAILS = [
     ("授权令牌无效", "authorization_token_invalid"),
 ]
 
+_NOTE_ERROR_CODES = {
+    "llm_queue_full",
+    "transcription_queue_full",
+    "recalibration_formatting_failed",
+    "resummary_formatting_failed",
+    "task_queue_failed",
+    "notes_queue_failed",
+}
+
+
+def _sample_error_values(error_code):
+    if error_code == "task_id_not_found":
+        values = {"task_id": "probe-task"}
+    elif error_code in {code for _, code in _DYNAMIC_BASE_DETAILS}:
+        values = {"error": "probe-error"}
+    else:
+        values = {}
+    if error_code in _NOTE_ERROR_CODES:
+        values["note"] = ""
+    return values
+
+
 _DYNAMIC_BASE_DETAILS = [
     ("任务不存在: probe-task", "task_id_not_found"),
     ("获取任务状态失败: probe-error", "task_status_failed"),
@@ -104,13 +127,41 @@ _DYNAMIC_BASE_DETAILS = [
 ]
 
 
+def test_json_api_sources_do_not_call_http_exception():
+    route_files = [
+        path for path in (PROJECT_ROOT / "src" / "video_transcript_api" / "api" / "routes").glob("*.py")
+        if path.name != "views.py"
+    ]
+    route_files.append(
+        PROJECT_ROOT / "src" / "video_transcript_api" / "api" / "services" / "transcription.py"
+    )
+    offending_calls = []
+    for path in route_files:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            if (
+                isinstance(function, ast.Name) and function.id == "HTTPException"
+                or isinstance(function, ast.Attribute) and function.attr == "HTTPException"
+            ):
+                offending_calls.append(f"{path}:{node.lineno}")
+
+    assert not offending_calls, f"Replace HTTPException calls with ApiError: {offending_calls}"
+
+
 @pytest.mark.parametrize(("source_detail", "expected_code"), _STATIC_BASE_DETAILS)
 def test_static_api_details_match_base_and_have_stable_codes(
     language_config, source_detail, expected_code
 ):
     language_config("zh-CN")
 
-    error = ApiError(status_code=400, detail=source_detail)
+    error = ApiError(
+        status_code=400,
+        error_code=expected_code,
+        **_sample_error_values(expected_code),
+    )
 
     assert error.detail == source_detail
     assert error.error_code == expected_code
@@ -122,7 +173,11 @@ def test_dynamic_api_details_match_base_and_have_stable_codes(
 ):
     language_config("zh-CN")
 
-    error = ApiError(status_code=500, detail=source_detail)
+    error = ApiError(
+        status_code=500,
+        error_code=expected_code,
+        **_sample_error_values(expected_code),
+    )
 
     assert error.detail == source_detail
     assert error.error_code == expected_code
@@ -146,7 +201,11 @@ def test_queue_cleanup_warning_keeps_original_chinese_detail(
 ):
     language_config("zh-CN")
 
-    error = ApiError(status_code=503, detail=source_detail)
+    error = ApiError(
+        status_code=503,
+        error_code=expected_code,
+        note="；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛",
+    )
 
     assert error.detail == source_detail
     assert error.error_code == expected_code
@@ -156,7 +215,11 @@ def test_queue_cleanup_warning_keeps_original_chinese_detail(
 def test_api_errors_are_english_without_cjk(language_config, source_detail, expected_code):
     language_config("en")
 
-    error = ApiError(status_code=400, detail=source_detail)
+    error = ApiError(
+        status_code=400,
+        error_code=expected_code,
+        **_sample_error_values(expected_code),
+    )
 
     assert error.error_code == expected_code
     assert isinstance(error.detail, str)
@@ -189,7 +252,7 @@ def test_api_errors_are_english_without_cjk(language_config, source_detail, expe
 )
 def test_upload_error_codes_have_english_details(language_config, error_code):
     language_config("en")
-    error = ApiError(status_code=400, detail="source detail", error_code=error_code)
+    error = ApiError(status_code=400, error_code=error_code, detail="source detail")
 
     assert error.error_code == error_code
     assert isinstance(error.detail, str)
@@ -203,7 +266,7 @@ def test_error_handler_serializes_error_code_and_preserves_fastapi_422(language_
 
     @app.get("/api/rejected")
     async def rejected():
-        raise ApiError(status_code=401, detail="授权令牌无效")
+        raise ApiError(status_code=401, error_code="authorization_token_invalid")
 
     @app.get("/api/validated")
     async def validated(value: int):
@@ -388,6 +451,7 @@ def test_error_catalog_keys_exist_for_each_language():
             "error.resource_not_found",
             "error.task_failed",
             "error.task_failure_reason",
+            "error.terminal_write_note",
         }
     )
     for language, catalog in catalogs.items():

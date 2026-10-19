@@ -35,3 +35,9 @@
 - 本段结论：`make test` 与窄验证通过，scope 检查通过，分支已推送且工作区干净；JSON API 错误码、本地化及已授权的任务失败写入路径均已提交。由于 seq 1 scope-request 等待超时，`llm_ops.py` 两处 task_status 失败写入未能纳入，故不能宣告 C5 全目标完成。
 - 关键决策与已否决方案：按卡面授权只提交 scope 内产物；没有绕过 scope 闸，也没有把未授权的 task_status 写入伪称为已本地化。
 - 下一步唯一动作：主脑处理 dispatch `dlg-20261019-171404-e584c4` 的 seq 1 scope-request；获批后补改 `llm_ops.py` 并重新验收，否则由主脑按当前 blocked 交付验收。
+
+### 里程碑 7：修订 A——调用点显式错误码
+- 当前阶段：implementing
+- 本段结论：删除按中文 detail 反查错误码的实现；已授权 JSON 路由与鉴权调用点改为显式 `ApiError(status_code, error_code, **values)`，动态错误部分通过 locale 占位符格式化。新增 AST 判据扫描 routes（排除 views）及 transcription 服务。
+- 关键决策与已否决方案：保留原生 422 校验异常；不对未知文案作错误码推断，不引入默认/回退翻译。
+- 下一步唯一动作：提交并推送本段 A；提交后执行一次 AST 断言红验，随后进入 C 任务失败原因保真。

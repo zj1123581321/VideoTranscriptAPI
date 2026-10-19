@@ -5,10 +5,10 @@ import os
 import queue
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from ..context import (
-    ApiError as HTTPException,
+    ApiError,
     get_audit_logger,
     get_cache_manager,
     get_config,
@@ -114,7 +114,7 @@ def _admit_upload_reprocess(cursor, view_token, user_id, cache_data):
     if cache_data.get("platform") != "local_upload":
         return view_token
     if os.environ.get("VTA_UPLOADS_ENABLED", "").strip().lower() != "true":
-        raise HTTPException(status_code=404, detail="上传分享不可用")
+        raise ApiError(404, "upload_share_unavailable")
     task_info = cache_data.get("task_info") or {}
     upload = cache_manager.get_active_local_upload_for_reprocess(
         cursor,
@@ -124,7 +124,7 @@ def _admit_upload_reprocess(cursor, view_token, user_id, cache_data):
         media_id=cache_data.get("media_id"),
     )
     if upload is None:
-        raise HTTPException(status_code=404, detail="上传分享不可用或已关闭")
+        raise ApiError(404, "upload_share_closed")
     return ""
 
 
@@ -224,7 +224,7 @@ async def transcribe_video(
     url = request_body.url
     if not url:
         logger.warning("请求未提供视频URL")
-        raise HTTPException(status_code=400, detail="视频URL不能为空")
+        raise ApiError(400, "invalid_url")
 
     # 规范化空字符串为 None
     normalized_download_url = _normalize_empty_string(request_body.download_url)
@@ -285,7 +285,7 @@ async def transcribe_video(
     inflight_registry = get_inflight_registry()
     if not inflight_registry.try_register("transcription", task_id):
         logger.warning("在途转录任务已达受理上限，拒绝任务: {}", url)
-        raise HTTPException(status_code=503, detail="任务处理已达上限，请稍后重试")
+        raise ApiError(503, "task_capacity_reached")
 
     # 登记表配额从这里开始"归属"这次 HTTP 请求，直到下面 put_nowait 成功
     # 把任务交给消费者（之后由 track_future 的完成回调注销，见
@@ -304,10 +304,7 @@ async def transcribe_video(
                     "reject transcription task: {}",
                     url,
                 )
-                raise HTTPException(
-                    status_code=503,
-                    detail="service busy or lock unavailable, retry shortly",
-                )
+                raise ApiError(503, "service_busy")
             task_info = cache_manager.create_task(
                 task_id=task_id,
                 url=url,
@@ -395,10 +392,11 @@ async def transcribe_video(
                         task_id, "任务队列已满，提交被拒绝",
                         log_context="队列已满后写入 failed 终态失败",
                     )
-                    detail = "任务队列已满，请稍后重试"
-                    if not terminal_write_ok:
-                        detail += _TERMINAL_WRITE_FAILURE_NOTE
-                    raise HTTPException(status_code=503, detail=detail)
+                    raise ApiError(
+                        503,
+                        "transcription_queue_full",
+                        note=t("error.terminal_write_note") if not terminal_write_ok else "",
+                    )
 
                 try:
                     display_url = url
@@ -456,10 +454,12 @@ async def transcribe_video(
                     task_id, f"任务加入队列失败: {queue_exc}",
                     log_context="任务加入队列失败后写入 failed 终态失败",
                 )
-                detail = f"任务加入队列失败: {queue_exc}"
-                if not terminal_write_ok:
-                    detail += _TERMINAL_WRITE_FAILURE_NOTE
-                raise HTTPException(status_code=500, detail=detail)
+                raise ApiError(
+                    500,
+                    "task_queue_failed",
+                    error=str(queue_exc),
+                    note=t("error.terminal_write_note") if not terminal_write_ok else "",
+                )
 
             processing_time_ms = int(
                 (datetime.datetime.now() - start_time).total_seconds() * 1000
@@ -499,7 +499,7 @@ async def transcribe_video(
                 remote_ip=request.client.host if request.client else None,
             )
             logger.exception("提交转录任务失败: {}", exc)
-            raise HTTPException(status_code=500, detail=f"提交转录任务失败: {exc}")
+            raise ApiError(500, "transcription_submission_failed", error=str(exc))
     finally:
         if registration_owned:
             inflight_registry.release("transcription", task_id)
@@ -535,7 +535,7 @@ async def get_task_status(
                 remote_ip=request.client.host if request.client else None,
             )
             logger.warning("任务不存在: {}", task_id)
-            raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
+            raise ApiError(404, "task_id_not_found", task_id=task_id)
 
         status = task_info.get("status") or TaskStatus.QUEUED
         code = http_code_for_status(status)
@@ -597,7 +597,7 @@ async def get_task_status(
             remote_ip=request.client.host if request.client else None,
         )
         logger.exception("获取任务状态异常: {}", exc)
-        raise HTTPException(status_code=500, detail=f"获取任务状态失败: {exc}")
+        raise ApiError(500, "task_status_failed", error=str(exc))
 
 
 @router.get("/webhook-stats")
@@ -660,19 +660,19 @@ async def recalibrate(
     # 用的是同一个 UserManager 实例（见上方 import 处注释）。
     if not user_manager.check_permission(user_info, "recalibrate"):
         logger.warning(f"用户 {user_id} 无 recalibrate 权限")
-        raise HTTPException(status_code=403, detail="无重新校对权限")
+        raise ApiError(403, "recalibration_permission_denied")
 
     # 通过 view_token 获取缓存数据
     cache_data = ViewTokenResolver(cache_manager).get_cache_by_view_token(view_token)
     if not cache_data:
         logger.warning(f"view_token 对应的缓存不存在: {view_token}")
-        raise HTTPException(status_code=404, detail="未找到对应的转录数据")
+        raise ApiError(404, "transcript_not_found")
 
     # 验证有转录数据
     transcript_data = cache_data.get("transcript_data")
     if not transcript_data:
         logger.warning(f"缓存中无转录数据: {view_token}")
-        raise HTTPException(status_code=400, detail="缓存中没有转录数据，无法重新校对")
+        raise ApiError(400, "recalibration_transcript_missing")
 
     task_info = cache_data.get("task_info", {})
     is_local_upload = cache_data.get("platform") == "local_upload"
@@ -703,13 +703,13 @@ async def recalibrate(
             )
         except Exception as e:
             logger.error(f"recalibrate 归属校验暂时不可用(fail-closed 拒绝): {e}")
-            raise HTTPException(status_code=503, detail="归属校验暂时不可用，请稍后重试")
+            raise ApiError(503, "ownership_check_unavailable")
         if not owned:
             logger.warning(
                 f"用户 {user_id} 无权对 view_token={view_token} 发起 recalibrate"
                 f"（非该任务的权威提交者）"
             )
-            raise HTTPException(status_code=403, detail="无权对该任务发起重新校对")
+            raise ApiError(403, "recalibration_ownership_denied")
 
     platform = cache_data.get("platform")
     media_id = cache_data.get("media_id")
@@ -740,7 +740,7 @@ async def recalibrate(
     inflight_registry = get_inflight_registry()
     if not inflight_registry.try_register("llm", task_id):
         logger.warning("在途 LLM 任务已达受理上限，拒绝重新校对任务: {}", view_token)
-        raise HTTPException(status_code=503, detail="任务处理已达上限，请稍后重试")
+        raise ApiError(503, "task_capacity_reached")
 
     # 登记表配额从这里开始"归属"这次 HTTP 请求，直到下面 llm_queue.
     # put_nowait 成功把任务交给消费者（之后由 track_future 的完成回调
@@ -774,7 +774,7 @@ async def recalibrate(
             raise
         except Exception as e:
             logger.error(f"创建重新校对任务失败: {e}")
-            raise HTTPException(status_code=500, detail=f"创建重新校对任务失败: {e}")
+            raise ApiError(500, "recalibration_creation_failed", error=str(e))
 
         # 状态以 DB 为唯一真相源；上方 INSERT 已写入 status='processing'
 
@@ -807,10 +807,12 @@ async def recalibrate(
                 task_id, f"转录数据格式化失败: {format_exc}",
                 log_context="转录数据格式化失败后写入 failed 终态失败",
             )
-            detail = f"重新校对任务转录数据格式化失败: {format_exc}"
-            if not terminal_write_ok:
-                detail += _TERMINAL_WRITE_FAILURE_NOTE
-            raise HTTPException(status_code=500, detail=detail)
+            raise ApiError(
+                500,
+                "recalibration_formatting_failed",
+                error=str(format_exc),
+                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+            )
 
         # Build per-channel webhooks
         recal_webhooks = {}
@@ -879,10 +881,11 @@ async def recalibrate(
                 task_id, "LLM 队列已满，重新校对提交被拒绝",
                 log_context="LLM 队列已满后写入 failed 终态失败",
             )
-            detail = "LLM 队列已满，请稍后重试"
-            if not terminal_write_ok:
-                detail += _TERMINAL_WRITE_FAILURE_NOTE
-            raise HTTPException(status_code=503, detail=detail)
+            raise ApiError(
+                503,
+                "llm_queue_full",
+                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+            )
         except Exception as e:
             logger.error(f"重新校对任务加入队列失败: {e}")
             # 非 queue.Full 的普通入队异常（本地 Codex review 第 14 轮）：任务行
@@ -895,10 +898,12 @@ async def recalibrate(
                 task_id, f"任务加入队列失败: {e}",
                 log_context="任务加入队列失败后写入 failed 终态失败",
             )
-            detail = f"任务加入队列失败: {e}"
-            if not terminal_write_ok:
-                detail += _TERMINAL_WRITE_FAILURE_NOTE
-            raise HTTPException(status_code=500, detail=detail)
+            raise ApiError(
+                500,
+                "task_queue_failed",
+                error=str(e),
+                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+            )
 
         processing_time_ms = int(
             (datetime.datetime.now() - start_time).total_seconds() * 1000
@@ -958,19 +963,19 @@ async def resummarize(
     # 同样走 runtime 优先的 DI 来源，与 verify_token 鉴权用同一个实例。
     if not user_manager.check_permission(user_info, "recalibrate"):
         logger.warning(f"用户 {user_id} 无 recalibrate 权限")
-        raise HTTPException(status_code=403, detail="无重新生成总结权限")
+        raise ApiError(403, "resummary_permission_denied")
 
     # 通过 view_token 获取缓存数据
     cache_data = ViewTokenResolver(cache_manager).get_cache_by_view_token(view_token)
     if not cache_data:
         logger.warning(f"view_token 对应的缓存不存在: {view_token}")
-        raise HTTPException(status_code=404, detail="未找到对应的转录数据")
+        raise ApiError(404, "transcript_not_found")
 
     # 验证有转录数据（llm_calibrated 取不到时要回退到原始转录）
     transcript_data = cache_data.get("transcript_data")
     if not transcript_data:
         logger.warning(f"缓存中无转录数据: {view_token}")
-        raise HTTPException(status_code=400, detail="缓存中没有转录数据，无法重新生成总结")
+        raise ApiError(400, "resummary_transcript_missing")
 
     task_info = cache_data.get("task_info", {})
     is_local_upload = cache_data.get("platform") == "local_upload"
@@ -991,13 +996,13 @@ async def resummarize(
             )
         except Exception as e:
             logger.error(f"resummarize 归属校验暂时不可用(fail-closed 拒绝): {e}")
-            raise HTTPException(status_code=503, detail="归属校验暂时不可用，请稍后重试")
+            raise ApiError(503, "ownership_check_unavailable")
         if not owned:
             logger.warning(
                 f"用户 {user_id} 无权对 view_token={view_token} 发起 resummarize"
                 f"（非该任务的权威提交者）"
             )
-            raise HTTPException(status_code=403, detail="无权对该任务发起重新生成总结")
+            raise ApiError(403, "resummary_ownership_denied")
 
     # 前置校验（在归属校验之后，避免向非任务归属方泄露总结层状态）：总结
     # 已真实生成过（文件非空且状态为 generated）时直接 400，防止误点重复
@@ -1006,7 +1011,7 @@ async def resummarize(
     existing_summary_status = (cache_data.get("llm_status") or {}).get("summary_status")
     if existing_summary and existing_summary_status == SummaryStatus.GENERATED:
         logger.warning(f"总结已存在，拒绝重复生成: {view_token}")
-        raise HTTPException(status_code=400, detail="总结已存在，无需重新生成")
+        raise ApiError(400, "summary_already_exists")
 
     platform = cache_data.get("platform")
     media_id = cache_data.get("media_id")
@@ -1038,7 +1043,7 @@ async def resummarize(
     inflight_registry = get_inflight_registry()
     if not inflight_registry.try_register("llm", task_id):
         logger.warning("在途 LLM 任务已达受理上限，拒绝重新生成总结任务: {}", view_token)
-        raise HTTPException(status_code=503, detail="任务处理已达上限，请稍后重试")
+        raise ApiError(503, "task_capacity_reached")
 
     # 登记表配额从这里开始"归属"这次 HTTP 请求，直到下面 llm_queue.
     # put_nowait 成功把任务交给消费者——中途任何异常都必须在最下面的
@@ -1070,7 +1075,7 @@ async def resummarize(
             raise
         except Exception as e:
             logger.error(f"创建重新生成总结任务失败: {e}")
-            raise HTTPException(status_code=500, detail=f"创建重新生成总结任务失败: {e}")
+            raise ApiError(500, "resummary_creation_failed", error=str(e))
 
         # 状态以 DB 为唯一真相源；上方 INSERT 已写入 status='processing'
 
@@ -1109,10 +1114,12 @@ async def resummarize(
                 task_id, f"转录数据格式化失败: {format_exc}",
                 log_context="转录数据格式化失败后写入 failed 终态失败",
             )
-            detail = f"重新生成总结任务转录数据格式化失败: {format_exc}"
-            if not terminal_write_ok:
-                detail += _TERMINAL_WRITE_FAILURE_NOTE
-            raise HTTPException(status_code=500, detail=detail)
+            raise ApiError(
+                500,
+                "resummary_formatting_failed",
+                error=str(format_exc),
+                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+            )
 
         # Build per-channel webhooks
         resum_webhooks = {}
@@ -1170,20 +1177,23 @@ async def resummarize(
                 task_id, "LLM 队列已满，重新生成总结提交被拒绝",
                 log_context="LLM 队列已满后写入 failed 终态失败",
             )
-            detail = "LLM 队列已满，请稍后重试"
-            if not terminal_write_ok:
-                detail += _TERMINAL_WRITE_FAILURE_NOTE
-            raise HTTPException(status_code=503, detail=detail)
+            raise ApiError(
+                503,
+                "llm_queue_full",
+                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+            )
         except Exception as e:
             logger.error(f"重新生成总结任务加入队列失败: {e}")
             terminal_write_ok = _fail_task_after_creation(
                 task_id, f"任务加入队列失败: {e}",
                 log_context="任务加入队列失败后写入 failed 终态失败",
             )
-            detail = f"任务加入队列失败: {e}"
-            if not terminal_write_ok:
-                detail += _TERMINAL_WRITE_FAILURE_NOTE
-            raise HTTPException(status_code=500, detail=detail)
+            raise ApiError(
+                500,
+                "task_queue_failed",
+                error=str(e),
+                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+            )
 
         processing_time_ms = int(
             (datetime.datetime.now() - start_time).total_seconds() * 1000
@@ -1232,20 +1242,17 @@ async def generate_notes(
 
     if not user_manager.check_permission(user_info, "recalibrate"):
         logger.warning(f"用户 {user_id} 无 recalibrate 权限，拒绝生成详细笔记")
-        raise HTTPException(status_code=403, detail="无生成详细笔记权限")
+        raise ApiError(403, "notes_permission_denied")
 
     cache_data = ViewTokenResolver(cache_manager).get_cache_by_view_token(view_token)
     if not cache_data:
         logger.warning(f"view_token 对应的缓存不存在，无法生成详细笔记: {view_token}")
-        raise HTTPException(status_code=404, detail="未找到对应的转录数据")
+        raise ApiError(404, "transcript_not_found")
 
     transcript_data = cache_data.get("transcript_data")
     if not transcript_data:
         logger.warning(f"缓存中无转录数据，无法生成详细笔记: {view_token}")
-        raise HTTPException(
-            status_code=400,
-            detail="缓存中没有转录数据，无法生成详细笔记",
-        )
+        raise ApiError(400, "notes_transcript_missing")
 
     task_info = cache_data.get("task_info", {})
     is_local_upload = cache_data.get("platform") == "local_upload"
@@ -1265,21 +1272,18 @@ async def generate_notes(
             )
         except Exception as exc:
             logger.error(f"generate_notes 归属校验暂时不可用(fail-closed 拒绝): {exc}")
-            raise HTTPException(status_code=503, detail="归属校验暂时不可用，请稍后重试")
+            raise ApiError(503, "ownership_check_unavailable")
         if not owned:
             logger.warning(
                 f"用户 {user_id} 无权对 view_token={view_token} 发起 generate_notes"
                 "（非该任务的权威提交者）"
             )
-            raise HTTPException(status_code=403, detail="无权对该任务生成详细笔记")
+            raise ApiError(403, "notes_ownership_denied")
 
     llm_status = cache_data.get("llm_status") or {}
     if llm_status.get("chapters_status") != ChaptersStatus.GENERATED:
         logger.warning(f"详细笔记依赖的章节层尚未生成: {view_token}")
-        raise HTTPException(
-            status_code=409,
-            detail="详细笔记依赖已生成的章节层，请先生成章节后再重试",
-        )
+        raise ApiError(409, "notes_chapters_required")
     if llm_status.get("notes_status") == NotesStatus.GENERATED:
         notes_language_mismatch = any(
             layer == "notes"
@@ -1287,23 +1291,20 @@ async def generate_notes(
         )
         if not notes_language_mismatch:
             logger.warning(f"详细笔记已存在，拒绝重复生成: {view_token}")
-            raise HTTPException(status_code=400, detail="详细笔记已存在，无需重复生成")
+            raise ApiError(400, "notes_already_exists")
 
     try:
         with cache_manager._get_cursor() as cursor:
             inflight_notes_task_id = _find_inflight_notes_task(cursor, view_token)
     except Exception as exc:
         logger.error(f"查询在途详细笔记任务失败(fail-closed 拒绝): {exc}")
-        raise HTTPException(status_code=503, detail="详细笔记任务状态查询失败，请稍后重试")
+        raise ApiError(503, "notes_status_unavailable")
     if inflight_notes_task_id is not None:
         logger.warning(
             "拒绝重复详细笔记任务，已有在途 notes 任务: "
             f"view_token={view_token}, task_id={inflight_notes_task_id}"
         )
-        raise HTTPException(
-            status_code=409,
-            detail="详细笔记正在生成中，请等待当前任务完成",
-        )
+        raise ApiError(409, "notes_already_in_progress")
 
     platform = cache_data.get("platform")
     media_id = cache_data.get("media_id")
@@ -1328,7 +1329,7 @@ async def generate_notes(
     inflight_registry = get_inflight_registry()
     if not inflight_registry.try_register("llm", task_id):
         logger.warning("在途 LLM 任务已达受理上限，拒绝详细笔记任务: {}", view_token)
-        raise HTTPException(status_code=503, detail="任务处理已达上限，请稍后重试")
+        raise ApiError(503, "task_capacity_reached")
 
     registration_owned = True
     try:
@@ -1390,22 +1391,16 @@ async def generate_notes(
                     "拒绝重复详细笔记任务，已有在途 notes 任务: "
                     f"view_token={view_token}, task_id={inflight_notes_task_id}"
                 )
-                raise HTTPException(
-                    status_code=409,
-                    detail="详细笔记正在生成中，请等待当前任务完成",
-                )
+                raise ApiError(409, "notes_already_in_progress")
             if notes_generated_during_admission:
                 logger.warning(f"详细笔记已在准入期间生成，拒绝重复生成: {view_token}")
-                raise HTTPException(
-                    status_code=400,
-                    detail="详细笔记已存在，无需重复生成",
-                )
+                raise ApiError(400, "notes_already_exists")
             logger.info(f"详细笔记任务创建成功: {task_id}, view_token: {view_token}")
         except HTTPException:
             raise
         except Exception as exc:
             logger.error(f"创建详细笔记任务失败: {exc}")
-            raise HTTPException(status_code=500, detail=f"创建详细笔记任务失败: {exc}")
+            raise ApiError(500, "notes_creation_failed", error=str(exc))
 
         notes_webhooks = {}
         wechat_webhook = (
@@ -1453,10 +1448,11 @@ async def generate_notes(
                 "LLM 队列已满，详细笔记提交被拒绝",
                 log_context="LLM 队列已满后写入详细笔记 failed 终态失败",
             )
-            detail = "LLM 队列已满，请稍后重试"
-            if not terminal_write_ok:
-                detail += _TERMINAL_WRITE_FAILURE_NOTE
-            raise HTTPException(status_code=503, detail=detail)
+            raise ApiError(
+                503,
+                "llm_queue_full",
+                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+            )
         except Exception as exc:
             logger.error(f"详细笔记任务加入队列失败: {exc}")
             terminal_write_ok = _fail_task_after_creation(
@@ -1464,10 +1460,12 @@ async def generate_notes(
                 f"详细笔记任务加入队列失败: {exc}",
                 log_context="详细笔记任务加入队列失败后写入 failed 终态失败",
             )
-            detail = f"详细笔记任务加入队列失败: {exc}"
-            if not terminal_write_ok:
-                detail += _TERMINAL_WRITE_FAILURE_NOTE
-            raise HTTPException(status_code=500, detail=detail)
+            raise ApiError(
+                500,
+                "notes_queue_failed",
+                error=str(exc),
+                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+            )
 
         processing_time_ms = int(
             (datetime.datetime.now() - start_time).total_seconds() * 1000

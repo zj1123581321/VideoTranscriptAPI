@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, StrictBool, field_validator
 from ..processing_options import ProcessingOptions, normalize_processing_options
 
 from ..context import (
-    ApiError as HTTPException,
+    ApiError,
     get_audit_logger,
     get_cache_manager,
     get_config,
@@ -584,18 +584,18 @@ async def verify_token(authorization: str = Header(None), request: Request = Non
     """
     if not authorization:
         logger.warning("请求未提供Authorization头")
-        raise HTTPException(status_code=401, detail="未提供授权令牌")
+        raise ApiError(401, "authorization_token_missing")
 
     token_parts = authorization.split()
     if len(token_parts) != 2 or token_parts[0].lower() != "bearer":
         logger.warning("授权令牌格式错误")
-        raise HTTPException(status_code=401, detail="授权令牌格式错误")
+        raise ApiError(401, "authorization_token_malformed")
 
     token = token_parts[1]
     user_info = user_manager.validate_token(token)
     if not user_info:
         logger.warning("Authorization token rejected")
-        raise HTTPException(status_code=401, detail="授权令牌无效")
+        raise ApiError(401, "authorization_token_invalid")
 
     logger.debug(f"用户认证成功: {user_info.get('user_id')}")
     if request:

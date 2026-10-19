@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from ..context import ApiError as HTTPException
+from ..context import ApiError
 from ..context import get_logger, get_user_manager, lazy_resource
 from ..services.transcription import TranscribeResponse, verify_token
 
@@ -27,4 +27,4 @@ async def get_user_profile(user_info: dict = Depends(verify_token)):
         )
     except Exception as exc:
         logger.exception("获取用户配置异常: {}", exc)
-        raise HTTPException(status_code=500, detail=f"获取用户配置失败: {exc}")
+        raise ApiError(500, "user_profile_failed", error=str(exc))
