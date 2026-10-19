@@ -13,10 +13,14 @@ All console output must be in English only (no emoji, no Chinese).
 """
 
 import datetime
+import json
+import sqlite3
 
 import pytest
 from loguru import logger as loguru_logger
 
+from src.video_transcript_api.cache.cache_manager import CacheManager
+from src.video_transcript_api.utils.task_status import TaskStatus
 from src.video_transcript_api.utils.perf_tracker import PerfTracker
 
 
@@ -139,3 +143,63 @@ class TestStageEntryPublishing:
 
         assert tracker.get_elapsed("download") is not None
         assert tracker.report_subprogress(done=1, total=2) is False
+
+
+class TestTerminalStateGuard:
+    """Late stage writes must never overwrite a terminal task row."""
+
+    @pytest.fixture
+    def cm(self, tmp_path):
+        manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+        yield manager
+        manager.close()
+
+    def test_late_write_after_success_is_rejected(self, cm):
+        task = cm.create_task(url="https://example.com/late-success")
+        assert cm.update_task_status(task["task_id"], TaskStatus.SUCCESS) is True
+
+        assert (
+            cm.update_task_progress(
+                task["task_id"], {"stage": "download", "stage_state": "running"}
+            )
+            is False
+        )
+        assert cm.get_task_by_id(task["task_id"])["progress"] is None
+
+    def test_late_write_after_failed_is_rejected(self, cm):
+        task = cm.create_task(url="https://example.com/late-failed")
+        assert cm.update_task_status(task["task_id"], TaskStatus.FAILED) is True
+
+        assert (
+            cm.update_task_progress(
+                task["task_id"], {"stage": "transcription", "stage_state": "running"}
+            )
+            is False
+        )
+        assert cm.get_task_by_id(task["task_id"])["progress"] is None
+
+    def test_write_while_processing_is_accepted(self, cm):
+        task = cm.create_task(url="https://example.com/running-write")
+        progress = {"stage": "download", "stage_state": "running", "started_at": "x"}
+
+        assert cm.update_task_progress(task["task_id"], progress) is True
+        assert cm.get_task_by_id(task["task_id"])["progress"] == progress
+
+    def test_stage_progress_visible_from_second_connection(self, cm):
+        """The acceptance path: a reader on its own sqlite connection sees
+        the running stage written by the unified entry mid-stage."""
+        task = cm.create_task(url="https://example.com/second-reader")
+        tracker = PerfTracker(task_id=task["task_id"])
+        tracker.attach_progress_sink(cm.stage_progress_sink(task["task_id"]))
+
+        with tracker.track("download"):
+            with sqlite3.connect(str(cm.db_path)) as reader:
+                row = reader.execute(
+                    "SELECT progress FROM task_status WHERE task_id = ?",
+                    (task["task_id"],),
+                ).fetchone()
+
+        assert row is not None
+        document = json.loads(row[0])
+        assert document["stage"] == "download"
+        assert document["stage_state"] == "running"
