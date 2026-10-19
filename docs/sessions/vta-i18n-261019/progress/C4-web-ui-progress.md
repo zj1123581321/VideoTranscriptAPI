@@ -107,3 +107,18 @@ e2e CJK 正则扩到 CJK 标点与全角形式，先在 HEAD 抓到 error.html �
 
 ### 下一步唯一动作
 修 floating-toc aria-label 拼接为带占位符的整句 key。
+
+## 2026-10-19 TOC aria-label 整句 key
+
+### 当前阶段
+implementing
+
+### 本段结论
+`floating-toc.js` 的收起/展开 aria-label 改为 `web.toc.collapse_section` / `web.toc.expand_section` 占位符整句；zh-CN 为 `折叠{section}` / `展开{section}`，与 Base 拼接结果一致。
+
+### 关键决策与已否决方案
+- 跟 Base 用「折叠」而非卡面举例的「收起」，以保证逐字一致。
+- 已否决继续把两段翻译直接相加。
+
+### 下一步唯一动作
+核对并修正本卡新增 zh-CN 目录值与 Base 原字面量的不一致。

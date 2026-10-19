@@ -439,7 +439,12 @@
         const toggle = createEl('button', 'toc-outline-toggle', expanded ? '▾' : '▸');
         toggle.type = 'button';
         toggle.setAttribute('aria-expanded', String(expanded));
-        toggle.setAttribute('aria-label', (expanded ? tr('web.toc.fold') : tr('web.toc.unfold')) + label);
+        toggle.setAttribute(
+            'aria-label',
+            expanded
+                ? tr('web.toc.collapse_section', { section: label })
+                : tr('web.toc.expand_section', { section: label })
+        );
         header.appendChild(toggle);
         return toggle;
     }
@@ -962,9 +967,12 @@
         const label = section.querySelector('.toc-outline-parent, .toc-chapter-main');
         toggleEl.setAttribute('aria-expanded', String(!expanded));
         toggleEl.textContent = expanded ? '▸' : '▾';
+        const sectionLabel = label ? label.textContent : tr('web.toc.section');
         toggleEl.setAttribute(
             'aria-label',
-            (expanded ? tr('web.toc.unfold') : tr('web.toc.fold')) + (label ? label.textContent : tr('web.toc.section'))
+            expanded
+                ? tr('web.toc.expand_section', { section: sectionLabel })
+                : tr('web.toc.collapse_section', { section: sectionLabel })
         );
         section.classList.toggle('toc-outline-collapsed', expanded);
     }
