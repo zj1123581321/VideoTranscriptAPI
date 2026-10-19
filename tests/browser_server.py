@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import datetime
 import hashlib
 import json
 import mimetypes
@@ -34,6 +35,9 @@ sys.modules["video_transcript_api.utils.logging.logger"] = _logger_mod
 
 from video_transcript_api.i18n import get_language, web_catalog_script
 from video_transcript_api.utils.logging.logger import load_config
+from video_transcript_api.api.services.view_token_resolver import (
+    build_stage_progress_display,
+)
 from video_transcript_api.utils.rendering.home_page import render_home_html
 from video_transcript_api.utils.rendering.i18n_jinja import install_i18n
 STATIC_DIR = ROOT / "src" / "web" / "static"
@@ -95,6 +99,26 @@ def _fixture_calibrated_html() -> str:
         f'<div class="dialog-content"><p>{body}</p></div>'
         "</div></div>"
     )
+
+# Browser fixture uses the production resolver so stage labels follow the same
+# global language as the Jinja ``t()`` globals during the i18n regression.
+def _fixture_stage_progress() -> dict[str, object]:
+    started_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        seconds=83
+    )
+    display = build_stage_progress_display(
+        {
+            "stage": "download",
+            "stage_state": "running",
+            "started_at": started_at.isoformat(),
+            "stages": [
+                {"stage": "url_parse", "elapsed_ms": 2000, "state": "done"},
+                {"stage": "transcription", "elapsed_ms": 65000, "state": "done"},
+            ],
+        }
+    )
+    assert display is not None
+    return display
 
 
 def initialize_database(db_path: Path) -> None:
@@ -590,6 +614,8 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
             "error_message": _fixture_error_message(),
             "message": _fixture_error_message(),
         }
+        if status == "processing":
+            context["stage_progress"] = _fixture_stage_progress()
         if view_token == VIEW_TOKEN_WITH_CARD:
             port = self.server.server_address[1]
             context["share_card"] = {

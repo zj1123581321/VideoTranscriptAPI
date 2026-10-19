@@ -1,8 +1,11 @@
 """View-token business logic coordinated through an existing CacheManager."""
 
+import datetime
+import json
 import os
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+from ...i18n import t
 from ...transcriber.segments import normalize_segments
 from ...utils.llm_status import NotesStatus, SummaryStatus
 from ...utils.logging import setup_logger
@@ -13,6 +16,142 @@ if TYPE_CHECKING:
 
 logger = setup_logger("view_token_resolver")
 UPLOAD_DISABLED = "UPLOAD_DISABLED"
+
+#: 瞬时阶段：经同一入口计时发布，但页面上不单独成步，归入"准备"。
+#: 其余发布名按 web.processing.stage.<name> 查词表，无词表条目的新阶段
+#: 直接以内部名上页。
+_TRANSIENT_STAGES = ("url_parse", "cache_check", "metadata")
+
+
+def _stage_display_name(stage: str) -> str:
+    """Map a published stage name to its display text.
+
+    Stages without a catalog entry (new stages added later via the same
+    entry) surface under their internal name so they still appear on the
+    page without any presentation-layer change.
+    """
+    if stage in _TRANSIENT_STAGES:
+        return t("web.processing.stage.preparing")
+    try:
+        return t(f"web.processing.stage.{stage}")
+    except KeyError:
+        return stage
+
+
+def _format_elapsed_text(elapsed_ms: Any) -> str:
+    """Render a duration in milliseconds with the configured language."""
+    if not isinstance(elapsed_ms, (int, float)) or isinstance(elapsed_ms, bool):
+        return ""
+    total_seconds = max(0, int(round(elapsed_ms / 1000)))
+    if total_seconds < 60:
+        return t("web.processing.duration.seconds", seconds=total_seconds)
+    if total_seconds < 3600:
+        minutes, seconds = divmod(total_seconds, 60)
+        return t(
+            "web.processing.duration.minutes", minutes=minutes, seconds=seconds
+        )
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes = remainder // 60
+    return t("web.processing.duration.hours", hours=hours, minutes=minutes)
+
+
+def _running_stage_elapsed_text(progress: Dict[str, Any]) -> str:
+    """Elapsed time of the running stage, computed at render time."""
+    started_at = progress.get("started_at")
+    if not isinstance(started_at, str) or not started_at:
+        return ""
+    try:
+        started = datetime.datetime.fromisoformat(started_at)
+    except ValueError:
+        return ""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=datetime.timezone.utc)
+    elapsed_ms = (now - started).total_seconds() * 1000
+    return _format_elapsed_text(elapsed_ms)
+
+
+def _parse_progress_document(raw: Any) -> Optional[Dict[str, Any]]:
+    """Parse the raw ``task_status.progress`` TEXT into a dict.
+
+    Mirrors CacheManager.get_task_by_id's tolerance: malformed or non-object
+    payloads degrade to None instead of breaking the view.
+    """
+    if raw is None or isinstance(raw, dict):
+        return raw if isinstance(raw, dict) else None
+    if not isinstance(raw, str):
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        logger.warning("Invalid progress JSON on task row for view rendering")
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def build_stage_progress_display(
+    progress: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Build the display-ready payload rendered by ``processing.html``.
+
+    All strings are pre-rendered through the i18n catalog so the template
+    and the browser fixture only deal with final text.
+    """
+    if not isinstance(progress, dict):
+        return None
+    stage = progress.get("stage")
+    if not isinstance(stage, str) or not stage:
+        return None
+
+    label = _stage_display_name(stage)
+    elapsed_text = (
+        _running_stage_elapsed_text(progress)
+        if progress.get("stage_state") == "running"
+        else ""
+    )
+    if elapsed_text:
+        current_line = t(
+            "web.processing.progress.current", stage=label, elapsed=elapsed_text
+        )
+    else:
+        current_line = t("web.processing.progress.current_plain", stage=label)
+
+    completed_items = []
+    stages = progress.get("stages")
+    if isinstance(stages, list):
+        for record in stages:
+            if not isinstance(record, dict):
+                continue
+            record_stage = record.get("stage")
+            if not isinstance(record_stage, str) or not record_stage:
+                continue
+            completed_items.append(
+                t(
+                    "web.processing.progress.completed_item",
+                    stage=_stage_display_name(record_stage),
+                    elapsed=_format_elapsed_text(record.get("elapsed_ms")),
+                )
+            )
+
+    notes_line = None
+    done = progress.get("done")
+    total = progress.get("total")
+    if (
+        isinstance(done, int)
+        and not isinstance(done, bool)
+        and isinstance(total, int)
+        and not isinstance(total, bool)
+    ):
+        notes_line = t(
+            "web.processing.progress.notes_detail", done=done, total=total
+        )
+
+    return {
+        "current_line": current_line,
+        "notes_line": notes_line,
+        "completed_header": t("web.processing.progress.completed_header"),
+        "completed_items": completed_items,
+    }
 
 
 class ViewTokenResolver:
@@ -200,11 +339,19 @@ class ViewTokenResolver:
             display_url = task_info.get("url") or task_info.get("download_url") or ""
 
             if task_info["status"] in ["queued", "processing", "calibrating"]:
+                # 终态任务不展示残留 progress（阶段是从属元数据）；非终态
+                # 时把统一阶段入口发布的进度转成展示结构带给 processing.html。
+                progress_document = _parse_progress_document(
+                    task_info.get("progress")
+                )
                 return {
                     "status": "processing",
                     "title": task_info.get("title", "转录处理中..."),
                     "url": display_url,
                     "created_at": task_info["created_at"],
+                    "stage_progress": build_stage_progress_display(
+                        progress_document
+                    ),
                 }
 
             if task_info["status"] == "failed":

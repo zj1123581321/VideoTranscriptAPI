@@ -1059,11 +1059,12 @@ def process_transcription(
     processing_options = normalize_processing_options(processing_options)
     # 性能追踪器：记录各阶段耗时
     tracker = PerfTracker(task_id=task_id)
+    tracker.attach_progress_sink(
+        lambda document: cache_manager.stage_progress_sink(task_id)(document)
+    )
 
     # ---- 临时文件生命周期（见评审决议 D10/D11/codex#1,#9）----
-    # 进入处理：标记活跃（受在途保护）、绑定当前线程任务、建任务专属目录、
-    # 顺手做一次节流的惰性清扫兜底孤儿。所有下载产物会落到 data/temp/task_<id>/，
-    # 在最外层 finally 里被 clean_up_task 一并删除——覆盖所有 early return 与异常。
+    # 标记活跃、绑定任务并建专属目录；产物由最外层 finally 清理，覆盖所有 early return。
     temp_manager = get_temp_manager()
     temp_manager.mark_active(task_id)
     temp_manager.set_current_task(task_id)
@@ -1093,9 +1094,7 @@ def process_transcription(
         display_url = url
         logger.info(f"通知将使用URL: {display_url}")
 
-        # 偏慢提醒（261007-notify-slim 卡 2）：转录 worker 开始处理即起算，
-        # 排队时间天然不计入。view_url 必须在这里解析好存进计时状态——计时
-        # 回调线程没有 runtime context，查不了库。
+        # 偏慢提醒从转录 worker 起算；先解析 view_url，因为计时回调线程无法查库。
         slow_alert.track_transcription(
             task_id,
             url=display_url,
