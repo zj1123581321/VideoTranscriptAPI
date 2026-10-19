@@ -1,27 +1,40 @@
 """性能埋点模块
 
 提供上下文管理器记录各阶段耗时，支持缓存命中/未命中计数和统计汇总。
+``track`` 同时是任务阶段进度的唯一发布入口：进入阶段时经注入的
+progress sink 持久化"当前阶段 running"，退出时标记 done/failed，
+用户新增一个 ``tracker.track(...)`` 阶段无需任何额外代码就会出现在
+处理中查看页上。
 """
 
+import datetime
 import threading
 import time
 from contextlib import contextmanager
-from typing import Dict, Optional, List
+from typing import Any, Callable, Dict, List, Optional
 from .logging import setup_logger
 
 logger = setup_logger("perf_tracker")
+
+#: 阶段进度持久化回调的形状：接收进度文档 dict，返回写入是否生效
+#: （False 表示任务行不存在或已终态，属预期拒绝）。注入点在持有
+#: CacheManager 的业务侧（见 CacheManager.stage_progress_sink）。
+ProgressSink = Callable[[Dict[str, Any]], bool]
 
 
 class PerfTracker:
     """性能追踪器
 
-    使用上下文管理器记录各阶段耗时，线程安全。
+    使用上下文管理器记录各阶段耗时，线程安全。同一个 ``track`` 边界
+    也是阶段进度的唯一发布入口：sink 经 :meth:`attach_progress_sink`
+    注入后，进入/退出（或异常退出）阶段都会发布一份进度文档。
 
     Usage:
         tracker = PerfTracker(task_id="task-001")
+        tracker.attach_progress_sink(cache_manager.stage_progress_sink("task-001"))
         with tracker.track("download"):
             download_file(...)
-        with tracker.track("transcribe"):
+        with tracker.track("transcription"):
             transcribe(...)
         print(tracker.summary())
     """
@@ -37,6 +50,12 @@ class PerfTracker:
         self._counters: Dict[str, int] = {}
         self._media_duration_s: Optional[float] = None
         self._lock = threading.Lock()
+        self._progress_sink: Optional[ProgressSink] = None
+        # 当前 running 阶段的发布信息（publish 名 + started_at ISO）；
+        # _published_stages 是已退出阶段的有序发布记录。
+        self._publishing: Optional[Dict[str, str]] = None
+        self._published_stages: List[Dict[str, Any]] = []
+        self._subprogress: Optional[Dict[str, int]] = None
 
     def set_media_duration(self, duration_s: Optional[float]) -> None:
         """记录探测到的媒体时长（秒），随终态快照 observability 落库。
@@ -47,17 +66,56 @@ class PerfTracker:
         with self._lock:
             self._media_duration_s = duration_s
 
-    @contextmanager
-    def track(self, stage: str):
-        """记录指定阶段的耗时
+    def attach_progress_sink(self, sink: ProgressSink) -> None:
+        """注入阶段进度的持久化回调（唯一写库路径）。
 
         Args:
-            stage: 阶段名称（如 "download", "transcribe", "llm_calibrate"）
+            sink: 接收进度文档并写入 task_status.progress 的回调。
+                未注入时 track() 只做内存计时，不发布进度。
+        """
+        with self._lock:
+            self._progress_sink = sink
+
+    def report_subprogress(self, done: int, total: int) -> bool:
+        """发布当前阶段的 done/total 细粒度计数（详细笔记阶段契约）。
+
+        进度文档只有一个属主（本入口）：调用方不再自行整份覆盖
+        task_status.progress，done/total 随当前阶段文档一起发布，
+        处理中查看页与 /api/task 消费方读到的结构保持一致。
+
+        Args:
+            done: 已完成条目数。
+            total: 总条目数。
+
+        Returns:
+            bool: 是否成功发布；False 表示未注入 sink 或当前没有
+                running 阶段（拒绝不打断业务主流程，由调用方记日志）。
+        """
+        with self._lock:
+            if self._progress_sink is None or self._publishing is None:
+                return False
+            self._subprogress = {"done": done, "total": total}
+            document = self._build_progress_document_locked()
+        return self._publish(document)
+
+    @contextmanager
+    def track(self, stage: str, *, publish_as: Optional[str] = None):
+        """记录指定阶段的耗时，并向 progress sink 发布阶段边界。
+
+        Args:
+            stage: 阶段名称（如 "download", "transcription", "llm_processing"）
+            publish_as: 进度文档对外展示的阶段名；缺省发布 stage 本身。
+                仅当观测口径锁死了内部名、而用户可见阶段需要另一个名字时
+                使用（如 llm_processing 对主流程发布 llm、对详细笔记任务
+                发布 notes），新代码不要随手加映射。
 
         Yields:
             None
         """
         start = time.monotonic()
+        publish_name = publish_as or stage
+        started_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        self._begin_publishing(publish_name, started_at)
         error = None
         try:
             yield
@@ -78,6 +136,109 @@ class PerfTracker:
             logger.info(
                 f"[perf] {self.task_id} | {stage}: {elapsed_ms:.0f}ms ({status})"
             )
+
+            state = "failed" if error is not None else "done"
+            self._finish_publishing(publish_name, started_at, elapsed_ms, state)
+            if error is not None:
+                # 固定字面量 stage_progress_failed：阶段异常退出的可 grep
+                # 降级日志（进度是从属元数据，异常本身继续向上传播）。
+                logger.error(
+                    f"stage_progress_failed: task={self.task_id} "
+                    f"stage={publish_name} error={error}"
+                )
+
+    def _begin_publishing(self, publish_name: str, started_at: str) -> None:
+        """进入阶段：发布 running 文档；发布失败只记降级日志。"""
+        with self._lock:
+            self._publishing = {
+                "stage": publish_name,
+                "started_at": started_at,
+            }
+            document = self._build_progress_document_locked()
+        self._publish(document)
+
+    def _finish_publishing(
+        self,
+        publish_name: str,
+        started_at: str,
+        elapsed_ms: float,
+        state: str,
+    ) -> None:
+        """退出阶段：记录已完成区间并发布终态文档。"""
+        with self._lock:
+            self._publishing = None
+            self._subprogress = None
+            self._published_stages.append(
+                {
+                    "stage": publish_name,
+                    "elapsed_ms": round(elapsed_ms, 2),
+                    "state": state,
+                }
+            )
+            document = self._build_progress_document_locked()
+        self._publish(document)
+
+    def _build_progress_document_locked(self) -> Dict[str, Any]:
+        """组装进度文档；调用方必须已持有 self._lock。
+
+        文档形状（契约见 docs/guides/task-observability.md）：
+        {"stage", "stage_state", "started_at", "stages": [...], "done"?, "total"?}
+        """
+        if self._publishing is not None:
+            stage = self._publishing["stage"]
+            stage_state = "running"
+            started_at = self._publishing["started_at"]
+        elif self._published_stages:
+            last = self._published_stages[-1]
+            stage = last["stage"]
+            stage_state = last["state"]
+            started_at = ""
+        else:
+            stage = ""
+            stage_state = "running"
+            started_at = ""
+        document: Dict[str, Any] = {
+            "stage": stage,
+            "stage_state": stage_state,
+            "started_at": started_at,
+            "stages": [
+                {
+                    "stage": record["stage"],
+                    "elapsed_ms": record["elapsed_ms"],
+                    "state": record["state"],
+                }
+                for record in self._published_stages
+            ],
+        }
+        if self._subprogress is not None:
+            document["done"] = self._subprogress["done"]
+            document["total"] = self._subprogress["total"]
+        return document
+
+    def _publish(self, document: Dict[str, Any]) -> bool:
+        """把进度文档交给注入的 sink；失败降级为可 grep 日志，不传播。
+
+        进度是从属元数据，绝不参与状态机：写进度失败不得打断转录/LLM
+        主流程，固定字面量 stage_progress_failed 供日志检索。
+        """
+        with self._lock:
+            sink = self._progress_sink
+        if sink is None:
+            return False
+        try:
+            written = sink(document)
+            if not written:
+                logger.warning(
+                    f"stage progress write rejected (terminal or missing row): "
+                    f"task={self.task_id} stage={document.get('stage')}"
+                )
+            return bool(written)
+        except Exception as exc:
+            logger.error(
+                f"stage_progress_failed: task={self.task_id} "
+                f"stage={document.get('stage')} error={exc}"
+            )
+            return False
 
     def count(self, name: str, delta: int = 1):
         """递增一个计数器
