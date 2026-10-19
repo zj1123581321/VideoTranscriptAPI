@@ -53,6 +53,25 @@ class TestSummaryProcessor(unittest.TestCase):
     self.assertTrue(len(single_prompt) > 100)
     self.assertNotEqual(single_prompt, multi_prompt)
 
+  def test_english_language_selects_native_english_prompt(self):
+    from video_transcript_api.llm.prompts import en as en_prompts
+    from video_transcript_api.utils.logging.logger import load_config
+
+    config = load_config()
+    had_key = "language" in config
+    original = config.get("language")
+    config["language"] = "en"
+    try:
+      single_prompt = self.processor._select_system_prompt(speaker_count=0)
+      self.assertEqual(single_prompt, en_prompts.SUMMARY_SYSTEM_PROMPT_SINGLE_SPEAKER)
+      self.assertIn("Write in English only", single_prompt)
+      self.assertNotIn("只能使用中文书写", single_prompt)
+    finally:
+      if had_key:
+        config["language"] = original
+      else:
+        config.pop("language", None)
+
   def test_within_hard_cap_single_call(self):
     self.mock_call.return_value = LLMResponse(text="generated summary text. " * 20)
 

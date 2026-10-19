@@ -1,0 +1,72 @@
+Fixture Title - 视频转录查看器
+由开源项目
+VideoTranscriptAPI
+生成
+·
+by
+张立行
+☀️
+⚙
+📝 提交任务
+📋 任务历史
+设置/更换访问令牌
+清除访问令牌
+Fixture Title
+👤 Fixture Author
+🔗
+查看原视频
+⏰ 2026-10-08 12:00
+📊
+转录统计
+原始转录 12 字 | 校对文本 12 字 | 内容总结 13 字（占原文 108.3%）
+Raw 校对文本
+复制 URL
+纯文本，粘贴到 ChatGPT / Claude 直接读取
+HTML 校对页面
+复制 URL
+带标题的 HTML，供 NotebookLM 等工具爬取
+分享摘要
+复制摘要
+标题、原始地址与总结首段
+📤
+更多导出选项
+Raw 纯文本
+校对文本
+·
+总结
+·
+详细笔记
+·
+原始转录
+下载 TXT / 粘贴 URL 到 ChatGPT、Claude 等 LLM 直接读取
+HTML 页面
+校对文本
+·
+总结
+·
+详细笔记
+·
+原始转录
+带标题与 Meta 标签，适合 NotebookLM 等工具爬取
+📝 内容总结
+📋 复制内容
+Summary body.
+📚 详细笔记
+📋 复制内容
+Notes body.
+✨ 校对文本
+📋 复制内容
+🔄 重新校对
+说话人姓名为 AI 推断，可能有误；关键引用请核对原音频
+说话人1
+待确认
+你好，这是第一段。
+输入访问令牌
+受保护操作需要统一的访问令牌；访问令牌只保存到浏览器统一鉴权存储。
+访问令牌
+取消
+确认
+Powered by
+VideoTranscriptAPI
+· Open Source ·
+☆ Star on GitHub

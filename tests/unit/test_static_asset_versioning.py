@@ -23,6 +23,7 @@ from video_transcript_api.api.context import (
     get_static_dir,
     get_templates,
 )
+from video_transcript_api.api.routes import views as views_mod
 
 
 def _write(path: Path, content: str) -> None:
@@ -78,7 +79,7 @@ def _render_transcript(**overrides) -> str:
         "llm_config": None,
     }
     ctx.update(overrides)
-    return get_templates().env.get_template("transcript.html").render(**ctx)
+    return views_mod.templates.env.get_template("transcript.html").render(**ctx)
 
 
 class TestComputeAssetVersion:

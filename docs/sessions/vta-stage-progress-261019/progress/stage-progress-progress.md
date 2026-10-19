@@ -28,5 +28,9 @@
 - **关键决策与已否决方案**:详细笔记路径维持既有直写 update_task_progress(`{"stage":"notes","done","total"}` 契约,卡面约束明文豁免的「notes 细节更新」),notes-only 任务的 tracker 不接 sink(无交接 tracker),故 `report_subprogress` 失去消费者按反熵条款撤除;否决「把 notes 细粒度计数并入入口文档」——会打破 tests/integration/test_llm_ops_generate_notes.py:223 的整字典契约断言且该文件在 Scope-Globs 外。notes 阶段运行时 status=processing(非终态),终态限定不影响其写入。
 - **下一步唯一动作**:红验①(入口进入不写库 → 阶段进行中可见测试转红)。
 
+## 里程碑 5:合并主线并适配语言一致性
 
-
+- **当前阶段**:implementing(341dc874 主线已合入,适配与三套验证完成,待 merge commit + push)
+- **本段结论**:按主线词表排序补入 13 个阶段键,两份 locale 关键集一致且 JSON 有序;processing 页保留主线 `t()` 文案与 stage-progress 块。浏览器夹具调用生产 `build_stage_progress_display`,使阶段文案与模板 `t()` 同按全局语言配置切换,完整测试通过。
+- **关键决策与已否决方案**:主线 `get_language()` 读取全局配置,不是按请求或任务选语言;Jinja 的 `t()` 与 resolver 的 `t()` 共用该入口,故保留 resolver 预渲染,不把展示组装迁入模板。浏览器夹具使用生产 resolver,并由英文页面无 CJK 断言覆盖此一致性;无词表的新阶段内部名回显测试保留。
+- **下一步唯一动作**:提交合并结果并 push 分支,再查远端确认提交已发布。

@@ -1,0 +1,23 @@
+处理中 - 视频转录查看器
+由开源项目
+VideoTranscriptAPI
+生成
+·
+by
+张立行
+☀️
+📝 提交任务
+📋 任务历史
+Fixture Title
+👤 Fixture Author
+🔗
+查看原视频
+⏰ 2026-10-08 12:00
+⏳ 转录处理中...
+视频转录任务正在进行中，请稍后刷新页面查看结果。
+🔄 刷新页面
+任务创建时间：2026-10-08 12:00
+Powered by
+VideoTranscriptAPI
+· Open Source ·
+☆ Star on GitHub

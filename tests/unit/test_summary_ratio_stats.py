@@ -22,6 +22,7 @@ def _seed_task(
     original_text: str,
     summary_text: str,
     original_length_band: int,
+    summary_language: str = "zh-CN",
 ):
   cache_root = tmp_path / "cache"
   audit_path = tmp_path / "audit.db"
@@ -45,6 +46,15 @@ def _seed_task(
     use_speaker_recognition=False,
     llm_type="summary",
     content=summary_text,
+  )
+  cm.save_llm_status(
+    platform="youtube",
+    media_id=media_id,
+    use_speaker_recognition=False,
+    artifact_provenance={
+      "schema_version": "artifact-provenance-v1",
+      "layers": {"summary": {"language": summary_language}},
+    },
   )
   task = cm.create_task(
     url=f"https://www.youtube.com/watch?v={media_id}",
@@ -124,6 +134,34 @@ def test_over_hardcap_counted(tmp_path):
     days=30,
   )
   assert result["bands"]["S"]["over_hardcap"] == 1
+
+
+@pytest.mark.parametrize(
+  ("summary_language", "expected_over_hardcap"),
+  [("en", 0), ("zh-CN", 1)],
+)
+def test_over_hardcap_uses_summary_provenance_language(
+  tmp_path, summary_language, expected_over_hardcap
+):
+  _seed_task(
+    tmp_path,
+    task_id=f"t-{summary_language}",
+    media_id=f"vid-{summary_language}",
+    original_text="short",
+    summary_text="x" * 7000,
+    original_length_band=10000,
+    summary_language=summary_language,
+  )
+
+  cache_root = tmp_path / "cache"
+  result = compute_summary_ratio_stats(
+    audit_db_path=str(tmp_path / "audit.db"),
+    cache_db_path=str(cache_root / "cache.db"),
+    cache_root=cache_root,
+    days=30,
+  )
+
+  assert result["bands"]["M"]["over_hardcap"] == expected_over_hardcap
 
 
 def test_summary_ratio_endpoint_ok_when_audit_db_config_missing(tmp_path):

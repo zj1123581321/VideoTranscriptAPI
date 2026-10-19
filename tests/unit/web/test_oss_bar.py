@@ -16,6 +16,7 @@ All console output must be in English only per project testing conventions.
 from pathlib import Path
 import re
 import jinja2
+from video_transcript_api.utils.rendering.i18n_jinja import install_i18n
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -34,6 +35,7 @@ def _jinja_env() -> jinja2.Environment:
         loader=jinja2.FileSystemLoader(str(TEMPLATES_DIR)),
         autoescape=True,
     )
+    install_i18n(env)
     env.globals["asset_v"] = "test-asset-v"
     return env
 

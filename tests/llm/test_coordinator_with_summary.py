@@ -3,6 +3,8 @@
 import unittest
 from unittest.mock import Mock, patch
 from video_transcript_api.llm import LLMCoordinator
+from video_transcript_api.llm.processors.summary_processor import SummaryResult
+from video_transcript_api.utils.llm_status import SummaryStatus
 
 
 class TestCoordinatorWithSummary(unittest.TestCase):
@@ -33,6 +35,32 @@ class TestCoordinatorWithSummary(unittest.TestCase):
         )
 
         self.assertIsNotNone(coordinator.summary_processor)
+
+    def test_coordinator_precheck_uses_language_scaled_threshold(self):
+        coordinator = LLMCoordinator(
+            config_dict=self.config_dict,
+            cache_dir=self.cache_dir,
+        )
+        with patch(
+            "video_transcript_api.llm.prompts.localized.get_language",
+            return_value="en",
+        ), patch.object(
+            coordinator.summary_processor,
+            "process",
+            return_value=SummaryResult(text="generated", status=SummaryStatus.GENERATED),
+        ) as process_summary:
+            result = coordinator._generate_summary_if_needed(
+                text="x" * 800,
+                title="Test",
+                author="",
+                description="",
+                speaker_count=0,
+                transcription_data=None,
+                selected_models={},
+            )
+
+        self.assertEqual(result.status, SummaryStatus.SKIPPED_SHORT)
+        process_summary.assert_not_called()
 
     @patch('video_transcript_api.llm.core.llm_client.LLMClient.call')
     def test_short_text_skips_summary(self, mock_call):

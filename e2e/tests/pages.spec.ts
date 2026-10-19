@@ -137,9 +137,9 @@ test('processing view shows current stage and completed stages', async ({ page }
   await expect(stageProgress).toBeVisible();
   await expect(stageProgress).toContainText('当前阶段');
   await expect(stageProgress).toContainText('下载');
-  await expect(stageProgress).toContainText('已进行 1 分 23 秒');
+  await expect(stageProgress).toContainText(/已进行 \d+ 分 \d+ 秒/);
   await expect(stageProgress).toContainText('已完成阶段');
-  await expect(stageProgress).toContainText('转录（耗时 1 分 05 秒）');
+  await expect(stageProgress).toContainText('转录（耗时 1 分 5 秒）');
 });
 
 test('failed view smoke: error state is visible', async ({ page }) => {

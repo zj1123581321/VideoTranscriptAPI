@@ -1,12 +1,14 @@
 import asyncio
 import datetime
+import json
 import threading
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from ..utils.notifications import init_all_notifiers, shutdown_all_notifiers
@@ -339,6 +341,17 @@ def create_app(
         return FileResponse(
             sw_path,
             media_type="application/javascript",
+            headers={"Cache-Control": "no-cache"},
+        )
+
+    @app.get("/i18n.js", include_in_schema=False)
+    async def i18n_catalog_script() -> Response:
+        """Inject ``window.I18N`` (web.* catalog subset) for static pages."""
+        from ..i18n import get_language, web_catalog_script
+
+        return Response(
+            content=web_catalog_script(get_language()),
+            media_type="application/javascript; charset=utf-8",
             headers={"Cache-Control": "no-cache"},
         )
 

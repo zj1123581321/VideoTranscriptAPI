@@ -55,6 +55,8 @@ from ...utils.llm_status import (
     NotesStatus,
     SummaryStatus,
 )
+from ...i18n import get_language
+from ...cache.cache_manager import language_mismatched_generation_layers
 
 logger = lazy_resource(get_logger)
 config = lazy_resource(get_config)
@@ -67,6 +69,25 @@ _NOTES_STALE_CHAPTERS_ERROR = (
     "chapters changed during notes generation, "
     "notes discarded to avoid misalignment"
 )
+
+def _provenance_layers(llm_status: Any) -> dict:
+    if not isinstance(llm_status, dict):
+        return {}
+    provenance = llm_status.get("artifact_provenance")
+    if (
+        isinstance(provenance, dict)
+        and provenance.get("schema_version") == "artifact-provenance-v1"
+        and isinstance(provenance.get("layers"), dict)
+    ):
+        return provenance["layers"]
+    return {}
+
+
+def log_language_mismatch_regenerate(layer: str, old_language: str, new_language: str) -> None:
+    """Emit the locked LANGUAGE-MISMATCH-REGENERATE warning."""
+    logger.warning(
+        f"LANGUAGE-MISMATCH-REGENERATE layer={layer} old={old_language} new={new_language}"
+    )
 
 
 def _requires_llm_title(
@@ -403,6 +424,17 @@ def _handle_notes_generation(
     if not cache_dir:
         raise ValueError("Detailed notes task requires a valid cache directory")
 
+    notes_status_snapshot = cache_manager.get_cache(
+        platform,
+        media_id,
+        use_speaker_recognition=use_speaker_recognition,
+    )
+    for layer_name, old_language, new_language in language_mismatched_generation_layers(
+        notes_status_snapshot,
+    ):
+        if layer_name == "notes":
+            log_language_mismatch_regenerate(layer_name, old_language, new_language)
+
     chapter_count = 0
     try:
         chapters_payload = json.loads(
@@ -476,11 +508,30 @@ def _handle_notes_generation(
             ):
                 raise OSError("Failed to persist detailed notes artifact")
 
+            notes_cache = cache_manager.get_cache(
+                platform,
+                media_id,
+                use_speaker_recognition=use_speaker_recognition,
+            )
+            notes_layers = dict(
+                _provenance_layers((notes_cache or {}).get("llm_status"))
+            )
+            notes_record = notes_layers.get("notes")
+            if not isinstance(notes_record, dict):
+                notes_record = {}
+            else:
+                notes_record = dict(notes_record)
+            notes_record["language"] = get_language()
+            notes_layers["notes"] = notes_record
             cache_manager.save_llm_status(
                 platform=platform,
                 media_id=media_id,
                 use_speaker_recognition=use_speaker_recognition,
                 notes_status=NotesStatus.GENERATED,
+                artifact_provenance={
+                    "schema_version": "artifact-provenance-v1",
+                    "layers": notes_layers,
+                },
             )
         notes_outcome["notes_status"] = NotesStatus.GENERATED
         status_written = finalize_terminal_status_and_notify(
@@ -696,6 +747,31 @@ def _handle_llm_task(llm_task: dict):
                     skip_chapters_for_coordinator = not force_chapters_recompute
                 else:
                     skip_chapters_for_coordinator = not chapters_requested
+
+                lang_cache = cache_snapshot_for_flags
+                if lang_cache is None and platform and media_id:
+                    lang_cache = cache_manager.get_cache(
+                        platform,
+                        media_id,
+                        use_speaker_recognition=use_speaker_recognition,
+                    )
+                language_mismatches = language_mismatched_generation_layers(lang_cache)
+                if not calibrate_only:
+                    for layer_name, _old_language, _new_language in language_mismatches:
+                        if layer_name == "summary" and summarize_requested:
+                            skip_summary_for_coordinator = False
+                        elif layer_name == "chapters" and chapters_requested:
+                            skip_chapters_for_coordinator = False
+                for layer_name, old_language, new_language in language_mismatches:
+                    will_generate = (
+                        layer_name == "summary" and not skip_summary_for_coordinator
+                    ) or (
+                        layer_name == "chapters" and not skip_chapters_for_coordinator
+                    )
+                    if will_generate:
+                        log_language_mismatch_regenerate(
+                            layer_name, old_language, new_language
+                        )
 
                 # Cache-side chapters seed (this-round dialogs preferred inside
                 # coordinator after calibration). Keep llm/ package pure.
@@ -2547,6 +2623,7 @@ def _save_llm_results(
                     "generation_kind": source.get("generation_kind", "unknown"),
                     "actual_model": "unknown",
                     "prompt_version": "unknown",
+                    "language": get_language(),
                 }
                 requested_model = source.get("requested_model")
                 if isinstance(requested_model, str) and requested_model:
@@ -2567,6 +2644,15 @@ def _save_llm_results(
                     final_artifact_layers.pop("summary", None)
                 else:
                     final_artifact_layers["summary"] = summary_record
+
+        if chapters_saved:
+            chapters_record = final_artifact_layers.get("chapters")
+            if not isinstance(chapters_record, dict):
+                chapters_record = {}
+            else:
+                chapters_record = dict(chapters_record)
+            chapters_record["language"] = get_language()
+            final_artifact_layers["chapters"] = chapters_record
 
         final_artifact_provenance = (
             {

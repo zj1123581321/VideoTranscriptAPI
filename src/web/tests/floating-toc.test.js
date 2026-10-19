@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
+import { installI18n } from './install-i18n.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const scriptSource = fs.readFileSync(
@@ -42,19 +43,19 @@ function createFixture({
   mobile = false,
 } = {}) {
   const summaryMarkup = includeSummary ? `
-    <div class="section" id="summary-section">
+    <div class="section" id="summary-section" data-section="summary">
       <div class="section-header"><h2>内容总结</h2></div>
       <div class="content"><h2 id="summary-heading">关键观点</h2><h3 id="summary-subheading">子观点</h3><p>summary</p></div>
     </div>` : '';
   const notesMarkup = notes.length > 0 ? `
-    <details class="section notes-section" id="notes-section" ${notesOpen ? 'open' : ''}>
+    <details class="section notes-section" id="notes-section" data-section="notes" ${notesOpen ? 'open' : ''}>
       <summary class="section-header"><h2>详细笔记</h2></summary>
       <div class="content" id="notes-content-block">
         ${notes.map(({ index, title }) => `<h2 id="notes-chapter-${index}">${title}</h2>`).join('')}
       </div>
     </details>` : '';
   const calibratedMarkup = calibrated.length > 0 || dialogs.length > 0 ? `
-    <div class="section" id="calibrated-section">
+    <div class="section" id="calibrated-section" data-section="calibrated">
       <div class="section-header"><h2>校对文本</h2></div>
       <div class="content" id="calibrated-content-block">
         ${calibrated.map(index => `<div class="chapter-anchor" id="chapter-anchor-${index}"><span class="chapter-anchor-title">校对章节 ${index}</span></div>`).join('')}
@@ -92,6 +93,7 @@ function createFixture({
   dom.window.HTMLElement.prototype.scrollIntoView = vi.fn();
   dom.window.console.log = vi.fn();
   dom.window.console.warn = vi.fn();
+  installI18n(dom.window);
   dom.window.eval(scriptSource);
   dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
 

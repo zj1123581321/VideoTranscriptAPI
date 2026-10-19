@@ -32,6 +32,7 @@ from src.video_transcript_api.cache.cache_manager import CacheManager
 from src.video_transcript_api.downloaders.models import DownloadInfo, VideoMetadata
 from src.video_transcript_api.utils.task_status import TaskStatus
 from src.video_transcript_api.utils.perf_tracker import PerfTracker
+from video_transcript_api.utils.rendering.i18n_jinja import install_i18n
 from src.video_transcript_api.utils.tempfile_manager import TempFileManager
 
 TEMPLATE_DIR = (
@@ -329,6 +330,7 @@ class TestViewStageProgress:
             autoescape=select_autoescape(["html"]),
         )
         environment.globals["asset_v"] = "unit-test"
+        install_i18n(environment)
         html = environment.get_template("processing.html").render(
             request=None,
             page_title="unit test",
@@ -527,6 +529,7 @@ class TestProcessTranscriptionStagePublishing:
             autoescape=select_autoescape(["html"]),
         )
         environment.globals["asset_v"] = "unit-test"
+        install_i18n(environment)
         html = environment.get_template("processing.html").render(
             request=None,
             page_title="e2e",

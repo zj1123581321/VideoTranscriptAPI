@@ -19,10 +19,12 @@ from ...utils.logging import setup_logger
 from ...utils.llm_status import NotesStatus
 from ..core.config import LLMConfig
 from ..core.llm_client import LLMClient
-from ..prompts import (
-    NOTES_SYSTEM_PROMPT_NO_SPEAKER,
-    NOTES_SYSTEM_PROMPT_SPEAKER,
+from ..prompts import en as en_prompts
+from ..prompts.localized import (
     build_notes_user_prompt,
+    is_english,
+    length_budget_coefficient,
+    notes_system_prompt,
 )
 from .chapters_processor import _compute_fingerprint
 
@@ -483,10 +485,8 @@ class NotesProcessor:
 
             model, reasoning_effort = self._resolve_model(selected_models)
             has_speaker_labels = detect_notes_speaker_labels(source)
-            system_prompt = (
-                NOTES_SYSTEM_PROMPT_SPEAKER
-                if has_speaker_labels
-                else NOTES_SYSTEM_PROMPT_NO_SPEAKER
+            system_prompt = notes_system_prompt(
+                has_speaker_labels=has_speaker_labels
             )
 
             def generate_chapter_notes(position: int, chapter: NotesChapterSlice) -> str:
@@ -543,16 +543,22 @@ class NotesProcessor:
                     raise RuntimeError(f"chapter {position} notes response is empty")
 
                 body_length = _notes_slice_body_length(chapter.segments)
+                max_notes_ratio = 0.8 * length_budget_coefficient()
                 ratio = len(chapter_notes) / body_length
-                if ratio > 0.8:
-                    retry_prompt = f"{user_prompt}\n\n{_NOTES_DENSITY_RETRY_PROMPT}"
+                if ratio > max_notes_ratio:
+                    density_retry = (
+                        en_prompts.NOTES_DENSITY_RETRY_PROMPT
+                        if is_english()
+                        else _NOTES_DENSITY_RETRY_PROMPT
+                    )
+                    retry_prompt = f"{user_prompt}\n\n{density_retry}"
                     retry_notes = sanitize_notes_chapter_output(
                         call_notes(retry_prompt), chapter.title
                     )
                     if not retry_notes:
                         raise RuntimeError(f"chapter {position} notes response is empty")
                     ratio = len(retry_notes) / body_length
-                    if ratio > 0.8:
+                    if ratio > max_notes_ratio:
                         logger.warning(
                             f"Notes chapter {position} remains over length budget after retry: ratio={ratio:.3f}"
                         )

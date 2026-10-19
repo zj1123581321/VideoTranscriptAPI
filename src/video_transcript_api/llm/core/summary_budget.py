@@ -50,6 +50,7 @@ class SummaryBudgetConfig:
 def compute_summary_budget(
     original_length: int,
     config: Optional[SummaryBudgetConfig] = None,
+    coefficient: float = 1.0,
 ) -> SummaryBudget:
     """Compute summary budget from calibrated transcript length L (characters).
 
@@ -60,9 +61,14 @@ def compute_summary_budget(
 
     For L < 800 (possible when min_summary_threshold < 800), S-band targets apply
     with the same hard-cap formula as S.
+
+    ``coefficient`` scales the character budget for the output language (English
+    needs more characters for the same information). Default 1.0 keeps the
+    Chinese bands unchanged. Band selection still uses the unscaled L.
     """
     cfg = config or SummaryBudgetConfig()
     length = max(0, int(original_length))
+    scale = float(coefficient)
 
     if length >= 30000:
         target_min = cfg.l_target_min
@@ -79,6 +85,10 @@ def compute_summary_budget(
 
     # Prompt 注入的 target_max 不得超过 hard_cap（S 带 L∈[800,1500) 时 2L < s_target_max）。
     target_max = min(target_max, hard_cap)
+
+    target_min = int(target_min * scale)
+    target_max = int(target_max * scale)
+    hard_cap = int(hard_cap * scale)
 
     max_tokens = int(hard_cap * cfg.max_tokens_multiplier)
     return SummaryBudget(
