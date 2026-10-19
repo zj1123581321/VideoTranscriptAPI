@@ -112,24 +112,42 @@ def test_language_mismatch_regenerate_log_locked(language_config):
     assert "new=en" in message
 
 
-def test_notes_and_chapters_and_share_card_are_generation_layers(tmp_path):
+def test_english_summary_with_share_card_file_is_not_a_mismatch(
+    tmp_path, language_config
+):
+    """A matching English summary must not be regenerated just because a share card file exists."""
+    language_config("en")
+    (tmp_path / "llm_summary.txt").write_text("english summary", encoding="utf-8")
+    (tmp_path / "llm_share_card.json").write_text("{}", encoding="utf-8")
+    cache_data = _cache_data(
+        tmp_path,
+        {"summary": {"language": "en"}},
+        payload_keys=("llm_summary",),
+    )
+    mismatches = language_mismatched_generation_layers(cache_data)
+    assert mismatches == []
+    with patch.object(llm_ops, "logger") as mock_logger:
+        for layer, old, new in mismatches:
+            llm_ops.log_language_mismatch_regenerate(layer, old, new)
+    mock_logger.warning.assert_not_called()
+
+
+def test_notes_and_chapters_are_generation_layers(tmp_path):
     (tmp_path / "llm_notes.txt").write_text("notes", encoding="utf-8")
     (tmp_path / "llm_chapters.json").write_text("{}", encoding="utf-8")
-    (tmp_path / "llm_share_card.json").write_text("{}", encoding="utf-8")
     mismatches = language_mismatched_generation_layers(
         _cache_data(
             tmp_path,
             {
                 "notes": {"language": "zh-CN"},
                 "chapters": {"language": "zh-CN"},
-                "share_card": {"language": "zh-CN"},
             },
             payload_keys=("llm_notes", "llm_chapters"),
         ),
         current_language="en",
     )
     names = {item[0] for item in mismatches}
-    assert names == {"notes", "chapters", "share_card"}
+    assert names == {"notes", "chapters"}
 
 
 def test_resubmit_queues_summary_and_logs_language_mismatch(language_config, monkeypatch):

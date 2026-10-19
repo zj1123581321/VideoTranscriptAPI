@@ -758,14 +758,13 @@ def _handle_llm_task(llm_task: dict):
                 language_mismatches = language_mismatched_generation_layers(lang_cache)
                 if not calibrate_only:
                     for layer_name, _old_language, _new_language in language_mismatches:
-                        if layer_name in ("summary", "share_card") and summarize_requested:
+                        if layer_name == "summary" and summarize_requested:
                             skip_summary_for_coordinator = False
                         elif layer_name == "chapters" and chapters_requested:
                             skip_chapters_for_coordinator = False
                 for layer_name, old_language, new_language in language_mismatches:
                     will_generate = (
-                        layer_name in ("summary", "share_card")
-                        and not skip_summary_for_coordinator
+                        layer_name == "summary" and not skip_summary_for_coordinator
                     ) or (
                         layer_name == "chapters" and not skip_chapters_for_coordinator
                     )

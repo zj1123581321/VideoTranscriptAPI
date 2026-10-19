@@ -70,7 +70,6 @@ _GENERATION_LAYER_FILES = {
     "summary": ("llm_summary", "llm_summary.txt"),
     "notes": ("llm_notes", "llm_notes.txt"),
     "chapters": ("llm_chapters", "llm_chapters.json"),
-    "share_card": (None, "llm_share_card.json"),
 }
 
 

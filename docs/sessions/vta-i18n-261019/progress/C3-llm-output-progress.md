@@ -41,3 +41,10 @@
 - **本段结论**：`get_cache` 不再按语言过滤。ViewTokenResolver 在 language=en 时仍返回原中文 summary/notes。复用判定收口为 `language_mismatched_generation_layers`，transcription / llm_ops / generate_notes 共用。HEAD `09da4805` 上该 View 测试以 AssertionError 先红。
 - **关键决策与已否决方案**：否决继续用 get_cache 隐藏层。语言不一致的笔记允许重新生成，同语言仍 400。
 - **下一步唯一动作**：跑 Narrow-Verify 与 make test，scope check 后 push。
+
+## 2026-10-19 分享卡不再单独做语言判定
+
+- **当前阶段**：implementing
+- **本段结论**：从 `_GENERATION_LAYER_FILES` 删除 share_card。en 下 summary 已是 en 且仅有分享卡文件时 mismatch 为空。HEAD `7882798b` 上该测试以 AssertionError 先红（`('share_card', 'zh-CN', 'en')`）。
+- **关键决策与已否决方案**：否决给分享卡补 provenance；它随总结重生删除重建。
+- **下一步唯一动作**：generate_notes 准入恢复 `_read_fresh_notes_status` 权威读。
