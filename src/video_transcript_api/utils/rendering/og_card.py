@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 
 from PIL import Image, ImageDraw, ImageFont
 
+from ...i18n import t
 from ...llm.processors.share_card_processor import _validate_card
 from ...llm.prompts.schemas.share_card import SHARE_CARD_FORMAT_VERSION
 from ..logging import setup_logger
@@ -63,8 +64,14 @@ FOOTER_FONT_SIZE = 30
 FOOTER_TOP = HEIGHT - 54
 FOOTER_GAP = 24  # min gap between the footer host text and the AI label
 
+# zh-CN catalog value; tests measure layout against this constant. Render
+# paths call t("og.ai_label") so language=en draws the English label.
 AI_LABEL = "AI 总结"
 ELLIPSIS = "…"
+
+
+def _ai_label() -> str:
+    return t("og.ai_label")
 
 
 def load_share_card(cache_dir: str | Path) -> Optional[Dict[str, Any]]:
@@ -208,8 +215,8 @@ def layout_header(
 
 
 def layout_footer_host(host: str, draw: ImageDraw.ImageDraw, font) -> str:
-    """Footer host, truncated to clear the right-aligned "AI 总结" label."""
-    label_width = _text_width(draw, AI_LABEL, font)
+    """Footer host, truncated to clear the right-aligned AI label."""
+    label_width = _text_width(draw, _ai_label(), font)
     available = WIDTH - 2 * MARGIN - label_width - FOOTER_GAP
     return truncate_lines(host, font, available, draw, 1)[0]
 
@@ -287,10 +294,11 @@ def render_og_card(
     host = urlparse(site_url).hostname or site_url
     host_line = layout_footer_host(host, draw, footer_font)
     draw.text((MARGIN, FOOTER_TOP), host_line, font=footer_font, fill=FOOTER_COLOR)
-    label_width = _text_width(draw, AI_LABEL, footer_font)
+    ai_label = _ai_label()
+    label_width = _text_width(draw, ai_label, footer_font)
     draw.text(
         (WIDTH - MARGIN - label_width, FOOTER_TOP),
-        AI_LABEL,
+        ai_label,
         font=footer_font,
         fill=ACCENT_COLOR,
     )

@@ -15,3 +15,18 @@ implementing
 
 ### 下一步唯一动作
 改 `dialog_renderer.py`：待确认读 `speaker_inference_meta.applied`，中英占位名正则仅作旧数据兜底；固定文案改走 `t()`。
+
+## 2026-10-19 渲染器 applied 判定与分享图标签
+
+### 当前阶段
+implementing
+
+### 本段结论
+说话人「待确认」改为读 `speaker_inference_meta` 的 applied 标记；无该字段时中英占位名正则兜底。结果页徽章与 OG 卡面 `AI 总结` 走目录，zh-CN 对照夹具仍绿。
+
+### 关键决策与已否决方案
+- 保留 `og_card.AI_LABEL` 常量给既有布局测试量宽，渲染路径每次调用 `t("og.ai_label")`。
+- 已否决：继续只用 `^说话人\\d+$` 判定（英文 Speaker N 永远没有待确认）。
+
+### 下一步唯一动作
+`views.py` 首页/导出元数据走 `t()`，Jinja 注入 `t`/`html_lang`，改模板。
