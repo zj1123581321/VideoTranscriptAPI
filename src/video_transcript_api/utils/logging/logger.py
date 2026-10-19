@@ -70,11 +70,18 @@ def load_config(config_path=None, *, use_cache=True):
     # 这样「配置里没有 language」与「显式写了 zh-CN」在语义上仍然可区分，
     # 也不会把默认值混进用户配置的其它消费方。
     #
+    # ``isinstance`` 前置条件（不是防御式兜底）：本文件对「根不是对象」这类形状
+    # 错误没有判定权，负责报错的是 api/context.py::validate_config
+    # （"configuration root must be an object"）。少了它，一个 123/null 的根会在
+    # 这里先抛 ``TypeError: argument of type 'int' is not iterable``，把原本明确的
+    # 报错换成一句与真实原因无关的话；不再由本行判定就原样往下走，既不吞错也
+    # 不抢注释权。
+    #
     # 函数内 import（而非模块顶层）：i18n 包的 ``get_language()`` 反向 import
     # 本模块的 load_config，顶层互相 import 会成环；而且 tests/conftest.py 会
     # 把本模块作为独立模块预热进 sys.modules（不带父包），顶层相对 import 会
     # 在那一刻拉进整个包初始化链，破坏预热的目的。
-    if "language" in parsed:
+    if isinstance(parsed, dict) and "language" in parsed:
         from ...i18n import validate_language
 
         validate_language(parsed["language"])

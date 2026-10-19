@@ -118,6 +118,39 @@ def test_config_load_rejects_unsupported_language(tmp_path):
     assert "zh-CN, en" in message, message
 
 
+def test_non_object_config_root_keeps_its_own_error(tmp_path):
+    """The language check must not hijack the root-shape error.
+
+    ``validate_config`` owns ``"configuration root must be an object"``. A
+    non-dict root therefore has to reach it unchanged; otherwise the user sees
+    ``TypeError: argument of type 'int' is not iterable``, which names neither
+    the file nor the real problem (regression caught in review of the first
+    round of this card).
+    """
+    config_path = tmp_path / "config.jsonc"
+    config_path.write_text("123", encoding="utf-8")
+
+    # load_config itself must not raise on the shape: it has no say over it.
+    # The call is wrapped in try/except only so the failure surfaces as a failed
+    # assertion rather than an unrelated exception type: the assertion is what
+    # this test is about, and a bare call would turn a regression into an
+    # Error (not a Failure) with no diff to read.
+    raised = None
+    try:
+        parsed = load_config(config_path, use_cache=False)
+    except Exception as exc:  # noqa: BLE001 - re-asserted immediately below
+        raised = exc
+        parsed = None
+    assert raised is None, f"load_config must not judge the config root shape: {raised!r}"
+    assert parsed == 123
+
+    from video_transcript_api.api.context import ConfigError, validate_config
+
+    with pytest.raises(ConfigError) as excinfo:
+        validate_config(123)
+    assert "configuration root must be an object" in str(excinfo.value)
+
+
 def test_get_language_rejects_unsupported_language(language_config):
     """Even a mutated in-memory config cannot silently produce a wrong locale."""
     language_config("fr")
