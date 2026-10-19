@@ -10,6 +10,9 @@ from video_transcript_api.utils.rendering.i18n_jinja import html_lang, og_locale
 
 def test_production_templates_env_exposes_i18n_globals():
     env = views_mod.templates.env
+    assert "t" in env.globals
+    assert "html_lang" in env.globals
+    assert "og_locale" in env.globals
     assert env.globals["t"] is t
     assert env.globals["html_lang"] is html_lang
     assert env.globals["og_locale"] is og_locale
