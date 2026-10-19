@@ -56,7 +56,7 @@ from ...utils.llm_status import (
     SummaryStatus,
 )
 from ...i18n import get_language
-from ...cache.cache_manager import generation_layer_language
+from ...cache.cache_manager import language_mismatched_generation_layers
 
 logger = lazy_resource(get_logger)
 config = lazy_resource(get_config)
@@ -70,14 +70,6 @@ _NOTES_STALE_CHAPTERS_ERROR = (
     "notes discarded to avoid misalignment"
 )
 
-_GENERATION_LAYER_FILES = {
-    "summary": "llm_summary.txt",
-    "notes": "llm_notes.txt",
-    "chapters": "llm_chapters.json",
-    "share_card": "llm_share_card.json",
-}
-
-
 def _provenance_layers(llm_status: Any) -> dict:
     if not isinstance(llm_status, dict):
         return {}
@@ -89,31 +81,6 @@ def _provenance_layers(llm_status: Any) -> dict:
     ):
         return provenance["layers"]
     return {}
-
-
-def collect_language_mismatched_generation_layers(
-    cache_dir: Optional[str],
-    layers: Any,
-    current_language: str,
-) -> list:
-    """Return (layer, old_language, new_language) for generation layers to redo.
-
-    A layer is a candidate when its file exists on disk or it already has a
-    provenance record. Missing language is treated as zh-CN. Calibration is
-    never included.
-    """
-    layer_map = layers if isinstance(layers, dict) else {}
-    mismatches = []
-    cache_path = Path(cache_dir) if cache_dir else None
-    for layer_name, filename in _GENERATION_LAYER_FILES.items():
-        exists = bool(cache_path and (cache_path / filename).exists())
-        record = layer_map.get(layer_name)
-        if not exists and not isinstance(record, dict):
-            continue
-        old_language = generation_layer_language(record)
-        if old_language != current_language:
-            mismatches.append((layer_name, old_language, current_language))
-    return mismatches
 
 
 def log_language_mismatch_regenerate(layer: str, old_language: str, new_language: str) -> None:
@@ -462,10 +429,8 @@ def _handle_notes_generation(
         media_id,
         use_speaker_recognition=use_speaker_recognition,
     )
-    for layer_name, old_language, new_language in collect_language_mismatched_generation_layers(
-        cache_dir=cache_dir,
-        layers=_provenance_layers((notes_status_snapshot or {}).get("llm_status")),
-        current_language=get_language(),
+    for layer_name, old_language, new_language in language_mismatched_generation_layers(
+        notes_status_snapshot,
     ):
         if layer_name == "notes":
             log_language_mismatch_regenerate(layer_name, old_language, new_language)
@@ -790,11 +755,7 @@ def _handle_llm_task(llm_task: dict):
                         media_id,
                         use_speaker_recognition=use_speaker_recognition,
                     )
-                language_mismatches = collect_language_mismatched_generation_layers(
-                    cache_dir=(lang_cache or {}).get("file_path"),
-                    layers=_provenance_layers((lang_cache or {}).get("llm_status")),
-                    current_language=get_language(),
-                )
+                language_mismatches = language_mismatched_generation_layers(lang_cache)
                 if not calibrate_only:
                     for layer_name, _old_language, _new_language in language_mismatches:
                         if layer_name in ("summary", "share_card") and summarize_requested:

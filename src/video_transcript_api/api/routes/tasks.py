@@ -30,6 +30,7 @@ from ..services.transcription import (
 from ..services.view_token_resolver import ViewTokenResolver
 from ...utils.busy_lock import acquire_for_task, release_for_task
 from ...utils.llm_status import ChaptersStatus, NotesStatus, SummaryStatus
+from ...cache.cache_manager import language_mismatched_generation_layers
 from ...utils.notifications import send_view_link_wechat, get_notification_router
 from ...utils.task_status import TaskStatus, http_code_for_status
 from ..services.terminal_status import finalize_terminal_status_and_notify
@@ -1273,8 +1274,13 @@ async def generate_notes(
             detail="详细笔记依赖已生成的章节层，请先生成章节后再重试",
         )
     if llm_status.get("notes_status") == NotesStatus.GENERATED:
-        logger.warning(f"详细笔记已存在，拒绝重复生成: {view_token}")
-        raise HTTPException(status_code=400, detail="详细笔记已存在，无需重复生成")
+        notes_language_mismatch = any(
+            layer == "notes"
+            for layer, _old, _new in language_mismatched_generation_layers(cache_data)
+        )
+        if not notes_language_mismatch:
+            logger.warning(f"详细笔记已存在，拒绝重复生成: {view_token}")
+            raise HTTPException(status_code=400, detail="详细笔记已存在，无需重复生成")
 
     try:
         with cache_manager._get_cursor() as cursor:
@@ -1335,9 +1341,22 @@ async def generate_notes(
                 )
 
                 if inflight_notes_task_id is None:
+                    fresh_notes_cache = cache_manager.get_cache(
+                        platform,
+                        media_id,
+                        use_speaker_recognition=use_speaker_recognition,
+                    ) or {}
                     notes_generated_during_admission = (
-                        _read_fresh_notes_status(cache_file_path)
+                        (fresh_notes_cache.get("llm_status") or {}).get(
+                            "notes_status"
+                        )
                         == NotesStatus.GENERATED
+                        and not any(
+                            layer == "notes"
+                            for layer, _old, _new in language_mismatched_generation_layers(
+                                fresh_notes_cache
+                            )
+                        )
                     )
                     if not notes_generated_during_admission:
                         cursor.execute(

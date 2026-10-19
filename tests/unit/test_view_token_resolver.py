@@ -165,6 +165,55 @@ class TestViewTokenResolver:
         assert view_data["notes_state"] == "generated"
         assert view_data["notes"] == "## Chapter\n- Detailed note."
 
+    def test_view_keeps_zh_summary_and_notes_when_language_switches_to_en(
+        self, cm, resolver
+    ):
+        """Switching language must not hide already-generated artifacts on the view page."""
+        from video_transcript_api.utils.logging.logger import load_config
+
+        task = _make_success_task(cm, "vid-zh-view")
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid-zh-view",
+            use_speaker_recognition=False,
+            llm_type="summary",
+            content="cached-zh-summary",
+        )
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid-zh-view",
+            use_speaker_recognition=False,
+            llm_type="notes",
+            content="cached-zh-notes",
+        )
+        cm.save_llm_status(
+            platform="youtube",
+            media_id="vid-zh-view",
+            use_speaker_recognition=False,
+            summary_status="generated",
+            notes_status="generated",
+            artifact_provenance={
+                "schema_version": "artifact-provenance-v1",
+                "layers": {
+                    "summary": {"language": "zh-CN"},
+                    "notes": {"language": "zh-CN"},
+                },
+            },
+        )
+        config = load_config()
+        had_key = "language" in config
+        original = config.get("language")
+        config["language"] = "en"
+        try:
+            view_data = resolver.get_view_data_by_token(task["view_token"])
+            assert view_data["summary"] == "cached-zh-summary"
+            assert view_data["notes"] == "cached-zh-notes"
+        finally:
+            if had_key:
+                config["language"] = original
+            else:
+                config.pop("language", None)
+
     def test_failed_notes_has_no_placeholder_text(self, cm, resolver):
         task = _make_success_task(cm, "vid-notes-failed")
         cm.save_llm_status(

@@ -376,7 +376,10 @@ class TestSaveLLMResult:
         assert "llm_summary" in result
         assert result["llm_summary"] == "Summary."
 
-    def test_get_cache_hides_generation_layers_on_language_mismatch(self, cm):
+    def test_get_cache_keeps_generation_layers_on_language_mismatch(self, cm):
+        from video_transcript_api.cache.cache_manager import (
+            language_mismatched_generation_layers,
+        )
         from video_transcript_api.utils.logging.logger import load_config
 
         _save_sample_capswriter(cm)
@@ -416,8 +419,10 @@ class TestSaveLLMResult:
             result = cm.get_cache(platform="youtube", media_id="vid1")
             assert "llm_calibrated" in result
             assert result["llm_calibrated"] == "Calibrated."
-            assert "llm_summary" not in result
-            assert result["file_path"]
+            assert result["llm_summary"] == "Chinese summary."
+            mismatches = language_mismatched_generation_layers(result)
+            assert ("summary", "zh-CN", "en") in mismatches
+            assert all(item[0] != "calibration" for item in mismatches)
         finally:
             if had_key:
                 config["language"] = original

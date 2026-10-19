@@ -63,12 +63,14 @@ _SHUTDOWN_DRAIN_MIN_BUSY_TIMEOUT_MS = 50
 # 避免单条记录卡死整个清理任务（媒体锁不可用时的降级策略见 cleanup_old_cache）。
 _CLEANUP_MEDIA_LOCK_TIMEOUT_SECONDS = 5.0
 
-# Generation-layer cache keys judged by artifact_provenance.language.
+# Generation layers judged by artifact_provenance.language.
 # Calibration is intentionally absent: language mismatch must not rerun it.
-_GENERATION_CACHE_KEYS = {
-    "summary": "llm_summary",
-    "notes": "llm_notes",
-    "chapters": "llm_chapters",
+# Values are (get_cache payload key or None, on-disk filename).
+_GENERATION_LAYER_FILES = {
+    "summary": ("llm_summary", "llm_summary.txt"),
+    "notes": ("llm_notes", "llm_notes.txt"),
+    "chapters": ("llm_chapters", "llm_chapters.json"),
+    "share_card": (None, "llm_share_card.json"),
 }
 
 
@@ -86,16 +88,23 @@ def generation_layer_language(layer_record: Any) -> str:
     return language
 
 
-def _omit_language_mismatched_generation_layers(cache_data: Dict[str, Any]) -> None:
-    """Drop generation-layer payloads whose provenance language differs.
+def language_mismatched_generation_layers(
+    cache_data: Optional[Dict[str, Any]],
+    current_language: Optional[str] = None,
+) -> List[Tuple[str, str, str]]:
+    """Return ``(layer, old_language, new_language)`` for generation layers to redo.
 
-    Mutates ``cache_data`` in place. Files on disk are left untouched; callers
-    that only need ``file_path`` (save_llm_result / save_llm_status) still work.
-    Transcription then sees the layer as missing and queues regeneration.
+    A layer is a candidate when its payload is in ``cache_data``, its file
+    exists on disk, or it already has a provenance record. Missing language is
+    treated as zh-CN. Calibration is never included. Does not mutate cache_data:
+    view pages keep showing the old-language artifact until it is regenerated.
     """
     from ..i18n import get_language
 
-    current_language = get_language()
+    if current_language is None:
+        current_language = get_language()
+    if not isinstance(cache_data, dict):
+        return []
     status = cache_data.get("llm_status")
     layers: Dict[str, Any] = {}
     if isinstance(status, dict):
@@ -106,10 +115,18 @@ def _omit_language_mismatched_generation_layers(cache_data: Dict[str, Any]) -> N
             and isinstance(provenance.get("layers"), dict)
         ):
             layers = provenance["layers"]
-    for layer_name, cache_key in _GENERATION_CACHE_KEYS.items():
-        stored = generation_layer_language(layers.get(layer_name))
-        if stored != current_language:
-            cache_data.pop(cache_key, None)
+    cache_path = Path(cache_data["file_path"]) if cache_data.get("file_path") else None
+    mismatches: List[Tuple[str, str, str]] = []
+    for layer_name, (cache_key, filename) in _GENERATION_LAYER_FILES.items():
+        in_payload = cache_key is not None and cache_key in cache_data
+        on_disk = bool(cache_path and (cache_path / filename).exists())
+        record = layers.get(layer_name)
+        if not in_payload and not on_disk and not isinstance(record, dict):
+            continue
+        old_language = generation_layer_language(record)
+        if old_language != current_language:
+            mismatches.append((layer_name, old_language, current_language))
+    return mismatches
 
 
 class CacheManager:
@@ -1525,7 +1542,6 @@ class CacheManager:
                     logger.warning(f"读取 timeline segments 失败，忽略: {segments_exc}")
 
                 cache_data['file_path'] = str(file_path)
-                _omit_language_mismatched_generation_layers(cache_data)
                 
                 logger.info(f"缓存命中: {platform}/{media_id}, 说话人识别: {cache_data['use_speaker_recognition']}")
                 return cache_data

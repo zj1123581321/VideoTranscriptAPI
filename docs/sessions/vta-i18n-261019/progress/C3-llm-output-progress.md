@@ -34,3 +34,10 @@
 - **本段结论**：改坏日志字面量后 `test_language_mismatch_regenerate_log_locked` 以 AssertionError 转红并已还原。`make test` 退出码 0。`card_scope_check.py` 对 Base..HEAD 绿。本机无 LLM 凭据且出站网络被拦，真实样本补跑留给主脑。
 - **关键决策与已否决方案**：红验只改 `log_language_mismatch_regenerate` 那一行日志前缀，未整文件 checkout。
 - **下一步唯一动作**：提交本段进度并 push 到 `card/VideoTranscriptAPI-20261019-05`。
+
+## 2026-10-19 撤回 get_cache 语言隐藏
+
+- **当前阶段**：implementing
+- **本段结论**：`get_cache` 不再按语言过滤。ViewTokenResolver 在 language=en 时仍返回原中文 summary/notes。复用判定收口为 `language_mismatched_generation_layers`，transcription / llm_ops / generate_notes 共用。HEAD `09da4805` 上该 View 测试以 AssertionError 先红。
+- **关键决策与已否决方案**：否决继续用 get_cache 隐藏层。语言不一致的笔记允许重新生成，同语言仍 400。
+- **下一步唯一动作**：跑 Narrow-Verify 与 make test，scope check 后 push。
