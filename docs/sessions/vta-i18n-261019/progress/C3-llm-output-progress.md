@@ -13,3 +13,10 @@
 - **本段结论**：新增原生英文 prompt 模块与 `prompts/localized.py` 访问函数；总结/笔记/章节处理器按 `get_language()` 选 prompt。英文篇幅系数 1.8 作用于 summary budget 与 `min_summary_threshold`。章节标题英文按至多 12 个 word 写进 prompt，本地截断按 48 字符。
 - **关键决策与已否决方案**：中文 `__init__.py` 零改动；否决在中文 prompt 后拼接 write in English。`localized.chapters_schema()` 因与 chapters_processor 循环导入已撤，schema 在调用点分支。
 - **下一步唯一动作**：说话人兜底占位名按语言生成，并补 speaker_inferencer 测试。
+
+## 2026-10-19 说话人兜底名按语言生成
+
+- **当前阶段**：implementing
+- **本段结论**：`_build_fallback_label` 在 zh-CN 仍输出 `说话人N`，en 输出 `Speaker N`。复合推测名自动带上该前缀。
+- **关键决策与已否决方案**：复合名中的「标题关联推测」等中文标记保持原样（卡面只锁占位名）；不迁移历史 `speaker_mapping.json`。
+- **下一步唯一动作**：provenance 写入 language，缓存复用按语言判定，并打 LANGUAGE-MISMATCH-REGENERATE 日志。
