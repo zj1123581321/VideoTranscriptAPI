@@ -17,6 +17,7 @@
   "error.notes_already_in_progress": "Detailed notes are already being generated",
   "error.notes_chapters_required": "Generate chapters before requesting detailed notes",
   "error.notes_creation_failed": "Failed to create the detailed notes task",
+  "error.notes_ownership_denied": "You are not authorized to generate detailed notes for this task",
   "error.notes_permission_denied": "You do not have permission to generate detailed notes",
   "error.notes_queue_failed": "Failed to queue the detailed notes task",
   "error.notes_status_unavailable": "The detailed notes task status is temporarily unavailable",

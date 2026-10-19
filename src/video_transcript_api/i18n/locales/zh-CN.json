@@ -17,6 +17,7 @@
   "error.notes_already_in_progress": "详细笔记正在生成中，请等待当前任务完成",
   "error.notes_chapters_required": "详细笔记依赖已生成的章节层，请先生成章节后再重试",
   "error.notes_creation_failed": "创建详细笔记任务失败: {error}",
+  "error.notes_ownership_denied": "无权对该任务生成详细笔记",
   "error.notes_permission_denied": "无生成详细笔记权限",
   "error.notes_queue_failed": "详细笔记任务加入队列失败: {error}",
   "error.notes_status_unavailable": "详细笔记任务状态查询失败，请稍后重试",

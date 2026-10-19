@@ -61,6 +61,7 @@ _STATIC_BASE_DETAILS = [
     ("无权对该任务发起重新生成总结", "resummary_ownership_denied"),
     ("总结已存在，无需重新生成", "summary_already_exists"),
     ("无生成详细笔记权限", "notes_permission_denied"),
+    ("无权对该任务生成详细笔记", "notes_ownership_denied"),
     ("缓存中没有转录数据，无法生成详细笔记", "notes_transcript_missing"),
     ("详细笔记依赖已生成的章节层，请先生成章节后再重试", "notes_chapters_required"),
     ("详细笔记正在生成中，请等待当前任务完成", "notes_already_in_progress"),
