@@ -1,69 +1,89 @@
 {
     // ============================================================
-    // API 服务配置
+    // 界面与输出语言 / UI and output language
+    // ============================================================
+    // 取值 "zh-CN" | "en"，缺省 "zh-CN"；其他值启动即失败。
+    // Accepted values are "zh-CN" | "en"; default "zh-CN"; any other value fails startup.
+    // 控制 Web 界面文案，以及总结、详细笔记、章节等生成内容的输出语言。
+    // Controls Web UI wording and the output language of generated content
+    // (summary, detailed notes, chapters).
+    // 企业微信与飞书通知暂不随此开关切换，仍使用各自模板里的固定文案。
+    // WeCom and Feishu notifications do NOT follow this switch yet; they keep the
+    // fixed wording of their own templates.
+    "language": "zh-CN",
+
+    // ============================================================
+    // API 服务配置 / API service configuration
     // ============================================================
     "api": {
-        "port": 8000,                    // 服务监听端口
-        "host": "0.0.0.0",               // 服务监听地址，0.0.0.0 表示所有网卡
-        "auth_token": "your-auth-token-here"  // API 访问令牌
+        "port": 8000,                    // 服务监听端口 / Port the service listens on
+        "host": "0.0.0.0",               // 服务监听地址，0.0.0.0 表示所有网卡 / Listen address; 0.0.0.0 means all interfaces
+        "auth_token": "your-auth-token-here"  // API 访问令牌 / API access token
     },
 
     // ============================================================
-    // 安全配置
+    // 安全配置 / Security configuration
     // ============================================================
     "security": {
         // 内网下载源白名单（SSRF 防护例外）。
+        // Allowlist of internal download sources (the exception to SSRF protection).
         // download_url 默认禁止指向私有/保留 IP，将可信的内网地址或网段
+        // By default download_url may not point at private or reserved IPs; list the
         // 列入此处即可放行。支持单个 IP 或 CIDR 网段。
+        // trusted internal addresses or subnets here to let them through. A single IP
+        // or a CIDR subnet is accepted.
         // 示例: ["203.0.113.10", "203.0.113.0/24"]
+        // Example: ["203.0.113.10", "203.0.113.0/24"]
         "download_url_allowlist": []
     },
 
     // ============================================================
-    // TikHub API 配置（用于抖音/小红书视频下载）
+    // TikHub API 配置（用于抖音/小红书视频下载） / TikHub API configuration (Douyin / Xiaohongshu downloads)
     // ============================================================
     "tikhub": {
-        "api_key": "your-tikhub-api-key-here",  // TikHub API 密钥
-        "max_retries": 2,                // 最大重试次数
-        "retry_delay": 5,                // 重试间隔（秒）
-        "timeout": 30                    // 请求超时时间（秒）
+        "api_key": "your-tikhub-api-key-here",  // TikHub API 密钥 / TikHub API key
+        "max_retries": 2,                // 最大重试次数 / Maximum number of retries
+        "retry_delay": 5,                // 重试间隔（秒） / Retry interval in seconds
+        "timeout": 30                    // 请求超时时间（秒） / Request timeout in seconds
     },
 
     // ============================================================
-    // CapsWriter ASR Server（协议 v2）
+    // CapsWriter ASR Server（协议 v2） / CapsWriter ASR Server (protocol v2)
     // https://github.com/zlxlabs/CapsWriter-ASR-Server
     // 协议：https://github.com/zlxlabs/CapsWriter-ASR-Server/blob/master/docs/reference/protocol.md
+    // Protocol: https://github.com/zlxlabs/CapsWriter-ASR-Server/blob/master/docs/reference/protocol.md
     // 本服务经官方 SDK 连接，不使用 v1 手写帧
+    // This service connects through the official SDK and does not use hand-written v1 frames.
     // ============================================================
     "capswriter": {
-        "server_url": "ws://localhost:6016",  // WebSocket 服务地址（须为协议 v2）
-        "max_retries": 5,                // 连接最大重试次数
-        "retry_delay": 3,                // 重试间隔（秒）
-        "connection_timeout": 10         // 连接超时时间（秒）
+        "server_url": "ws://localhost:6016",  // WebSocket 服务地址（须为协议 v2） / WebSocket server URL (must speak protocol v2)
+        "max_retries": 5,                // 连接最大重试次数 / Maximum number of connection retries
+        "retry_delay": 3,                // 重试间隔（秒） / Retry interval in seconds
+        "connection_timeout": 10         // 连接超时时间（秒） / Connection timeout in seconds
     },
 
     // ============================================================
-    // 并发处理配置
+    // 并发处理配置 / Concurrency configuration
     // ============================================================
     "concurrent": {
-        "max_workers": 3,                // 转录任务最大并发数
-        "queue_size": 10,                // 任务队列大小
-        "llm_max_workers": 10            // LLM 处理最大并发数
+        "max_workers": 3,                // 转录任务最大并发数 / Maximum number of concurrent transcription tasks
+        "queue_size": 10,                // 任务队列大小 / Task queue size
+        "llm_max_workers": 10            // LLM 处理最大并发数 / Maximum number of concurrent LLM jobs
     },
 
     // ============================================================
-    // 存储配置
+    // 存储配置 / Storage configuration
     // ============================================================
     "storage": {
-        "temp_dir": "./data/temp",            // 临时文件目录（下载源视频+提取音频），任务结束即清，并有兜底定期清扫
-        "temp_retention_hours": 24,           // temp 兜底保留时长（小时）：超龄且非活跃任务的孤儿文件会被清理
-        "workspace_dir": "./data/workspace",   // 转录工作目录
-        "cache_dir": "./data/cache",          // 缓存目录（持久化存储）
-        "cache_retention_days": 360,           // 缓存保留天数（每日定时清理超期缓存记录及文件），0 表示永久保留
-        "task_status_retention_days": 180,     // task_status 表终态（success/failed）任务记录保留天数（每日定时清理），0 表示永久保留。注意：/view 链接依赖 task_status 行解析，本值不应短于 cache_retention_days，短于时按缓存保留期执行（钳制并记 warning）；cache_retention_days 为 0（缓存永久保留）时本清理会被跳过
-        "audit_log_retention_days": 180,       // 审计日志保留天数（每日定时清理 audit.db 超期记录），0 表示永久保留
-        "max_download_size_mb": 4096,          // 单文件下载大小上限（MB），0 表示不限制，防止超长视频填满磁盘
-        "upload_limits": {                       // 四项真实容量证明齐备前保持 null；样本/示例值不能作为生产额度
+        "temp_dir": "./data/temp",            // 临时文件目录（下载源视频+提取音频），任务结束即清，并有兜底定期清扫 / Temporary directory (downloaded source video + extracted audio); cleared when a task ends, with a periodic sweep as a safety net
+        "temp_retention_hours": 24,           // temp 兜底保留时长（小时）：超龄且非活跃任务的孤儿文件会被清理 / Safety-net retention for temp files in hours: orphaned files older than this and not owned by an active task are deleted
+        "workspace_dir": "./data/workspace",   // 转录工作目录 / Transcription workspace directory
+        "cache_dir": "./data/cache",          // 缓存目录（持久化存储） / Cache directory (persistent storage)
+        "cache_retention_days": 360,           // 缓存保留天数（每日定时清理超期缓存记录及文件），0 表示永久保留 / Cache retention in days (expired cache rows and files are pruned daily); 0 means keep forever
+        "task_status_retention_days": 180,     // task_status 表终态（success/failed）任务记录保留天数（每日定时清理），0 表示永久保留。注意：/view 链接依赖 task_status 行解析，本值不应短于 cache_retention_days，短于时按缓存保留期执行（钳制并记 warning）；cache_retention_days 为 0（缓存永久保留）时本清理会被跳过 / Retention in days for terminal (success/failed) rows of the task_status table (pruned daily); 0 means keep forever. Note: /view links are resolved through task_status rows, so this value should not be shorter than cache_retention_days; when it is shorter it is clamped to the cache retention (a warning is logged), and when cache_retention_days is 0 (keep cache forever) this pruning is skipped entirely
+        "audit_log_retention_days": 180,       // 审计日志保留天数（每日定时清理 audit.db 超期记录），0 表示永久保留 / Audit log retention in days (expired audit.db rows are pruned daily); 0 means keep forever
+        "max_download_size_mb": 4096,          // 单文件下载大小上限（MB），0 表示不限制，防止超长视频填满磁盘 / Per-file download size limit in MB; 0 means unlimited. Guards the disk against very long videos
+        "upload_limits": {                       // 四项真实容量证明齐备前保持 null；样本/示例值不能作为生产额度 / Keep these null until all four real capacity proofs exist; sample or example values must not be used as production quotas
             "max_file_mib": null,
             "max_media_hours": null,
             "receive_concurrency": null,
@@ -72,172 +92,243 @@
     },
 
     // ============================================================
-    // Web 界面配置
+    // Web 界面配置 / Web UI configuration
     // ============================================================
     "web": {
-        "base_url": "http://localhost:8000",  // Web 服务基础 URL
-        "enable_view_links": true,       // 是否在响应中返回查看链接
-        "timezone": "UTC+8",             // 时区设置
-        // 一键复制深度阅读 Prompt（可选；每项 template 必须包含 {url}）
+        "base_url": "http://localhost:8000",  // Web 服务基础 URL / Base URL of the web service
+        "enable_view_links": true,       // 是否在响应中返回查看链接 / Whether to return view links in responses
+        "timezone": "UTC+8",             // 时区设置 / Timezone
+        // 一键复制深度阅读 Prompt（可选；每项 template 必须包含 {url}） / One-click "deep read" prompt (optional; every template must contain {url})
         "deep_read_prompts": [
             {
                 "label": "复制深度阅读 Prompt",
                 "template": "请读取下面 URL 的播客校对稿全文，按时间顺序分主题做详细笔记，保留人名、数字、时间点和原话，使用分层 bullets，关键论断加粗；不要浓缩省略。\n\n{url}\n"
             }
         ],
-        // OG 分享卡片渲染字体（字体文件不存在时出图接口直接报错，不降级）
+        // OG 分享卡片渲染字体（字体文件不存在时出图接口直接报错，不降级） / Fonts used to render OG share cards (a missing font file makes the image endpoint fail loudly instead of degrading)
         "og_font_path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "og_font_bold_path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
     },
 
     // ============================================================
-    // 企业微信通知配置
+    // 企业微信通知配置 / WeCom notification configuration
     // ============================================================
     "wechat": {
-        "webhook": "your-webhook-url-here"  // 企业微信机器人 Webhook 地址
+        "webhook": "your-webhook-url-here"  // 企业微信机器人 Webhook 地址 / WeCom bot webhook URL
     },
 
     // ============================================================
-    // 飞书通知配置（可选，配置 webhook 后自动启用）
+    // 飞书通知配置（可选，配置 webhook 后自动启用） / Feishu notification configuration (optional; enabled once a webhook is set)
     // ============================================================
     "feishu": {
-        "webhook": "",                      // 飞书机器人 Webhook 地址（留空则不启用）
-        "secret": ""                        // 签名密钥（可选，机器人启用签名校验时填写）
+        "webhook": "",                      // 飞书机器人 Webhook 地址（留空则不启用） / Feishu bot webhook URL (leave empty to disable)
+        "secret": ""                        // 签名密钥（可选，机器人启用签名校验时填写） / Signing secret (optional; required when the bot verifies signatures)
     },
 
     // ============================================================
-    // BBDown 下载器配置（用于 B 站视频下载）
+    // BBDown 下载器配置（用于 B 站视频下载） / BBDown downloader configuration (Bilibili video downloads)
     // ============================================================
     "bbdown": {
-        "use_bbdown": true,              // 是否使用 BBDown
-        "executable": "BBDown/BBDown.exe",       // Windows 可执行文件路径
-        "executable_linux": "BBDown/BBDown",     // Linux 可执行文件路径
-        "executable_mac": "BBDown/BBDown_Mac",   // macOS 可执行文件路径
-        "audio_only": true,              // 是否只下载音频
-        "timeout": 300,                  // 下载超时时间（秒）
+        "use_bbdown": true,              // 是否使用 BBDown / Whether to use BBDown
+        "executable": "BBDown/BBDown.exe",       // Windows 可执行文件路径 / Executable path on Windows
+        "executable_linux": "BBDown/BBDown",     // Linux 可执行文件路径 / Executable path on Linux
+        "executable_mac": "BBDown/BBDown_Mac",   // macOS 可执行文件路径 / Executable path on macOS
+        "audio_only": true,              // 是否只下载音频 / Whether to download audio only
+        "timeout": 300,                  // 下载超时时间（秒） / Download timeout in seconds
         // 可选：B 站官方元数据 API 的 Cookie 字符串。留空时自动使用随机 buvid3
+        // Optional: cookie string for the official Bilibili metadata API. When empty, a random
         // 指纹躲避 IP 级风控（零维护，推荐）。仅当频繁遇到 -412/-799 风控时，
+        // buvid3 fingerprint is used automatically to dodge IP-level risk control (zero
         // 才考虑填入真实账号 Cookie（注意会过期，需自行维护）。
+        // maintenance, recommended). Only fill in a real account cookie (which expires and
+        // must be maintained by hand) if you keep hitting -412/-799 risk control.
         "bilibili_cookie": ""
     },
 
     // ============================================================
-    // 日志配置
+    // 日志配置 / Logging configuration
     // ============================================================
     "log": {
-        "level": "INFO",                 // 日志级别: DEBUG, INFO, WARNING, ERROR
+        "level": "INFO",                 // 日志级别: DEBUG, INFO, WARNING, ERROR / Log level: DEBUG, INFO, WARNING, ERROR
         "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        "file": "./data/logs/app.log",   // 日志文件路径
-        "debug_dir": "./data/logs/debug",      // 调试日志目录
-        "llm_debug_dir": "./data/logs/llm_debug",  // LLM 调试日志目录
-        "max_size": 10485760,            // 单个日志文件大小限制（字节，默认 10MB）
-        "backup_count": 5                // 日志文件备份数量
+        "file": "./data/logs/app.log",   // 日志文件路径 / Log file path
+        "debug_dir": "./data/logs/debug",      // 调试日志目录 / Debug log directory
+        "llm_debug_dir": "./data/logs/llm_debug",  // LLM 调试日志目录 / LLM debug log directory
+        "max_size": 10485760,            // 单个日志文件大小限制（字节，默认 10MB） / Per-file log size limit in bytes (10MB by default)
+        "backup_count": 5                // 日志文件备份数量 / Number of rotated log files to keep
     },
 
     // ============================================================
-    // LLM 大语言模型配置
-    // 用于转录文本的校对和总结
+    // LLM 大语言模型配置 / LLM configuration
+    // 用于转录文本的校对和总结 / Used for calibrating and summarizing transcripts
     // ============================================================
     //
-    // 【处理流程说明】
+    // 【处理流程说明】 / [Processing pipeline]
     // 1. 校对(calibrate): 修正转录文本中的错别字、标点、语法等
+    // 1. calibrate: fix typos, punctuation and grammar in the transcript
     // 2. 总结(summary): 对校对后的文本生成摘要
+    // 2. summary: produce a summary of the calibrated text
     //
-    // 【reasoning_effort 参数说明】
+    // 【reasoning_effort 参数说明】 / [The reasoning_effort parameter]
     // OpenAI API 支持三个级别: "low"(1K tokens), "medium"(8K), "high"(24K)
+    // The OpenAI API supports three levels: "low" (1K tokens), "medium" (8K), "high" (24K)
     // - null   = 模型不支持该参数，请求时不携带此字段
+    // - null   = the model does not support this parameter, so the field is not sent
     // - "none" = 模型支持该参数，但关闭思考功能
+    // - "none" = the model supports the parameter but thinking is turned off
     // - "low"/"medium"/"high" = 启用对应级别的思考能力
+    // - "low"/"medium"/"high" = enable the thinking budget of that level
     //
     // ============================================================
     "llm": {
-        "api_key": "your-llm-api-key-here",     // LLM API 密钥
-        "base_url": "https://your-api.com/v1",   // LLM API 基础 URL，只到 /v1（不含 /chat/completions）
+        "api_key": "your-llm-api-key-here",     // LLM API 密钥 / LLM API key
+        "base_url": "https://your-api.com/v1",   // LLM API 基础 URL，只到 /v1（不含 /chat/completions） / LLM API base URL, up to /v1 only (no /chat/completions)
 
         // ------------------------------------------------------
-        // 校对模型配置
+        // 校对模型配置 / Calibration model configuration
         // ------------------------------------------------------
         // reasoning_effort 合法值（由 llm-compat 按模型族自动翻译）：
+        // Valid reasoning_effort values (translated per model family by llm-compat):
         //   null          - 不传参，用模型默认（DeepSeek V4/Gemini 3 默认已启用思考）
+        //   null          - send nothing, use the model default (DeepSeek V4 / Gemini 3 think by default)
         //   "disabled"    - 显式关闭思考（DeepSeek V4 发顶层 thinking.type=disabled;
+        //   "disabled"    - explicitly disable thinking (DeepSeek V4 sends top-level thinking.type=disabled;
         //                                 Gemini 2.5 发 reasoning_effort=none; GPT-5/Gemini-3 回退到 minimal;
+        //                                 Gemini 2.5 sends reasoning_effort=none; GPT-5 / Gemini 3 fall back to minimal;
         //                                 Gemini 3 Pro 关不掉，自动忽略并 warn）
+        //                                 Gemini 3 Pro cannot be turned off, it is ignored with a warning)
         //   "minimal"     - GPT-5 / Gemini 3 最低思考档；DeepSeek 会 clamp 到 low
+        //   "minimal"     - lowest thinking level for GPT-5 / Gemini 3; DeepSeek clamps it to low
         //   "low"/"high"  - 三家通用；"medium" 在 DeepSeek 上会 clamp 到 high（官方未文档化该档）
+        //   "low"/"high"  - supported by all three; "medium" is clamped to high on DeepSeek (not an officially documented level there)
         //   "max"/"xhigh" - DeepSeek V4 特有；其他服务商会 clamp 到 high
+        //   "max"/"xhigh" - DeepSeek V4 specific; other providers clamp them to high
         //   "none"        - 已弃用，启动时自动迁移到 "disabled" 并 warn
+        //   "none"        - deprecated; migrated to "disabled" at startup with a warning
         //
         // 【校对档位怎么选】校对是机械 ASR 纠错，建议 "disabled"：保真优先，只修错字/标点，
+        // [Which level for calibration] Calibration is mechanical ASR correction, so "disabled" is
         //   不改写、不翻译术语、不给 ASR 截断处补字。可读性由下游 summary/notes 负责——
+        //   recommended: fidelity first, fix only typos and punctuation, never rewrite, never
         //   校对稿是它们的输入，这一层编造会被下游放大。
+        //   translate terminology and never invent text at ASR cut-offs. Readability is the job of
+        //   the downstream summary/notes, which take the calibrated text as input, so fabrication
+        //   here gets amplified there.
         //   2026-08-05 实测(v4-flash + llm-compat 0.8.0, 1500 字简体播客真实转录, n=5)：
+        //   Measured on 2026-08-05 (v4-flash + llm-compat 0.8.0, real 1500-character Simplified
+        //   Chinese podcast transcript, n=5):
         //     "disabled" 中位 6.94s / completion 766 / reasoning 0，5 次自洽度 0.953
+        //     "disabled" median 6.94s / completion 766 / reasoning 0, self-consistency 0.953 over 5 runs
         //     "low"      中位 14.16s / completion 1099 / reasoning 327，长尾单次 45.0s / reasoning 4594
+        //     "low"      median 14.16s / completion 1099 / reasoning 327, worst run 45.0s / reasoning 4594
         //   "low" 另会偶发翻译英文术语（enterprise→企业级客户）、给截断处编造补字，两次结果不一致。
+        //   "low" also occasionally translates English terms (enterprise -> 企业级客户) and invents
+        //   filler at cut-offs, producing inconsistent results between runs.
         //
         // 【历史记录】经中转网关（one-api/new-api 之类）访问 DeepSeek 的关闭思考问题：
+        // [History] The "disable thinking" problem when reaching DeepSeek through a relay gateway
+        //   (one-api / new-api and the like):
         //   该问题源于 llm-compat <=0.7.0 的静默失效：旧版本把 thinking 编码成嵌套的
+        //   it came from a silent failure in llm-compat <=0.7.0: older versions encoded thinking as a
         //   extra_body.thinking.type，网关不认识就会忽略整块；llm-compat v0.8.0 起已修复为
+        //   nested extra_body.thinking.type, which gateways do not understand and therefore dropped;
         //   顶层 thinking，日志也从 thinking 读取，"disabled" 现在可以正常使用。
+        //   llm-compat v0.8.0 fixed this to a top-level thinking field, and logs are read from
+        //   thinking as well, so "disabled" works normally now.
         //   2026-07-31 在 v4-flash 上实测(n=3)：null 中位 46.6s/out 6462，"disabled" 52.0s/out 7046
+        //   Measured on 2026-07-31 on v4-flash (n=3): null median 46.6s / out 6462, "disabled" 52.0s / out 7046
         //   （两者分布重合＝修复前未生效），"low" 24.4s/out 3251 且无极端值。
+        //   (the two distributions overlap, i.e. the fix was not in effect yet), "low" 24.4s / out 3251 with no outliers.
         //   以上数据采集于修复前，仅作为历史记录，不代表 llm-compat v0.8.0 的行为；
+        //   Those numbers were collected before the fix and are historical only; they do not describe
         //   当时得出的「不要用 disabled、改用 low」结论已随 v0.8.0 退役，勿再照搬。
-        "calibrate_model": "gpt-4.1-mini",      // 校对使用的模型
-        "calibrate_reasoning_effort": null,     // GPT-4.x 不支持 reasoning_effort，设任何值都会被 drop
+        //   llm-compat v0.8.0. The "avoid disabled, use low instead" conclusion from that period is
+        //   retired along with v0.8.0; do not copy it.
+        "calibrate_model": "gpt-4.1-mini",      // 校对使用的模型 / Model used for calibration
+        "calibrate_reasoning_effort": null,     // GPT-4.x 不支持 reasoning_effort，设任何值都会被 drop / GPT-4.x does not support reasoning_effort; any value here is dropped
 
         // ------------------------------------------------------
-        // 总结模型配置
+        // 总结模型配置 / Summary model configuration
         // ------------------------------------------------------
         // 【DeepSeek 迁移提示】旧模型 deepseek-chat / deepseek-reasoner 将于 2026-07-24 弃用。
+        // [DeepSeek migration note] The old deepseek-chat / deepseek-reasoner models are retired on
         //   - deepseek-chat     → deepseek-v4-flash + reasoning_effort="disabled"（非思考）
+        //   2026-07-24.
         //   - deepseek-reasoner → deepseek-v4-flash + reasoning_effort="high"（思考）
+        //   - deepseek-chat     -> deepseek-v4-flash + reasoning_effort="disabled" (no thinking)
         //   注意：旧 deepseek-chat 不支持 reasoning_effort（被服务端忽略），
+        //   - deepseek-reasoner -> deepseek-v4-flash + reasoning_effort="high" (thinking)
         //         迁移到 v4-flash 后 "disabled" 会真正关闭思考，"high" 会真正触发思考。
+        //   Note: the old deepseek-chat did not support reasoning_effort (the server ignored it), so
         //         延迟和 token 成本会上升（思考模式），请按任务重要性选择级别。
-        "summary_model": "deepseek-v4-flash",   // 总结使用的模型
-        "summary_reasoning_effort": "high",     // 总结推理强度（v4-flash 下触发思考模式）
+        //   after migrating to v4-flash "disabled" really disables thinking and "high" really enables
+        //   it. Latency and token cost go up in thinking mode, so pick the level by task importance.
+        "summary_model": "deepseek-v4-flash",   // 总结使用的模型 / Model used for summaries
+        "summary_reasoning_effort": "high",     // 总结推理强度（v4-flash 下触发思考模式） / Summary reasoning effort (triggers thinking mode on v4-flash)
 
         // ------------------------------------------------------
-        // 按需分章详细笔记（可选）
+        // 按需分章详细笔记（可选） / On-demand per-chapter detailed notes (optional)
         // ------------------------------------------------------
         // notes_model 未配置时自动回退 summary_model；推理强度同理回退 summary_reasoning_effort。
+        // When notes_model is absent it falls back to summary_model; reasoning effort likewise falls
+        // back to summary_reasoning_effort.
         // 详细笔记只由查看页按钮或 POST /api/generate_notes 触发，
+        // Detailed notes are only triggered by the button on the view page or by
+        // POST /api/generate_notes; they are not part of the public processing_options of
         // 不属于 /api/transcribe 的公开 processing_options。
+        // /api/transcribe.
         //
         // 【笔记档位怎么选】建议 "disabled"：笔记按章并发生成，思考开销会被
+        // [Which level for notes] "disabled" is recommended: notes are generated per chapter
         //   notes_concurrency 放大 N 倍，而实测质量几乎无差异。
+        // concurrently, so thinking cost is multiplied by notes_concurrency, while measured quality
+        //   is nearly identical.
         //   实测(2026-08-05, v4-flash + llm-compat 0.8.0, 同一播客 2 章 x 每档 3 次, 串行)：
+        //   Measured on 2026-08-05 (v4-flash + llm-compat 0.8.0, same podcast, 2 chapters x 3 runs per
+        //   level, serial):
         //     null(=DeepSeek 默认 high) 中位 98.6s / completion 11476 / reasoning 7312，英文术语召回 0.55
+        //     null (= DeepSeek default high) median 98.6s / completion 11476 / reasoning 7312, English term recall 0.55
         //     "disabled"                中位  9.9s / completion   660 / reasoning     0，英文术语召回 0.54
+        //     "disabled"                    median  9.9s / completion   660 / reasoning     0, English term recall 0.54
         //     "low"                     中位 20.1s / completion  1451 / reasoning   604，召回 0.44（最差且比 disabled 贵）
+        //     "low"                         median 20.1s / completion  1451 / reasoning   604, recall 0.44 (worst and dearer than disabled)
         //   即全速思考换来约 1 个百分点召回，代价是 17 倍 token、10 倍耗时；逐条比对同章产出
+        //   So full-speed thinking buys about one point of recall at 17x the tokens and 10x the time;
         //   信息点无缺失，"disabled" 的说话人归属反而更系统。
+        //   a point-by-point comparison of the same chapter found no missing information points, and
+        //   "disabled" attributed speakers more consistently.
         //   样本限于 1 个播客 2 章；若实际使用中发现笔记信息缺失，回退为 null 即可。
+        //   The sample is one podcast with two chapters; if your own notes turn out to miss
+        //   information, fall back to null.
         "notes_model": "deepseek-v4-flash",
         "notes_reasoning_effort": "disabled",
-        "notes_concurrency": 10,          // 分章并发数上限；按实际章节数自动取较小值
+        "notes_concurrency": 10,          // 分章并发数上限；按实际章节数自动取较小值 / Upper bound on per-chapter concurrency; automatically lowered to the actual chapter count
 
         // ------------------------------------------------------
-        // 分享卡片文案（可选）
+        // 分享卡片文案（可选） / Share card copy (optional)
         // ------------------------------------------------------
         // share_card_model 未配置时自动回退 summary_model；推理强度同理回退 summary_reasoning_effort。
+        // When share_card_model is absent it falls back to summary_model; reasoning effort likewise
+        // falls back to summary_reasoning_effort.
         // 卡片是短文案，思考无收益，建议 "disabled"。
+        // Cards are short copy, thinking buys nothing, so "disabled" is recommended.
         "share_card_model": "deepseek-v4-flash",
         "share_card_reasoning_effort": "disabled",
 
         // ------------------------------------------------------
-        // 通用配置
+        // 通用配置 / General configuration
         // ------------------------------------------------------
-        "max_retries": 2,                // LLM 调用失败时的最大重试次数（由 llm-compat 内部处理）
-        "total_timeout": 300,            // 单次 LLM 请求总超时（秒），含 fallback 链共享（需留足 fallback 时间）
-        "min_summary_threshold": 500,    // 文本长度低于此值时跳过总结
-        "min_calibrate_ratio": 0.8,      // 校对后文本长度/原文长度的最小比例，低于则视为异常
+        "max_retries": 2,                // LLM 调用失败时的最大重试次数（由 llm-compat 内部处理） / Maximum retries after a failed LLM call (handled inside llm-compat)
+        "total_timeout": 300,            // 单次 LLM 请求总超时（秒），含 fallback 链共享（需留足 fallback 时间） / Total timeout in seconds for one LLM request, shared across the fallback chain (leave enough room for the fallbacks)
+        "min_summary_threshold": 500,    // 文本长度低于此值时跳过总结 / Summaries are skipped when the text is shorter than this
+        "min_calibrate_ratio": 0.8,      // 校对后文本长度/原文长度的最小比例，低于则视为异常 / Minimum ratio of calibrated length to original length; below it the result counts as anomalous
 
         // ------------------------------------------------------
-        // 总结篇幅预算（prompt / 后验硬顶共用同一曲线）
+        // 总结篇幅预算（prompt / 后验硬顶共用同一曲线） / Summary length budget (the prompt and the post-hoc hard cap share one curve)
         // max_tokens 仅对 reasoning_effort == "disabled" 的非思考模型下发
+        // max_tokens is only sent to non-thinking models with reasoning_effort == "disabled"
         // （hard_cap × max_tokens_multiplier）；思考模型不下发 max_tokens。
+        // (hard_cap x max_tokens_multiplier); thinking models never receive max_tokens.
         "summary_budget": {
             "s_target_min": 500,
             "s_target_max": 3000,
@@ -252,8 +343,9 @@
         },
 
         // ------------------------------------------------------
-        // 内容审查降级（llm-compat content_fallbacks）
+        // 内容审查降级（llm-compat content_fallbacks） / Content-moderation fallback (llm-compat content_fallbacks)
         // 当主模型因内容审查拒绝时，自动切换到 fallback 模型
+        // When the primary model refuses on content moderation, the fallback model takes over
         // ------------------------------------------------------
         "content_fallbacks": {
             "deepseek-v4-pro": ["deepseek-v4-flash"],
@@ -261,16 +353,17 @@
         },
 
         // ------------------------------------------------------
-        // Collector 集成（可选，用于跨项目敏感词积累）
+        // Collector 集成（可选，用于跨项目敏感词积累） / Collector integration (optional, for cross-project sensitive-word accumulation)
         // 不配置则不启用，不影响任何功能
+        // Not configured means not enabled; nothing else is affected
         // ------------------------------------------------------
-        "collector_url": null,           // Collector 服务地址，如 "http://llm-compat-collector:8000"
-        "collector_project": "",         // 项目标识，如 "video-api"
-        "collector_api_key": "",         // Collector API 密钥
-        "refusal_keywords_url": null,    // 动态敏感词加载 URL，如 "http://llm-compat-collector:8000/words"
+        "collector_url": null,           // Collector 服务地址，如 "http://llm-compat-collector:8000" / Collector service URL, e.g. "http://llm-compat-collector:8000"
+        "collector_project": "",         // 项目标识，如 "video-api" / Project identifier, e.g. "video-api"
+        "collector_api_key": "",         // Collector API 密钥 / Collector API key
+        "refusal_keywords_url": null,    // 动态敏感词加载 URL，如 "http://llm-compat-collector:8000/words" / URL to load dynamic sensitive words from, e.g. "http://llm-compat-collector:8000/words"
 
         // ------------------------------------------------------
-        // 统一质量验证配置（新增）
+        // 统一质量验证配置（新增） / Unified quality validation configuration (new)
         // ------------------------------------------------------
         "quality_validation": {
             "score_weights": {
@@ -286,216 +379,280 @@
         },
 
         // ------------------------------------------------------
-        // 分段处理配置
+        // 分段处理配置 / Segmentation configuration
         // 【触发条件】文本长度 > enable_threshold（严格大于；等于阈值不分段，
+        // [Trigger] Text length > enable_threshold (strictly greater; equal to the threshold is not
         //   见 llm/processors/plain_text_processor.py 的 len(text) > config.enable_threshold）
+        //   segmented, see len(text) > config.enable_threshold in
+        //   llm/processors/plain_text_processor.py)
         //   且 use_speaker_recognition=false，即无说话人标识的 plain 源
+        //   and use_speaker_recognition=false, i.e. a plain source with no speaker labels.
         // 【plain 源兜底路由】分段之后怎么校对，看 llm.structured_calibration_for_plain：
+        // [Plain-source routing] How segmented text is calibrated depends on
         //   true 走结构化逐段校对，false 回退旧的整段纯文本路径。
-        // 【适用场景】
+        //   llm.structured_calibration_for_plain: true goes through structured per-segment
+        //   calibration, false falls back to the old whole-text plain path.
+        // 【适用场景】 / [When it applies]
         //   - CapsWriter 转录的长文本（use_speaker_recognition=false）
+        //   - long transcripts from CapsWriter (use_speaker_recognition=false)
         //   - YouTube 直接获取的长字幕
+        //   - long subtitles fetched directly from YouTube
         // 【作用】将超长文本分段后并发校对，提高效率
+        // [Effect] Very long text is split into segments and calibrated concurrently for speed
         // ------------------------------------------------------
         "segmentation": {
-            "enable_threshold": 20000,   // 触发分段的文本长度阈值（字符数）
-            "segment_size": 8000,        // 每段的目标大小
-            "max_segment_size": 12000,   // 每段的最大大小（避免截断句子时超出）
-            "concurrent_workers": 10,    // 并发处理的段落数
+            "enable_threshold": 20000,   // 触发分段的文本长度阈值（字符数） / Text length threshold in characters that triggers segmentation
+            "segment_size": 8000,        // 每段的目标大小 / Target size of each segment
+            "max_segment_size": 12000,   // 每段的最大大小（避免截断句子时超出） / Maximum size of each segment (so sentence-aware cutting does not overshoot)
+            "concurrent_workers": 10,    // 并发处理的段落数 / Number of segments processed concurrently
             "quality_validation": {
-                "enabled": true,         // 默认开启
-                "pass_ratio": 0.7,       // 绿灯区阈值
-                "force_retry_ratio": 0.5,// 红灯区阈值
+                "enabled": true,         // 默认开启 / Enabled by default
+                "pass_ratio": 0.7,       // 绿灯区阈值 / Green-zone threshold
+                "force_retry_ratio": 0.5,// 红灯区阈值 / Red-zone threshold
                 "fallback_strategy": "best_quality"
             }
         },
 
         // ------------------------------------------------------
-        // 结构化校准配置
+        // 结构化校准配置 / Structured calibration configuration
         // 【触发条件】use_speaker_recognition=true 且转录数据包含说话人标识
+        // [Trigger] use_speaker_recognition=true and the transcript carries speaker labels
         // 【适用场景】仅 FunASR 转录结果（带 spk_0, spk_1 等标识）
+        // [When it applies] FunASR transcripts only (with labels such as spk_0, spk_1)
         // 【作用】按说话人对话分块校对，保留对话结构，推断真实说话人名称
+        // [Effect] Calibrates in per-speaker dialogue chunks, keeps the dialogue structure and
+        // infers real speaker names
         // 【优先级】高于分段处理，满足条件时优先使用
+        // [Priority] Higher than segmentation; used first whenever its conditions hold
         // ------------------------------------------------------
         "structured_calibration": {
-            "min_chunk_length": 800,     // 单个校对块的最小长度
-            "max_chunk_length": 3000,    // 单个校对块的最大长度
-            "preferred_chunk_length": 2000,  // 首选块长度（尽量接近此值分块）
-            "max_calibration_retries": 2,    // 单块校对失败的最大重试次数
-            "calibration_concurrent_limit": 10,  // 并发校对的块数
+            "min_chunk_length": 800,     // 单个校对块的最小长度 / Minimum length of one calibration chunk
+            "max_chunk_length": 3000,    // 单个校对块的最大长度 / Maximum length of one calibration chunk
+            "preferred_chunk_length": 2000,  // 首选块长度（尽量接近此值分块） / Preferred chunk length (chunks are cut as close to this as possible)
+            "max_calibration_retries": 2,    // 单块校对失败的最大重试次数 / Maximum retries when one chunk fails
+            "calibration_concurrent_limit": 10,  // 并发校对的块数 / Number of chunks calibrated concurrently
             // —— plain 源（无说话人）模式的独立分块参数 ——
+            // -- Separate chunk parameters for plain sources (no speaker labels) --
             // 仅在 structured_calibration_for_plain=true 时生效；
+            // Only effective when structured_calibration_for_plain=true; plain paragraphs are longer
             // plain 段落比对话长，分块预算相应放大，一般无需修改
-            "plain_preferred_chunk_length": 3000,  // plain 源首选块长度
-            "plain_max_chunk_length": 4000,        // plain 源单个校对块的最大长度
+            // than dialogue turns, so the chunk budget is scaled up accordingly. Usually no need to
+            // change these.
+            "plain_preferred_chunk_length": 3000,  // plain 源首选块长度 / Preferred chunk length for plain sources
+            "plain_max_chunk_length": 4000,        // plain 源单个校对块的最大长度 / Maximum chunk length for plain sources
             "quality_validation": {
-                "enabled": false,        // 默认关闭
+                "enabled": false,        // 默认关闭 / Disabled by default
                 "fallback_strategy": "best_quality"
             }
         },
 
         // ------------------------------------------------------
-        // plain 源结构化逐段校对总开关（阶段二）
+        // plain 源结构化逐段校对总开关（阶段二） / Master switch for structured per-segment calibration of plain sources (phase 2)
         // 默认 true（2026-07-19 真实样本验收通过后由暗启动翻正）：
+        // Defaults to true (flipped on after real-sample acceptance passed on 2026-07-19; it had been
         //   plain 源（CapsWriter 转录 / YouTube 字幕）走结构化逐段校对
+        // dark-launched before that): plain sources (CapsWriter transcripts / YouTube subtitles) go
         //   （id 锚点映射，不动文本结构），产物带时间块锚点（dlg-{i}），
+        // through structured per-segment calibration (id anchor mapping, text structure untouched);
         //   配合确定性段落化输出段落级 dialogs，章节可精准跳转。
+        // the output carries time-block anchors (dlg-{i}) and, together with deterministic
+        // paragraphization, produces paragraph-level dialogs so chapters can jump precisely.
         // 置 false：回退旧纯文本校对路径；已产出产物凭 provenance
+        // Set to false: falls back to the old plain-text calibration path. Already-produced artifacts
         //   "mode": "plain_structured" 识别，渲染时忽略、不受影响。
+        // are recognised by provenance "mode": "plain_structured" and are ignored at render time, so
+        // they stay unaffected.
         // ------------------------------------------------------
         "structured_calibration_for_plain": true,
 
         // ------------------------------------------------------
-        // 确定性段落化配置（v1，仅在 structured_calibration_for_plain=true 时生效）
+        // 确定性段落化配置（v1，仅在 structured_calibration_for_plain=true 时生效） / Deterministic paragraphization (v1, only effective when structured_calibration_for_plain=true)
         // 【作用】把校准后的 segments 按授权断点合成段落（只选边界、不动文本），
+        // [Effect] Merges calibrated segments into paragraphs at authorised breakpoints (it only
         //         落盘为 llm_processed.json 的 dialogs，供渲染/章节/指纹复用
+        // picks boundaries and never edits text) and writes them to dialogs in
+        // llm_processed.json for rendering, chapters and fingerprints to reuse.
         // 【规则】长度只是预算不是闸刀——到 target_chars 开始找断点，
+        // [Rules] Length is a budget, not a guillotine: once target_chars is reached it starts looking
         //         仅在句末标点或停顿 >= pause_threshold_seconds 处断段；
+        // for a breakpoint, and only breaks at sentence-final punctuation or at a pause
+        // >= pause_threshold_seconds;
         //         到 hard_max_chars 仍无授权点时放宽到逗号级
+        // if no authorised point exists at hard_max_chars it relaxes down to comma level.
         // ------------------------------------------------------
         "paragraphization": {
-            "target_chars": 300,             // 段落长度预算（字符），超过后开始寻找断点
-            "hard_max_chars": 600,           // 段落软上限（字符）：成员内不切，单成员超限会自成一段，组长 ≤ 2×
-            "pause_threshold_seconds": 2.0   // 停顿授权阈值（秒），相邻段间隔达到即允许断段
+            "target_chars": 300,             // 段落长度预算（字符），超过后开始寻找断点 / Paragraph length budget in characters; past it a breakpoint is searched for
+            "hard_max_chars": 600,           // 段落软上限（字符）：成员内不切，单成员超限会自成一段，组长 ≤ 2× / Soft paragraph cap in characters: never cut inside a member; an oversized member becomes its own paragraph and a group stays <= 2x
+            "pause_threshold_seconds": 2.0   // 停顿授权阈值（秒），相邻段间隔达到即允许断段 / Pause threshold in seconds; a gap between adjacent segments at or above it authorises a break
         },
 
         // ------------------------------------------------------
-        // 说话人推断采样配置
+        // 说话人推断采样配置 / Speaker-inference sampling configuration
         // 【作用】控制"按说话人采样"策略：每个说话人取其全时间轴上的前 N 条发言，
+        // [Effect] Controls the "sample per speaker" strategy: each speaker contributes the first N
         //         而非旧版"全局前1000字"截断（会丢失晚出场说话人的样本）
+        // utterances on its own timeline, instead of the old "first 1000 characters globally"
+        // truncation, which lost samples from speakers who appear late.
         // 【降级】confidence 低于阈值时不采用推断姓名，改用"说话人N"占位，
+        // [Degradation] When confidence is below the threshold the inferred name is not used and a
         //         避免把低置信度的猜测当作确定结论展示给用户
+        //         "speaker N" placeholder takes its place, so a low-confidence guess is never shown
+        //         to users as a settled conclusion.
         // ------------------------------------------------------
         "speaker_inference": {
-            "samples_per_speaker": 3,        // 普通说话人的采样条数基准；发言量 top2 至少 8 条；设为 0 关闭全部采样
-            "max_chars_per_speaker": 400,    // 普通说话人的采样字符基准；发言量 top2 至少 1200 字符；设为 0 关闭全部采样
-            "context_dialogs": 2,            // 说话人首次出场前，采集他人发言作为上下文的条数
-            "confidence_threshold": 0.6,     // 低于此置信度时不采用推断姓名，降级为"说话人N"
+            "samples_per_speaker": 3,        // 普通说话人的采样条数基准；发言量 top2 至少 8 条；设为 0 关闭全部采样 / Baseline utterance count per ordinary speaker; the top-2 talkers get at least 8; 0 disables all sampling
+            "max_chars_per_speaker": 400,    // 普通说话人的采样字符基准；发言量 top2 至少 1200 字符；设为 0 关闭全部采样 / Baseline sampled characters per ordinary speaker; the top-2 talkers get at least 1200 characters; 0 disables all sampling
+            "context_dialogs": 2,            // 说话人首次出场前，采集他人发言作为上下文的条数 / Number of other speakers' utterances collected as context before a speaker first appears
+            "confidence_threshold": 0.6,     // 低于此置信度时不采用推断姓名，降级为"说话人N" / Below this confidence the inferred name is dropped in favour of the "speaker N" placeholder
             "max_total_sample_chars": 8000   // 所有说话人采样文本合计的全局字符上限，
+                                              // Global character cap for all sampled speaker text, so a
                                               // 防止 diarization 切分错误产生大量虚假说话人
+                                              // broken diarization split cannot produce a huge number of
                                               // 标签时 prompt 总量失控（预算耗尽后，最晚出场
+                                              // bogus speaker labels and blow up the prompt. Once the
                                               // 的说话人最先被裁掉，不再获得采样）
+                                              // budget is exhausted, the speakers who appear last are
+                                              // trimmed first and no longer get sampled.
         },
 
         // ------------------------------------------------------
-        // Provider 识别自定义规则（可选）
+        // Provider 识别自定义规则（可选） / Custom provider-detection rules (optional)
         // 用于反向代理用户覆盖默认模型名识别，比如网关把模型改名了
+        // For users behind a reverse proxy that renames models, to override the default
         // 格式：dict of "pattern" -> "family" 或 list of [pattern, family]
+        // model-name detection. Format: dict of "pattern" -> "family", or list of [pattern, family].
         // 合法 family: deepseek / gemini_25 / gemini_3 / gemini / openai_gpt5
+        // Valid family values: deepseek / gemini_25 / gemini_3 / gemini / openai_gpt5
         //             openai_gpt4 / openai_o / openai
+        // openai_gpt4 / openai_o / openai.
         // 这些规则优先于内置默认表，默认表作为 fallback
+        // These rules take priority over the built-in default table, which is used as the fallback.
         // 留空或删除此字段 = 只用内置默认
+        // Leaving this out or deleting the field means "built-in defaults only".
         // ------------------------------------------------------
         // "provider_patterns": {
-        //     "dsproxy-*": "deepseek",        // 代理把 deepseek 改名的情况
+        //     "dsproxy-*": "deepseek",        // 代理把 deepseek 改名的情况 / a proxy that renamed deepseek
         //     "mygateway-v4-*": "deepseek"
         // },
 
         // ------------------------------------------------------
-        // JSON 结构化输出配置
+        // JSON 结构化输出配置 / Structured JSON output configuration
         // 用于控制 LLM 的 JSON 输出模式
+        // Controls the JSON output mode of LLM calls
         // ------------------------------------------------------
         "json_output": {
-            // 按模型名匹配输出模式（支持通配符 *）
+            // 按模型名匹配输出模式（支持通配符 *） / Output mode matched by model name (wildcard * supported)
             // 匹配顺序：从前到后，首次匹配生效
+            // Match order: top to bottom, the first match wins
             // 可选值：json_schema（严格模式）、json_object（兼容模式）
+            // Accepted values: json_schema (strict mode), json_object (compatible mode)
             "mode_by_model": {
-                "deepseek*": "json_object",     // DeepSeek 系列（含 v4-flash / v4-pro）暂不支持 json_schema
-                "qwen*": "json_object",         // 通义千问部分支持
-                "glm*": "json_object",          // 智谱 GLM 系列
-                "*": "json_schema"              // 其他模型使用严格模式
+                "deepseek*": "json_object",     // DeepSeek 系列（含 v4-flash / v4-pro）暂不支持 json_schema / DeepSeek family (including v4-flash / v4-pro) does not support json_schema yet
+                "qwen*": "json_object",         // 通义千问部分支持 / Qwen supports it only in part
+                "glm*": "json_object",          // 智谱 GLM 系列 / Zhipu GLM family
+                "*": "json_schema"              // 其他模型使用严格模式 / Everything else uses strict mode
             },
             // json_object 模式下解析失败时的最大重试次数
+            // Maximum retries when parsing fails in json_object mode
             "max_retries": 2,
             // 是否启用模式降级（false 时强制使用 json_schema，用于调试）
+            // Whether mode downgrade is enabled (false forces json_schema, for debugging)
             "enable_fallback": true
         },
 
         // ------------------------------------------------------
-        // 纯文本输出配置
+        // 纯文本输出配置 / Plain-text output configuration
         // 用于总结等 text 模式的 LLM 调用
+        // Used by text-mode LLM calls such as summaries
         // ------------------------------------------------------
         "text_output": {
             // "HTTP 200 但 content 为空"时的最大重发次数（思考模型偶发，
+            // Maximum resends when "HTTP 200 but empty content" happens (occasional with thinking
             // 多因思考预算耗尽）；重试时自动强制 reasoning_effort=disabled
+            // models, usually because the thinking budget ran out); a retry forces
+            // reasoning_effort=disabled.
             "max_retries": 2
         }
     },
 
     // ============================================================
-    // FunASR 说话人识别转录服务配置
+    // FunASR 说话人识别转录服务配置 / FunASR speaker-diarization transcription service configuration
     // 支持说话人识别、时间戳、情感分析
+    // Supports speaker diarization, timestamps and sentiment analysis
     // ============================================================
     "funasr_spk_server": {
-        "server_url": "ws://localhost:8767",  // WebSocket 服务地址
-        "max_retries": 3,                // 连接/未知异常的最大重试次数
-        "retry_delay": 5,                // 重试间隔（秒），也是 queue_full 无 retry_after 时的兜底退避
-        "connection_timeout": 30,        // 连接超时时间（秒）
-        // —— 异步轮询契约（适配 server 长队列优化）——
-        "poll_interval": 8,              // task_status_batch 轮询间隔（秒，建议 5~10）
-        "poll_recv_timeout": 60,         // 单次轮询响应超时（秒）
-        "total_timeout": 3600,           // 单任务总超时（秒），跨所有 phase/retry 的硬上限
-        "first_delay_fallback": 5        // 无 estimated_wait_seconds 时的首轮轮询延迟（秒）
+        "server_url": "ws://localhost:8767",  // WebSocket 服务地址 / WebSocket server URL
+        "max_retries": 3,                // 连接/未知异常的最大重试次数 / Maximum retries on connection or unknown errors
+        "retry_delay": 5,                // 重试间隔（秒），也是 queue_full 无 retry_after 时的兜底退避 / Retry interval in seconds; also the fallback backoff when queue_full carries no retry_after
+        "connection_timeout": 30,        // 连接超时时间（秒） / Connection timeout in seconds
+        // —— 异步轮询契约（适配 server 长队列优化）—— / -- Asynchronous polling contract (built for the server's long-queue optimisation) --
+        "poll_interval": 8,              // task_status_batch 轮询间隔（秒，建议 5~10） / task_status_batch polling interval in seconds (5-10 recommended)
+        "poll_recv_timeout": 60,         // 单次轮询响应超时（秒） / Timeout for one polling response in seconds
+        "total_timeout": 3600,           // 单任务总超时（秒），跨所有 phase/retry 的硬上限 / Total per-task timeout in seconds, a hard cap across all phases and retries
+        "first_delay_fallback": 5        // 无 estimated_wait_seconds 时的首轮轮询延迟（秒） / Delay before the first poll in seconds when no estimated_wait_seconds is given
     },
 
     // ============================================================
-    // 风控配置
+    // 风控配置 / Risk-control configuration
     // ============================================================
     "risk_control": {
-        "enabled": false,                // 是否启用风控
-        "sensitive_word_urls": [         // 敏感词库 URL 列表
+        "enabled": false,                // 是否启用风控 / Whether risk control is enabled
+        "sensitive_word_urls": [         // 敏感词库 URL 列表 / List of sensitive-word list URLs
             "https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/refs/heads/main/Vocabulary/%E6%96%B0%E6%80%9D%E6%83%B3%E5%90%AF%E8%92%99.txt"
         ],
-        "cache_file": "./data/risk_control/sensitive_words.txt"  // 敏感词缓存文件
+        "cache_file": "./data/risk_control/sensitive_words.txt"  // 敏感词缓存文件 / Sensitive-word cache file
     },
 
     // ============================================================
-    // yt-dlp 配置（YouTube 下载器）
+    // yt-dlp 配置（YouTube 下载器） / yt-dlp configuration (YouTube downloader)
     // ============================================================
     "ytdlp": {
-        "socket_timeout": 30,            // Socket 超时时间（秒）
-        "retries": 10,                   // 重试次数
-        "fragment_retries": 10,          // 分片重试次数
-        "extractor_retries": 5,          // 提取器重试次数
-        // 播放器客户端优先级（用于绕过限制）
+        "socket_timeout": 30,            // Socket 超时时间（秒） / Socket timeout in seconds
+        "retries": 10,                   // 重试次数 / Number of retries
+        "fragment_retries": 10,          // 分片重试次数 / Number of fragment retries
+        "extractor_retries": 5,          // 提取器重试次数 / Number of extractor retries
+        // 播放器客户端优先级（用于绕过限制） / Player client priority (used to work around restrictions)
         "player_client": ["android_vr", "android_music", "android", "ios", "tv_embedded"],
         "youtube_cookie": {
-            "enabled": false,            // 是否启用 Cookie
-            "file_path": "./config/youtube_cookies.txt",  // Cookie 文件路径
-            "fallback_without_cookie": true  // Cookie 失败时是否回退
+            "enabled": false,            // 是否启用 Cookie / Whether cookies are enabled
+            "file_path": "./config/youtube_cookies.txt",  // Cookie 文件路径 / Cookie file path
+            "fallback_without_cookie": true  // Cookie 失败时是否回退 / Whether to fall back when the cookie fails
         }
     },
 
     // ============================================================
-    // YouTube API Server 配置
+    // YouTube API Server 配置 / YouTube API Server configuration
     // 用于解决本地 IP 风控问题的远程下载服务
+    // A remote download service that works around local-IP risk control
     // ============================================================
     "youtube_api_server": {
-        "enabled": false,                // 是否启用
-        "base_url": "http://your-youtube-api-server:8000",  // 服务地址
-        "api_key": "your-api-key-here",  // API 密钥
-        "timeout": 30,                   // 请求超时时间（秒）
-        "poll_interval": 30,             // 轮询间隔（秒）
-        "max_wait_time": 3600            // 最大等待时间（秒）
+        "enabled": false,                // 是否启用 / Whether it is enabled
+        "base_url": "http://your-youtube-api-server:8000",  // 服务地址 / Service URL
+        "api_key": "your-api-key-here",  // API 密钥 / API key
+        "timeout": 30,                   // 请求超时时间（秒） / Request timeout in seconds
+        "poll_interval": 30,             // 轮询间隔（秒） / Polling interval in seconds
+        "max_wait_time": 3600            // 最大等待时间（秒） / Maximum wait in seconds
     },
 
     // ============================================================
-    // 下载器路由开关
+    // 下载器路由开关 / Downloader routing switch
     // use_media_resolver=true 时，抖音/小红书改走 MediaResolverAPI 解析
+    // With use_media_resolver=true, Douyin / Xiaohongshu are resolved through MediaResolverAPI
     // ============================================================
     "downloaders": {
-        "use_media_resolver": false      // 是否用 MediaResolverAPI 接管抖音/小红书
+        "use_media_resolver": false      // 是否用 MediaResolverAPI 接管抖音/小红书 / Whether MediaResolverAPI takes over Douyin / Xiaohongshu
     },
 
     // ============================================================
-    // MediaResolverAPI 配置（短视频 URL -> 无水印直链 + 元数据）
+    // MediaResolverAPI 配置（短视频 URL -> 无水印直链 + 元数据） / MediaResolverAPI configuration (short-video URL -> watermark-free direct link + metadata)
     // https://github.com/zlxlabs/MediaResolverAPI
     // 仅在 downloaders.use_media_resolver=true 时生效
+    // Only effective when downloaders.use_media_resolver=true
     // ============================================================
     "media_resolver": {
-        "base_url": "http://host.docker.internal:8000",  // Docker 内不能用 localhost
-        "api_key": "your-x-api-key",     // X-API-Key 鉴权
-        "timeout": 30,                   // 请求超时（秒）
-        "max_retries": 2                 // 解析重试次数
+        "base_url": "http://host.docker.internal:8000",  // Docker 内不能用 localhost / localhost does not work inside Docker
+        "api_key": "your-x-api-key",     // X-API-Key 鉴权 / X-API-Key authentication
+        "timeout": 30,                   // 请求超时（秒） / Request timeout in seconds
+        "max_retries": 2                 // 解析重试次数 / Number of resolution retries
     }
 }

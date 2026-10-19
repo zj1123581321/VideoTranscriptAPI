@@ -1,5 +1,7 @@
 # 视频转录 API (Video Transcript API)
 
+**中文** | [English](README.en.md)
+
 > 基于 Python 3.11+ 的异步视频转录服务，支持多平台下载、双引擎转录、智能文本处理和企业级功能集成。
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -55,6 +57,7 @@ uv sync
 # 配置服务
 cp config/config.example.jsonc config/config.jsonc
 # 编辑 config.jsonc，填写 api.auth_token、tikhub.api_key 等
+# 语言：顶层 language 取 "zh-CN"（默认）或 "en"，控制 Web 界面文案与总结/详细笔记/章节的输出语言；企业微信/飞书通知暂不随之切换
 # 可选：抖音/小红书改走 MediaResolverAPI 集中解析（微信视频号与 X 依赖该开关开启），设
 #   downloaders.use_media_resolver=true 并配置 media_resolver 段
 #   （使用指南：docs/guides/media_resolver.md）
