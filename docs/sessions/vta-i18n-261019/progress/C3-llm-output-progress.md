@@ -69,3 +69,10 @@
 - **本段结论**：SummaryProcessor 与 coordinator 都调用 `effective_min_summary_threshold()`；en 下 800 字输入在 500×1.8 阈值前被预检跳过，避免两处门槛不一致。
 - **关键决策与已否决方案**：以一个计算函数封装语言系数，否决 coordinator 自行重复计算。
 - **下一步唯一动作**：按总结 provenance 语言缩放审计 hard-cap 统计。
+
+## 2026-10-19 审计统计按总结 provenance 语言缩放
+
+- **当前阶段**：implementing
+- **本段结论**：summary-ratio 读取每条媒体总结 provenance 的语言并经 `generation_layer_language()` 处理；原文长 10,000、摘要长 7,000 时 en 不超预算而 zh-CN 超预算。
+- **关键决策与已否决方案**：不读取当前配置语言；缺失 provenance 语言沿用该函数的 zh-CN 语义，英文系数引用 prompts/en.py 常量。
+- **下一步唯一动作**：合并章节标题长度限制的重复定义。
