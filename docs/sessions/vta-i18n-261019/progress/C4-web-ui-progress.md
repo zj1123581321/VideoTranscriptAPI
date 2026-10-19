@@ -122,3 +122,17 @@ implementing
 
 ### 下一步唯一动作
 核对并修正本卡新增 zh-CN 目录值与 Base 原字面量的不一致。
+
+## 2026-10-19 修正 zh-CN 目录与 Base 字面量漂移
+
+### 当前阶段
+implementing
+
+### 本段结论
+核对本卡新增 zh-CN 值：仅 `web.js.upload_unconfirmed_post` 把 Base 的全角 `。` 写成了 ASCII `. `，已改回 `{receipt}。请稍后…`。其余新增 key 与 Base 字面量一致。
+
+### 关键决策与已否决方案
+- 只改漂移的那一条，不顺手改省略号等原本就是 ASCII 的值。
+
+### 下一步唯一动作
+修 i18n.js 的 replace 为函数替换值，并把 var/== 收紧。

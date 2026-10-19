@@ -283,7 +283,7 @@
   "web.js.upload_unauthorized": "访问令牌未授权使用上传服务。",
   "web.js.upload_unconfirmed": "上传状态待核实",
   "web.js.upload_unconfirmed_get": "核实回执失败（{err}），当前尚未取得回执记录。请稍后重试核实状态。",
-  "web.js.upload_unconfirmed_post": "服务或网络响应异常（{err}），初次核实回执未确认: {receipt}. 请稍后重试核实状态。",
+  "web.js.upload_unconfirmed_post": "服务或网络响应异常（{err}），初次核实回执未确认: {receipt}。请稍后重试核实状态。",
   "web.js.upload_unknown": "上传状态未知",
   "web.js.upload_unknown_hint": "回执返回状态: {state}",
   "web.js.upload_verify_after_error": "服务响应异常，正在核实受理状态...",
