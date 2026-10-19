@@ -1579,7 +1579,7 @@ class TestUpdateTaskProgress:
             "missing-progress-task", {"stage": "notes", "done": 1, "total": 1}
         ) is False
 
-    def test_updates_only_progress_without_touching_status_fields(self, cm):
+    def test_terminal_row_rejects_progress_overwrite(self, cm):
         task = cm.create_task(url="https://example.com/progress-terminal")
         assert cm.update_task_status(
             task["task_id"], TaskStatus.SUCCESS, skip_archive=True
@@ -1588,12 +1588,10 @@ class TestUpdateTaskProgress:
 
         assert cm.update_task_progress(
             task["task_id"], {"stage": "notes", "done": 1, "total": 1}
-        ) is True
+        ) is False
 
         after = cm.get_task_by_id(task["task_id"])
-        assert after["progress"] == {"stage": "notes", "done": 1, "total": 1}
-        assert after["status"] == before["status"] == TaskStatus.SUCCESS
-        assert after["completed_at"] == before["completed_at"]
+        assert after["progress"] == before["progress"]
         assert after["terminal_snapshot"] == before["terminal_snapshot"]
 
 

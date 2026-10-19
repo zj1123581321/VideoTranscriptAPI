@@ -131,6 +131,17 @@ test('processing view smoke: processing state is visible', async ({ page }) => {
   await expect(page.getByRole('button', { name: /刷新页面/ })).toBeVisible();
 });
 
+test('processing view shows current stage and completed stages', async ({ page }) => {
+  await page.goto('/view/processing');
+  const stageProgress = page.locator('.stage-progress');
+  await expect(stageProgress).toBeVisible();
+  await expect(stageProgress).toContainText('当前阶段');
+  await expect(stageProgress).toContainText('下载');
+  await expect(stageProgress).toContainText(/已进行 \d+ 分 \d+ 秒/);
+  await expect(stageProgress).toContainText('已完成阶段');
+  await expect(stageProgress).toContainText('转录（耗时 1 分 5 秒）');
+});
+
 test('failed view smoke: error state is visible', async ({ page }) => {
   await page.goto('/view/failed');
   await expect(page.getByRole('heading', { name: /出现错误/ })).toBeVisible();

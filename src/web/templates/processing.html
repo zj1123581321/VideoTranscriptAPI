@@ -29,6 +29,22 @@
             <p style="text-align: center; color: #666;">
                 {{ t('web.processing.message') }}
             </p>
+            {% if stage_progress %}
+            <div class="stage-progress" style="text-align: center; margin: 16px auto; max-width: 480px;">
+                <p style="font-weight: 600; margin: 8px 0;">{{ stage_progress.current_line }}</p>
+                {% if stage_progress.notes_line %}
+                <p style="color: #666; margin: 4px 0;">{{ stage_progress.notes_line }}</p>
+                {% endif %}
+                {% if stage_progress.completed_items %}
+                <p style="color: #666; margin: 12px 0 4px 0;">{{ stage_progress.completed_header }}</p>
+                <ul style="list-style: none; padding: 0; margin: 0; color: #666;">
+                    {% for item in stage_progress.completed_items %}
+                    <li style="margin: 2px 0;">{{ item }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            {% endif %}
             <p style="text-align: center; margin-top: 20px;">
                 <button onclick="window.location.reload()" style="
                     background: #2196f3;
