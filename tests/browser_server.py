@@ -8,6 +8,7 @@ import hashlib
 import json
 import mimetypes
 import sqlite3
+import sys
 import tempfile
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,12 +17,25 @@ from urllib.parse import parse_qs, urlsplit
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+import importlib.util
+
+_logger_py = ROOT / "src" / "video_transcript_api" / "utils" / "logging" / "logger.py"
+_logger_spec = importlib.util.spec_from_file_location(
+    "video_transcript_api.utils.logging.logger", _logger_py
+)
+_logger_mod = importlib.util.module_from_spec(_logger_spec)
+assert _logger_spec.loader is not None
+_logger_spec.loader.exec_module(_logger_mod)
+_logger_mod._config_cache = {}
+sys.modules["video_transcript_api.utils.logging.logger"] = _logger_mod
+
 from video_transcript_api.i18n import get_language, web_catalog_script
 from video_transcript_api.utils.logging.logger import load_config
 from video_transcript_api.utils.rendering.home_page import render_home_html
 from video_transcript_api.utils.rendering.i18n_jinja import install_i18n
-
-ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "src" / "web" / "static"
 TEMPLATE_DIR = ROOT / "src" / "web" / "templates"
 FIXTURE_TOKEN = "browser-fixture-token"

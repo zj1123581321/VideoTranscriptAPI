@@ -179,3 +179,18 @@ implementing
 
 ### 下一步唯一动作
 从 Base worktree 生成 zh-CN 逐字夹具并锁死对照测试。
+
+## 2026-10-19 Base zh-CN 逐字基线入库
+
+### 当前阶段
+implementing
+
+### 本段结论
+用 Base `708352f6` scratch worktree 生成首页 HTML、Jinja 可见文本、静态 title 夹具。当前 zh-CN 首页与 Base `_HOME_HTML` 逐字相同；结果/处理中/错误/清洗稿页按可见文本对照。生成命令见报告。
+
+### 关键决策与已否决方案
+- Jinja 全量 HTML 因新增 `/i18n.js` 与 `data-section` 无法逐字节相等，改为可见文本对照。首页仍全量 HTML。
+- 已否决把 Base 模板改写成当前结构。
+
+### 下一步唯一动作
+跑完整验收并写报告。

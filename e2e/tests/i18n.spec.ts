@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { resetBackend } from '../reset-backend';
+
+const staticTitles = JSON.parse(
+  readFileSync('../tests/unit/i18n_web/fixtures/baselines/static_titles.json', 'utf8'),
+) as { submit: { title: string }; history: { title: string } };
 
 const baseURL = process.env.VTA_BROWSER_PORT
   ? `http://127.0.0.1:${process.env.VTA_BROWSER_PORT}`
@@ -49,10 +54,14 @@ test('zh-CN html lang and primary copy stay Chinese', async ({ page }) => {
   await page.goto('/add_task_by_web');
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   await expect(page.getByRole('heading', { name: '视频转录服务' })).toBeVisible();
+  await expect(page).toHaveTitle(staticTitles.submit.title);
+  expect(await page.locator('body').innerText()).toContain('视频转录服务');
 
   await page.goto('/static/history.html');
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   await expect(page.getByRole('heading', { name: '任务历史' })).toBeVisible();
+  await expect(page).toHaveTitle(staticTitles.history.title);
+  expect(await page.locator('body').innerText()).toContain('任务历史');
 
   await page.goto('/view/browser-fixture-view');
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');

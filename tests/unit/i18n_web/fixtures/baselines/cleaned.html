@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <script>
+    (function() {
+        var saved = localStorage.getItem('vta_theme_preference');
+        var theme = saved || 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+    })();
+    </script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <meta name="description" content="Video Transcript API - 多平台视频转录与 AI 校对服务">
+    <meta name="theme-color" content="#667eea">
+    <meta property="og:title" content="">
+    <meta property="og:description" content="多平台视频转录与 AI 校对服务">
+    <meta property="og:type" content="article">
+    <meta property="og:locale" content="zh_CN">
+    <meta property="og:site_name" content="Video Transcript API">
+    
+    <title>内容已清理 - 视频转录查看器</title>
+    <style>
+        /* CSS变量定义 - 主题系统 */
+        :root {
+            /* 深色主题（默认） */
+            --bg-gradient-start: #1e293b;
+            --bg-gradient-end: #0f172a;
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --bg-primary: #1e293b;
+            --bg-secondary: #334155;
+            --bg-tertiary: #475569;
+            --border-primary: #475569;
+            --header-text: #f8fafc;
+        }
+
+        /* 浅色主题 */
+        [data-theme="light"] {
+            --bg-gradient-start: #667eea;
+            --bg-gradient-end: #764ba2;
+            --text-primary: #333;
+            --text-secondary: #6b7280;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --bg-tertiary: #f3f4f6;
+            --border-primary: #e5e7eb;
+            --header-text: #ffffff;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-primary);
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: var(--bg-secondary);
+            transition: color 0.3s ease, background 0.3s ease;
+        }
+        
+        .container {
+            background: var(--bg-primary);
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: background 0.3s ease;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            color: var(--header-text);
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+        
+        .header .meta {
+            margin-top: 10px;
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+        
+        .header .meta a {
+            color: var(--header-text);
+            text-decoration: none;
+        }
+        
+        .header .meta a:hover {
+            text-decoration: underline;
+        }
+
+        /* ========== 站内导航（提交任务 / 任务历史） ========== */
+        .site-nav {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .site-nav-link {
+            color: var(--header-text);
+            text-decoration: none;
+            font-size: 0.85rem;
+            padding: 4px 12px;
+            border: 1px solid currentColor;
+            border-radius: 6px;
+            opacity: 0.75;
+            transition: opacity 0.2s ease, background 0.2s ease;
+        }
+
+        .site-nav-link:hover {
+            opacity: 1;
+            background: rgba(128, 128, 128, 0.15);
+        }
+
+        .section {
+            padding: 30px;
+            border-bottom: 1px solid var(--border-primary);
+        }
+        
+        .section:last-child {
+            border-bottom: none;
+        }
+        
+        .section h2 {
+            margin: 0 0 20px 0;
+            color: var(--text-primary);
+            font-size: 1.3rem;
+            border-bottom: 2px solid var(--border-primary);
+            padding-bottom: 10px;
+        }
+        
+        .content {
+            line-height: 1.8;
+            font-size: 1rem;
+        }
+        
+        /* Markdown样式 */
+        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 {
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        
+        .content h1 { font-size: 1.6rem; }
+        .content h2 { font-size: 1.4rem; }
+        .content h3 { font-size: 1.2rem; }
+        
+        .content p {
+            margin-bottom: 16px;
+        }
+        
+        .content blockquote {
+            border-left: 4px solid var(--border-primary);
+            padding-left: 16px;
+            margin: 16px 0;
+            color: var(--text-secondary);
+            font-style: italic;
+            background: var(--bg-secondary);
+            padding: 16px;
+            border-radius: 0 4px 4px 0;
+            transition: border 0.3s ease, color 0.3s ease, background 0.3s ease;
+        }
+
+        /* 深色模式下的引用优化 */
+        [data-theme="dark"] .content blockquote {
+            border-left-color: #64748b;
+            background: var(--bg-tertiary);
+        }
+        
+        .content pre, .content code {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            font-family: "SFMono-Regular", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
+            color: var(--text-primary);
+            transition: background 0.3s ease, border 0.3s ease, color 0.3s ease;
+        }
+
+        .content code {
+            padding: 2px 4px;
+            font-size: 0.9rem;
+        }
+
+        .content pre {
+            padding: 12px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+
+        /* 深色模式下的代码块优化 */
+        [data-theme="dark"] .content pre,
+        [data-theme="dark"] .content code {
+            background: #2d3748;
+            border-color: #4a5568;
+            color: #e2e8f0;
+        }
+        
+        /* 列表基础样式 */
+        .content ul, .content ol {
+            padding-left: 24px;
+            margin: 16px 0;
+        }
+
+        .content li {
+            margin-bottom: 8px;
+            line-height: 1.6;
+        }
+
+        /* 嵌套列表样式 - 增加明显的缩进以显示层级 */
+        .content ul ul,
+        .content ol ol,
+        .content ul ol,
+        .content ol ul {
+            padding-left: 40px;  /* 第2级：相对父级增加40px缩进，视觉差异明显 */
+            margin: 8px 0;       /* 减少嵌套列表的垂直间距 */
+        }
+
+        /* 第三层嵌套列表 */
+        .content ul ul ul,
+        .content ol ol ol {
+            padding-left: 40px;  /* 第3级：继续增加40px缩进 */
+            margin: 6px 0;
+        }
+
+        /* 定义不同层级的无序列表标记 */
+        .content ul {
+            list-style-type: disc;      /* 第1级：实心圆点 ● */
+        }
+
+        .content ul ul {
+            list-style-type: circle;    /* 第2级：空心圆 ○ */
+        }
+
+        .content ul ul ul {
+            list-style-type: square;    /* 第3级：实心方块 ■ */
+        }
+
+        /* 定义不同层级的有序列表标记 */
+        .content ol {
+            list-style-type: decimal;        /* 第1级：1, 2, 3 */
+        }
+
+        .content ol ol {
+            list-style-type: lower-alpha;    /* 第2级：a, b, c */
+        }
+
+        .content ol ol ol {
+            list-style-type: lower-roman;    /* 第3级：i, ii, iii */
+        }
+
+        /* 确保列表标记可见 */
+        .content ul, .content ol {
+            list-style-position: outside;    /* 标记在内容外侧 */
+        }
+
+        /* 嵌套列表项的间距优化 */
+        .content li li {
+            margin-bottom: 6px;  /* 嵌套列表项间距稍小 */
+        }
+
+        .content li li:last-child {
+            margin-bottom: 0;    /* 最后一个嵌套项无底部间距 */
+        }
+        
+        .content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 16px 0;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: background 0.3s ease;
+        }
+
+        .content th, .content td {
+            border: 1px solid var(--border-primary);
+            padding: 8px 12px;
+            text-align: left;
+            color: var(--text-primary);
+            transition: border 0.3s ease, color 0.3s ease;
+        }
+
+        .content th {
+            background: var(--bg-secondary);
+            font-weight: 600;
+            transition: background 0.3s ease;
+        }
+
+        /* 深色模式下的表格优化 */
+        [data-theme="dark"] .content table {
+            background: var(--bg-primary);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+
+        [data-theme="dark"] .content th {
+            background: var(--bg-tertiary);
+        }
+
+        [data-theme="dark"] .content th,
+        [data-theme="dark"] .content td {
+            border-color: var(--border-primary);
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 1.5rem;
+            }
+
+            .site-nav-link {
+                font-size: 0.78rem;
+                padding: 3px 10px;
+            }
+
+            .section {
+                padding: 20px;
+            }
+        }
+        
+        /* 状态样式 */
+        .status-processing {
+            background: #e7f3ff;
+            border-left: 4px solid #2196f3;
+            padding: 16px;
+            margin: 16px 0;
+            border-radius: 4px;
+        }
+        
+        .status-error {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 16px;
+            margin: 16px 0;
+            border-radius: 4px;
+        }
+        
+        .status-cleaned {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 16px;
+            margin: 16px 0;
+            border-radius: 4px;
+        }
+        
+        .action-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .action-list li {
+            padding: 8px 0;
+            font-size: 1.1rem;
+        }
+        
+        .action-list a {
+            color: #1976d2;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .action-list a:hover {
+            text-decoration: underline;
+        }
+        
+        /* 对话样式 */
+        .dialog-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .dialog-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            transition: box-shadow 0.2s ease, background 0.3s ease, border 0.3s ease;
+        }
+        
+        .dialog-item:hover {
+            box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+        }
+        
+        .speaker-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+            align-self: flex-start;
+        }
+        
+        .speaker-tag {
+            width: 100px;
+            text-align: center;
+            padding: 8px 12px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9em;
+            line-height: 1.3;
+            word-break: break-all;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .time-tag {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-family: "SFMono-Regular", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
+            border: 1px solid var(--border-primary);
+            white-space: nowrap;
+            transition: background 0.3s ease, color 0.3s ease, border 0.3s ease;
+        }
+        
+        .dialog-content {
+            flex: 1;
+            min-width: 0;
+            padding: 4px 0;
+        }
+        
+        .dialog-content p {
+            margin: 0 0 16px 0;
+            line-height: 1.7;
+            text-align: justify;
+        }
+        
+        .dialog-content p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .dialog-content .paragraph-break {
+            margin-bottom: 20px;
+        }
+        
+        /* 手机端响应式样式 */
+        @media (max-width: 768px) {
+            .dialog-item {
+                flex-direction: column;
+                gap: 8px;
+                margin-bottom: 20px;
+                padding: 16px;
+                background: var(--bg-secondary);
+                border-radius: 8px;
+                border-left: 4px solid var(--speaker-color, #3B82F6);
+            }
+            
+            .speaker-header {
+                flex-direction: row;
+                gap: 8px;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+            
+            .speaker-tag {
+                width: auto;
+                text-align: left;
+                font-size: 0.9em;
+                min-width: 60px;
+                margin-bottom: 0;
+            }
+            
+            .time-tag {
+                font-size: 0.75em;
+                padding: 3px 6px;
+            }
+            
+            .dialog-content {
+                padding-left: 0;
+            }
+            
+            .dialog-content p {
+                font-size: 1rem;
+                line-height: 1.6;
+            }
+        }
+        
+        /* 更小屏幕优化 */
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+                font-size: 16px;
+            }
+            
+            .dialog-item {
+                padding: 12px;
+                margin-bottom: 16px;
+            }
+            
+            .speaker-header {
+                gap: 6px;
+            }
+            
+            .speaker-tag {
+                font-size: 0.85em;
+                padding: 3px 6px;
+                min-width: 50px;
+            }
+            
+            .time-tag {
+                font-size: 0.7em;
+                padding: 2px 4px;
+            }
+            
+            .dialog-content p {
+                font-size: 16px;
+                line-height: 1.5;
+                margin-bottom: 10px;
+            }
+        }
+
+        /* 主题切换按钮样式 */
+        .theme-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            color: var(--header-text);
+            font-size: 1.2rem;
+        }
+
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+
+        .theme-toggle:active {
+            transform: scale(0.95);
+        }
+
+        [data-theme="dark"] .theme-toggle {
+            background: rgba(0, 0, 0, 0.2);
+            border-color: rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="dark"] .theme-toggle:hover {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        /* ========== 转录统计单行样式 ========== */
+        .stats-line {
+            padding: 12px 30px;
+            margin: 0;
+            background: rgba(0, 0, 0, 0.03);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stats-icon {
+            font-size: 1rem;
+            opacity: 0.8;
+        }
+
+        .stats-label {
+            font-weight: 600;
+            opacity: 0.9;
+        }
+
+        .stats-content {
+            opacity: 0.85;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        /* 深色主题适配 */
+        [data-theme="dark"] .stats-line {
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .stats-line {
+                padding: 10px 20px;
+                font-size: 0.85rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-line {
+                padding: 10px 15px;
+                font-size: 0.8rem;
+                flex-wrap: wrap;
+            }
+
+            .stats-content {
+                flex-basis: 100%;
+                margin-top: 5px;
+            }
+        }
+
+        /* ========== LLM 模型配置折叠区块样式 ========== */
+        .llm-config-details {
+            padding: 8px 30px;
+            margin: 0;
+            background: rgba(0, 0, 0, 0.02);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            font-size: 0.85rem;
+        }
+
+        .llm-config-details summary {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0;
+            user-select: none;
+            list-style: none;
+        }
+
+        .llm-config-details summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .llm-config-details summary::before {
+            content: '▶';
+            font-size: 0.7rem;
+            transition: transform 0.2s ease;
+            color: var(--text-secondary);
+        }
+
+        .llm-config-details[open] summary::before {
+            transform: rotate(90deg);
+        }
+
+        .config-icon {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .config-label {
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .risk-badge {
+            background: #dc2626;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-left: 8px;
+        }
+
+        .llm-config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 8px 16px;
+            padding: 12px 0 8px 20px;
+        }
+
+        .config-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .config-key {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .config-value {
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            font-family: "SFMono-Regular", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+        }
+
+        .reasoning-tag {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            margin-left: 4px;
+        }
+
+        /* 深色主题适配 */
+        [data-theme="dark"] .llm-config-details {
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        [data-theme="dark"] .risk-badge {
+            background: #ef4444;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .llm-config-details {
+                padding: 8px 20px;
+            }
+
+            .llm-config-grid {
+                grid-template-columns: 1fr;
+                padding-left: 16px;
+            }
+        }
+
+        /* ========== 一键复制按钮栏 ========== */
+        .quick-copy-bar {
+            padding: 12px 30px;
+            margin: 0;
+            background: rgba(0, 0, 0, 0.02);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .quick-copy-btn {
+            display: inline-grid;
+            grid-template-columns: 1fr auto;
+            grid-template-rows: auto auto;
+            align-items: center;
+            gap: 2px 8px;
+            padding: 8px 14px;
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-align: left;
+        }
+
+        .quick-copy-btn:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.06);
+        }
+
+        .quick-copy-btn:active {
+            transform: scale(0.97);
+        }
+
+        .quick-copy-btn.copied {
+            border-color: #10b981;
+            background: rgba(16, 185, 129, 0.08);
+        }
+
+        .quick-copy-label {
+            font-weight: 500;
+        }
+
+        .quick-copy-action {
+            font-size: 0.75rem;
+            color: #667eea;
+            border-left: 1px solid var(--border-primary);
+            padding-left: 8px;
+            grid-row: 1 / 3;
+            grid-column: 2;
+            align-self: center;
+        }
+
+        .quick-copy-btn.copied .quick-copy-action {
+            color: #10b981;
+        }
+
+        .quick-copy-desc {
+            grid-column: 1;
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            opacity: 0.7;
+            font-weight: 400;
+        }
+
+        /* 深色主题适配 */
+        [data-theme="dark"] .quick-copy-bar {
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        [data-theme="dark"] .quick-copy-btn {
+            background: var(--bg-secondary);
+        }
+
+        [data-theme="dark"] .quick-copy-btn:hover {
+            background: rgba(147, 165, 246, 0.1);
+        }
+
+        [data-theme="dark"] .quick-copy-action {
+            color: #93a5f6;
+        }
+
+        /* 响应式 */
+        @media (max-width: 480px) {
+            .quick-copy-bar {
+                padding: 10px 15px;
+                flex-direction: column;
+            }
+
+            .quick-copy-btn {
+                flex: 0 0 auto;
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+        }
+
+        /* ========== 开源脚注样式 ========== */
+        .powered-footer {
+            padding: 12px 30px;
+            text-align: center;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            opacity: 0.5;
+            transition: opacity 0.2s ease;
+        }
+
+        .powered-footer:hover {
+            opacity: 0.8;
+        }
+
+        .powered-footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+
+        .powered-footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* ========== 页面顶部开源信息细条 ========== */
+        .oss-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 6px 16px;
+            font-size: 0.78rem;
+            line-height: 1.4;
+            color: var(--text-secondary);
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-primary);
+            box-sizing: border-box;
+            transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+
+        .oss-bar-sep {
+            opacity: 0.6;
+            user-select: none;
+        }
+
+        .oss-bar-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .oss-bar-link:hover {
+            color: var(--text-primary);
+            text-decoration: underline;
+        }
+
+        .oss-bar-icon {
+            display: inline-block;
+            vertical-align: middle;
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 640px) {
+            .oss-bar {
+                padding: 0 10px;
+                gap: 6px;
+                font-size: 0.75rem;
+                white-space: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+            }
+
+            .oss-bar::-webkit-scrollbar {
+                display: none;
+            }
+
+            .oss-bar-link {
+                min-height: 32px;
+                display: inline-flex;
+                align-items: center;
+                padding: 0 4px;
+            }
+        }
+
+        /* ========== 导出链接折叠栏样式 ========== */
+        .export-links-details {
+            padding: 0;
+            margin: 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            font-size: 0.85rem;
+        }
+
+        .export-links-summary {
+            padding: 8px 30px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            user-select: none;
+            list-style: none;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        .export-links-summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .export-links-summary::before {
+            content: '▶';
+            font-size: 0.6rem;
+            transition: transform 0.2s ease;
+        }
+
+        .export-links-details[open] .export-links-summary::before {
+            transform: rotate(90deg);
+        }
+
+        .export-summary-label {
+            opacity: 0.7;
+        }
+
+        .export-links-content {
+            padding: 4px 30px 10px 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .export-icon {
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+
+        /* 深色主题适配 */
+        [data-theme="dark"] .export-links-details {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .export-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .export-group-label {
+            font-weight: 500;
+            color: var(--text-secondary);
+            min-width: 70px;
+            font-size: 0.8rem;
+        }
+
+        .export-group-items a {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+
+        .export-group-items a:hover {
+            text-decoration: underline;
+        }
+
+        .export-sep {
+            color: var(--text-secondary);
+            opacity: 0.4;
+            margin: 0 2px;
+        }
+
+        .export-hint {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            opacity: 0.6;
+            margin-left: 6px;
+        }
+
+        /* 深色主题适配 */
+        [data-theme="dark"] .export-links-bar {
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        [data-theme="dark"] .export-group-items a {
+            color: #93a5f6;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .export-links-bar {
+                padding: 10px 20px;
+            }
+
+            .export-group {
+                flex-wrap: wrap;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .export-links-bar {
+                padding: 10px 15px;
+            }
+
+            .export-group-label {
+                min-width: 60px;
+                font-size: 0.75rem;
+            }
+
+            .export-group-items a {
+                font-size: 0.8rem;
+            }
+        }
+
+        /* ========== 逐字稿内嵌章节头 ========== */
+        .chapter-anchor {
+            display: flex;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 4px 10px;
+            margin: 28px 0 14px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border-primary);
+        }
+
+        .chapter-anchor-time {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-family: "SFMono-Regular", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
+            flex-shrink: 0;
+        }
+
+        .chapter-anchor-title {
+            font-weight: 600;
+            font-size: 1.05rem;
+            color: var(--text-primary);
+        }
+
+        .chapter-anchor-gist {
+            flex-basis: 100%;
+            margin: 2px 0 0;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+
+        @media (max-width: 480px) {
+            .chapter-anchor {
+                margin: 22px 0 10px;
+                padding-top: 10px;
+            }
+
+            .chapter-anchor-title {
+                font-size: 1rem;
+            }
+
+            .chapter-anchor-gist {
+                font-size: 0.85rem;
+                line-height: 1.55;
+            }
+        }
+    </style>
+    
+</head>
+<body>
+    <div class="container">
+        <div class="oss-bar" aria-label="开源项目信息">
+            <span>由开源项目 </span>
+            <a href="https://github.com/zlxlabs/VideoTranscriptAPI" class="oss-bar-link" target="_blank" rel="noopener" title="开源，可自行部署" aria-label="GitHub 开源仓库 VideoTranscriptAPI">
+                <svg class="oss-bar-icon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                </svg>
+                <span>VideoTranscriptAPI</span>
+            </a>
+            <span> 生成</span>
+            <span class="oss-bar-sep" aria-hidden="true">·</span>
+            <span>by </span>
+            <a href="https://x.com/bylixing" class="oss-bar-link" target="_blank" rel="noopener" title="在 X 上关注 @bylixing" aria-label="作者张立行的 X 账号 @bylixing">
+                <svg class="oss-bar-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 24.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+                <span>张立行</span>
+            </a>
+        </div>
+        <div class="header">
+            <button id="theme-toggle" class="theme-toggle" title="切换到浅色模式">
+                ☀️
+            </button>
+            
+            <nav class="site-nav">
+                <a href="/add_task_by_web" class="site-nav-link">📝 提交任务</a>
+                <a href="/static/history.html?v=baseline" class="site-nav-link">📋 任务历史</a>
+            </nav>
+            
+            <h1>Fixture Title</h1>
+            
+            <div class="meta">
+                👤 Fixture Author
+                
+                    <br>🔗 <a href="https://www.youtube.com/watch?v=fixture" target="_blank" rel="noopener">查看原视频</a>
+                
+                
+                    <br>⏰ 2026-10-08 12:00
+                
+            </div>
+            
+        </div>
+        
+        
+    <div class="section">
+        <div class="status-cleaned">
+            <h2 style="margin-top: 0;">⚠️ 内容已清理</h2>
+            <p>该转录任务的底层文件已被系统清理，无法显示详细转录内容。</p>
+            
+            <h3>您可以：</h3>
+            <ul class="action-list">
+                
+                <li>📎 <a href="https://www.youtube.com/watch?v=fixture" target="_blank" rel="noopener">查看原始视频链接</a></li>
+                
+                <li>🔄 重新提交转录任务（将原始链接发送到API重新处理）</li>
+            </ul>
+            
+            
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd;">
+                <strong>原始任务信息：</strong><br>
+                创建时间：2026-10-08 12:00
+            </div>
+            
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>💡 如何重新获取转录</h2>
+        <div class="content">
+            <p>如果您需要重新获取这个视频的转录内容，请：</p>
+            <ol>
+                <li>复制上方的原始视频链接</li>
+                <li>使用API接口重新提交转录任务</li>
+                <li>等待处理完成后获取新的查看链接</li>
+            </ol>
+            
+            <p style="color: #666; font-size: 0.9rem;">
+                由于存储空间限制，系统会定期清理较旧的转录文件。查看链接永久有效，但内容可能会被清理。
+            </p>
+        </div>
+    </div>
+
+
+        <div class="powered-footer">
+            Powered by <a href="https://github.com/zlxlabs/VideoTranscriptAPI" target="_blank" rel="noopener">VideoTranscriptAPI</a> · Open Source · <a href="https://github.com/zlxlabs/VideoTranscriptAPI" target="_blank" rel="noopener">☆ Star on GitHub</a>
+        </div>
+    </div>
+    
+    <script src="/static/js/auth-storage.js?v=baseline"></script>
+    
+    
+    <!-- 主题切换脚本 -->
+    <script>
+        // 简化版主题切换功能（用于模板页面）
+        document.addEventListener('DOMContentLoaded', function() {
+            const THEME_KEY = 'vta_theme_preference';
+            
+            function getStoredTheme() {
+                try {
+                    const value = localStorage.getItem(THEME_KEY);
+                    return value ? JSON.parse(value) : null;
+                } catch (e) {
+                    return null;
+                }
+            }
+            
+            function setStoredTheme(theme) {
+                try {
+                    localStorage.setItem(THEME_KEY, JSON.stringify(theme));
+                } catch (e) {
+                    console.error('Failed to save theme preference');
+                }
+            }
+            
+            function detectSystemTheme() {
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+                    return 'light';
+                }
+                return 'dark';
+            }
+            
+            function applyTheme(theme) {
+                const root = document.documentElement;
+                const themeToggle = document.getElementById('theme-toggle');
+
+                // 始终通过 data-theme 属性设置主题
+                root.setAttribute('data-theme', theme);
+
+                if (theme === 'dark') {
+                    if (themeToggle) {
+                        themeToggle.textContent = '☀️';
+                        themeToggle.title = '切换到浅色模式';
+                    }
+                } else {
+                    if (themeToggle) {
+                        themeToggle.textContent = '🌙';
+                        themeToggle.title = '切换到深色模式';
+                    }
+                }
+            }
+            
+            function toggleTheme() {
+                const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                const themeToggle = document.getElementById('theme-toggle');
+                
+                // 添加按钮旋转动画
+                if (themeToggle) {
+                    themeToggle.classList.add('switching');
+                    setTimeout(() => {
+                        themeToggle.classList.remove('switching');
+                    }, 600);
+                }
+                
+                setStoredTheme(newTheme);
+                
+                // 添加页面过渡动画
+                const body = document.body;
+                body.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+                
+                // 应用新主题
+                setTimeout(() => {
+                    applyTheme(newTheme);
+                }, 50);
+                
+                // 清除过渡样式
+                setTimeout(() => {
+                    body.style.transition = '';
+                }, 350);
+            }
+            
+            // 初始化主题
+            const savedTheme = getStoredTheme();
+            const theme = savedTheme || detectSystemTheme();
+            applyTheme(theme);
+            
+            // 绑定切换按钮
+            const themeToggle = document.getElementById('theme-toggle');
+            if (themeToggle) {
+                themeToggle.addEventListener('click', toggleTheme);
+            }
+        });
+    </script>
+
+    <!-- 通用剪贴板复制脚本（供 URL 复制、正文复制共用） -->
+    <script>
+        /**
+         * 降级复制方案：通过隐藏 textarea + execCommand('copy') 实现，
+         * 用于 navigator.clipboard 不可用（如非 HTTPS 环境）时的兜底。
+         * 使用 textarea 而非 input，保证多行正文复制时换行不丢失。
+         */
+        function fallbackCopyToClipboard(text) {
+            var tmp = document.createElement('textarea');
+            tmp.value = text;
+            // 移出可视区域，避免影响页面布局与滚动
+            tmp.style.position = 'fixed';
+            tmp.style.top = '-9999px';
+            tmp.style.left = '-9999px';
+            tmp.style.opacity = '0';
+            document.body.appendChild(tmp);
+            tmp.focus();
+            tmp.select();
+            try {
+                document.execCommand('copy');
+            } finally {
+                document.body.removeChild(tmp);
+            }
+        }
+
+        /**
+         * 通用剪贴板复制函数：优先使用 navigator.clipboard API，
+         * 不可用或失败时自动降级到 execCommand 方案。
+         * @param {string} text 待复制的文本内容
+         * @param {Function} onDone 复制完成后的回调（用于驱动按钮的“已复制”视觉反馈）
+         */
+        function copyTextToClipboard(text, onDone) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(onDone).catch(function() {
+                    fallbackCopyToClipboard(text);
+                    onDone();
+                });
+            } else {
+                fallbackCopyToClipboard(text);
+                onDone();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // 场景一：一键复制链接 URL（沿用原有的按钮文案短暂反馈样式）
+            document.querySelectorAll('.quick-copy-btn:not(.deep-read-prompt-btn):not(.share-summary-btn)').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var path = btn.getAttribute('data-path');
+                    var fullUrl = window.location.origin + path;
+                    var actionEl = btn.querySelector('.quick-copy-action');
+                    var originalText = actionEl.textContent;
+
+                    copyTextToClipboard(fullUrl, function() {
+                        btn.classList.add('copied');
+                        actionEl.textContent = 'Copied!';
+                        setTimeout(function() {
+                            btn.classList.remove('copied');
+                            actionEl.textContent = originalText;
+                        }, 1500);
+                    });
+                });
+            });
+
+            // 场景一补充：复制深度阅读 Prompt 与同源 Raw 校对文本 URL
+            document.querySelectorAll('.deep-read-prompt-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var path = btn.getAttribute('data-path') || '';
+                    var templatePayload = btn.getAttribute('data-template') || '';
+                    var template = '';
+                    try {
+                        template = templatePayload ? JSON.parse(templatePayload) : '';
+                    } catch (error) {
+                        return;
+                    }
+                    if (typeof template !== 'string' || template.indexOf('{url}') === -1) {
+                        return;
+                    }
+                    var actionEl = btn.querySelector('.quick-copy-action');
+                    if (!actionEl || btn.classList.contains('copied')) {
+                        return;
+                    }
+                    var fullUrl = window.location.origin + path;
+                    var text = template.split('{url}').join(fullUrl);
+                    var originalText = actionEl.textContent;
+
+                    copyTextToClipboard(text, function() {
+                        btn.classList.add('copied');
+                        actionEl.textContent = '已复制';
+                        setTimeout(function() {
+                            btn.classList.remove('copied');
+                            actionEl.textContent = originalText;
+                        }, 1500);
+                    });
+                });
+            });
+
+            // 场景二：复制正文内容（内容总结 / 校对文本），复制目标区块的纯文本
+            document.querySelectorAll('.copy-content-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var targetId = btn.getAttribute('data-copy-target');
+                    var targetEl = targetId ? document.getElementById(targetId) : null;
+                    if (!targetEl) return;
+                    var sourceLinks = targetEl.querySelectorAll('.notes-source-link, .calibrated-notes-link');
+                    sourceLinks.forEach(function(link) {
+                        link.style.display = 'none';
+                    });
+                    var text = targetEl.innerText || targetEl.textContent || '';
+                    sourceLinks.forEach(function(link) {
+                        link.style.display = '';
+                    });
+                    var originalHtml = btn.innerHTML;
+
+                    copyTextToClipboard(text, function() {
+                        btn.classList.add('copied');
+                        btn.textContent = '✅ 已复制';
+                        setTimeout(function() {
+                            btn.classList.remove('copied');
+                            btn.innerHTML = originalHtml;
+                        }, 1500);
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+</html>

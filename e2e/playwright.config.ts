@@ -22,8 +22,8 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: `uv run python ../tests/browser_server.py --port ${port}`,
-    cwd: process.cwd(),
+    command: `uv run python tests/browser_server.py --port ${port}`,
+    cwd: `${process.cwd()}/..`,
     url: `${baseURL}/__e2e__/ready`,
     reuseExistingServer: false,
     timeout: 30_000,
