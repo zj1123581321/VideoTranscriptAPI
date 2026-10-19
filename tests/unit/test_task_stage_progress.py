@@ -200,6 +200,7 @@ class TestTerminalStateGuard:
                 ).fetchone()
 
         assert row is not None
+        assert row[0] is not None
         document = json.loads(row[0])
         assert document["stage"] == "download"
         assert document["stage_state"] == "running"
