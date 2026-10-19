@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from ...cache.cache_manager import generation_layer_language
+from ...llm.prompts.en import LENGTH_BUDGET_COEFFICIENT
 from ...transcriber import FunASRSpeakerClient
 from ...utils.logging import setup_logger
 from ...llm.core.summary_budget import (
@@ -205,7 +207,22 @@ def compute_summary_ratio_stats(
             band_ratios[band].append(ratio)
             if ratio > 1.0:
                 band_over_100[band] += 1
-            hard_cap = compute_summary_budget(original_length, budget_config).hard_cap
+            status_path = cache_dir / "llm_status.json"
+            if status_path.exists():
+                with status_path.open("r", encoding="utf-8") as handle:
+                    status_data = json.load(handle)
+            else:
+                status_data = {}
+            provenance = status_data.get("artifact_provenance")
+            layers = provenance.get("layers") if isinstance(provenance, dict) else None
+            summary_record = layers.get("summary") if isinstance(layers, dict) else None
+            summary_language = generation_layer_language(summary_record)
+            coefficient = (
+                LENGTH_BUDGET_COEFFICIENT if summary_language == "en" else 1.0
+            )
+            hard_cap = compute_summary_budget(
+                original_length, budget_config, coefficient=coefficient
+            ).hard_cap
             if summary_length > hard_cap:
                 band_over_hardcap[band] += 1
 

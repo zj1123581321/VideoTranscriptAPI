@@ -1376,5 +1376,68 @@ class TestNoSamplesAndFailureFallback(unittest.TestCase):
         self.assertEqual(result["source"], "cache_hit")
 
 
+class TestFallbackLabelLanguage(unittest.TestCase):
+    """Placeholder speaker labels follow the global output language."""
+
+    def _set_language(self, value):
+        from video_transcript_api.utils.logging.logger import load_config
+
+        config = load_config()
+        self._had_language = "language" in config
+        self._original_language = config.get("language")
+        if value is None:
+            config.pop("language", None)
+        else:
+            config["language"] = value
+        self._config = config
+
+    def tearDown(self):
+        config = getattr(self, "_config", None)
+        if config is None:
+            return
+        if self._had_language:
+            config["language"] = self._original_language
+        else:
+            config.pop("language", None)
+
+    def test_zh_cn_keeps_speaker_n_without_space(self):
+        self._set_language("zh-CN")
+        label = SpeakerInferencer._build_fallback_label(
+            "Speaker2", ["Speaker1", "Speaker2"]
+        )
+        self.assertEqual(label, "说话人2")
+
+    def test_en_uses_speaker_n_with_space(self):
+        self._set_language("en")
+        label = SpeakerInferencer._build_fallback_label(
+            "Speaker2", ["Speaker1", "Speaker2"]
+        )
+        self.assertEqual(label, "Speaker 2")
+
+    def test_en_compound_guess_uses_english_fallback_prefix(self):
+        self._set_language("en")
+        inferencer = _make_inferencer()
+        display, reason = inferencer._decide_display_name(
+            [
+                {
+                    "name": "Lan",
+                    "evidence_type": "dialog_address",
+                    "evidence_quote": "hi Lan",
+                },
+                {
+                    "name": "Blue",
+                    "evidence_type": "title_credit",
+                    "evidence_quote": "Blue",
+                },
+            ],
+            "Speaker2",
+            ["Speaker1", "Speaker2"],
+        )
+        self.assertIsNone(reason)
+        self.assertTrue(display.startswith("Speaker 2"))
+        self.assertIn("Lan", display)
+        self.assertIn("Blue", display)
+
+
 if __name__ == "__main__":
     unittest.main()

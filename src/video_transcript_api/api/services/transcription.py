@@ -1311,7 +1311,18 @@ def process_transcription(
                 logger.info("使用 CapsWriter 缓存文本")
 
             has_llm_calibrated = "llm_calibrated" in cache_data
-            has_llm_summary = "llm_summary" in cache_data
+            from ...cache.cache_manager import language_mismatched_generation_layers
+
+            mismatched_generation_layers = {
+                name
+                for name, _old, _new in language_mismatched_generation_layers(
+                    cache_data
+                )
+            }
+            has_llm_summary = (
+                "llm_summary" in cache_data
+                and "summary" not in mismatched_generation_layers
+            )
 
             # ---- 分层缓存命中判定（相对本次请求的 processing_options）----
             # 缓存产物只增不减：required = {transcript} ∪ (calibrate→calibrated) ∪
@@ -1377,7 +1388,9 @@ def process_transcription(
             chapters_requested = processing_options.get("chapters", True)
             cached_chapters_status = cached_llm_status.get("chapters_status")
             has_llm_chapters = "llm_chapters" in cache_data
-            if cached_chapters_status == ChaptersStatus.GENERATED and has_llm_chapters:
+            if "chapters" in mismatched_generation_layers:
+                chapters_layer_satisfied = False
+            elif cached_chapters_status == ChaptersStatus.GENERATED and has_llm_chapters:
                 chapters_layer_satisfied = True
             elif cached_chapters_status in (
                 ChaptersStatus.SKIPPED_SHORT,

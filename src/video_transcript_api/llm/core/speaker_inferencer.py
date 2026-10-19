@@ -1498,16 +1498,21 @@ class SpeakerInferencer:
 
     @staticmethod
     def _build_fallback_label(speaker: str, speakers: List[str]) -> str:
-        """构造降级占位符「说话人N」
+        """构造降级占位符「说话人N」/「Speaker N」
 
         N 优先取原始标签中的数字序号（如 Speaker3 -> 3）；
         标签中没有数字时，按其在 speakers 列表中的出现顺序编号（1 基）。
+        输出语言跟随全局 ``language``：zh-CN 为 ``说话人N``，en 为 ``Speaker N``。
         """
         match = re.search(r"(\d+)", speaker)
         if match:
             n = match.group(1)
         else:
             n = str(speakers.index(speaker) + 1)
+        from ...i18n import get_language
+
+        if get_language() == "en":
+            return f"Speaker {n}"
         return f"说话人{n}"
 
     def _identity_fallback(self, speakers: List[str]) -> Dict:

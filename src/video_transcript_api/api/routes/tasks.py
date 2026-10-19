@@ -30,6 +30,7 @@ from ..services.transcription import (
 from ..services.view_token_resolver import ViewTokenResolver
 from ...utils.busy_lock import acquire_for_task, release_for_task
 from ...utils.llm_status import ChaptersStatus, NotesStatus, SummaryStatus
+from ...cache.cache_manager import language_mismatched_generation_layers
 from ...utils.notifications import send_view_link_wechat, get_notification_router
 from ...utils.task_status import TaskStatus, http_code_for_status
 from ..services.terminal_status import finalize_terminal_status_and_notify
@@ -125,8 +126,13 @@ def _admit_upload_reprocess(cursor, view_token, user_id, cache_data):
     return ""
 
 
-def _read_fresh_notes_status(cache_dir: str | None) -> str | None:
-    """Read notes_status directly from the authoritative cache status file."""
+def _read_fresh_notes_status(cache_dir: str | None) -> dict | None:
+    """Read the authoritative llm_status.json object from the cache directory.
+
+    Returns the JSON object so callers can take notes_status and hand the same
+    payload to language_mismatched_generation_layers. Missing file returns
+    None. Invalid JSON or a non-object payload raises (fail-loud).
+    """
     if not cache_dir:
         raise ValueError("Detailed notes cache directory is unavailable")
     status_file = Path(cache_dir) / "llm_status.json"
@@ -135,7 +141,7 @@ def _read_fresh_notes_status(cache_dir: str | None) -> str | None:
     status_payload = json.loads(status_file.read_text(encoding="utf-8"))
     if not isinstance(status_payload, dict):
         raise ValueError("llm_status.json must contain a JSON object")
-    return status_payload.get("notes_status")
+    return status_payload
 
 
 # K1 路由站点观察面（CI review 第 3 轮 major）：_fail_task_after_creation
@@ -1273,8 +1279,13 @@ async def generate_notes(
             detail="详细笔记依赖已生成的章节层，请先生成章节后再重试",
         )
     if llm_status.get("notes_status") == NotesStatus.GENERATED:
-        logger.warning(f"详细笔记已存在，拒绝重复生成: {view_token}")
-        raise HTTPException(status_code=400, detail="详细笔记已存在，无需重复生成")
+        notes_language_mismatch = any(
+            layer == "notes"
+            for layer, _old, _new in language_mismatched_generation_layers(cache_data)
+        )
+        if not notes_language_mismatch:
+            logger.warning(f"详细笔记已存在，拒绝重复生成: {view_token}")
+            raise HTTPException(status_code=400, detail="详细笔记已存在，无需重复生成")
 
     try:
         with cache_manager._get_cursor() as cursor:
@@ -1335,9 +1346,19 @@ async def generate_notes(
                 )
 
                 if inflight_notes_task_id is None:
+                    fresh_status = _read_fresh_notes_status(cache_file_path)
                     notes_generated_during_admission = (
-                        _read_fresh_notes_status(cache_file_path)
+                        (fresh_status or {}).get("notes_status")
                         == NotesStatus.GENERATED
+                        and not any(
+                            layer == "notes"
+                            for layer, _old, _new in language_mismatched_generation_layers(
+                                {
+                                    "llm_status": fresh_status or {},
+                                    "file_path": cache_file_path,
+                                }
+                            )
+                        )
                     )
                     if not notes_generated_during_admission:
                         cursor.execute(

@@ -63,6 +63,71 @@ _SHUTDOWN_DRAIN_MIN_BUSY_TIMEOUT_MS = 50
 # 避免单条记录卡死整个清理任务（媒体锁不可用时的降级策略见 cleanup_old_cache）。
 _CLEANUP_MEDIA_LOCK_TIMEOUT_SECONDS = 5.0
 
+# Generation layers judged by artifact_provenance.language.
+# Calibration is intentionally absent: language mismatch must not rerun it.
+# Values are (get_cache payload key or None, on-disk filename).
+_GENERATION_LAYER_FILES = {
+    "summary": ("llm_summary", "llm_summary.txt"),
+    "notes": ("llm_notes", "llm_notes.txt"),
+    "chapters": ("llm_chapters", "llm_chapters.json"),
+}
+
+
+def generation_layer_language(layer_record: Any) -> str:
+    """Return the language stamped on a provenance layer record.
+
+    A missing or empty ``language`` field is treated as ``zh-CN`` so legacy
+    artifacts keep their original Chinese meaning without a migration.
+    """
+    if not isinstance(layer_record, dict):
+        return "zh-CN"
+    language = layer_record.get("language")
+    if not isinstance(language, str) or not language:
+        return "zh-CN"
+    return language
+
+
+def language_mismatched_generation_layers(
+    cache_data: Optional[Dict[str, Any]],
+    current_language: Optional[str] = None,
+) -> List[Tuple[str, str, str]]:
+    """Return ``(layer, old_language, new_language)`` for generation layers to redo.
+
+    A layer is a candidate when its payload is in ``cache_data``, its file
+    exists on disk, or it already has a provenance record. Missing language is
+    treated as zh-CN. Calibration is never included. Does not mutate cache_data:
+    view pages keep showing the old-language artifact until it is regenerated.
+    """
+    from ..i18n import get_language
+
+    if current_language is None:
+        current_language = get_language()
+    if not isinstance(cache_data, dict):
+        return []
+    status = cache_data.get("llm_status")
+    layers: Dict[str, Any] = {}
+    if isinstance(status, dict):
+        provenance = status.get("artifact_provenance")
+        if (
+            isinstance(provenance, dict)
+            and provenance.get("schema_version") == "artifact-provenance-v1"
+            and isinstance(provenance.get("layers"), dict)
+        ):
+            layers = provenance["layers"]
+    cache_path = Path(cache_data["file_path"]) if cache_data.get("file_path") else None
+    mismatches: List[Tuple[str, str, str]] = []
+    for layer_name, (cache_key, filename) in _GENERATION_LAYER_FILES.items():
+        in_payload = cache_key is not None and cache_key in cache_data
+        on_disk = bool(cache_path and (cache_path / filename).exists())
+        record = layers.get(layer_name)
+        if not in_payload and not on_disk and not isinstance(record, dict):
+            continue
+        old_language = generation_layer_language(record)
+        if old_language != current_language:
+            mismatches.append((layer_name, old_language, current_language))
+    return mismatches
+
+
 class CacheManager:
     """
     管理视频转录缓存的类
