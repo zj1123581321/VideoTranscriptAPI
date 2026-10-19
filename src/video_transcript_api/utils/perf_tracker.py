@@ -55,7 +55,6 @@ class PerfTracker:
         # _published_stages 是已退出阶段的有序发布记录。
         self._publishing: Optional[Dict[str, str]] = None
         self._published_stages: List[Dict[str, Any]] = []
-        self._subprogress: Optional[Dict[str, int]] = None
 
     def set_media_duration(self, duration_s: Optional[float]) -> None:
         """记录探测到的媒体时长（秒），随终态快照 observability 落库。
@@ -71,32 +70,11 @@ class PerfTracker:
 
         Args:
             sink: 接收进度文档并写入 task_status.progress 的回调。
-                未注入时 track() 只做内存计时，不发布进度。
+                未注入时 track() 只做内存计时，不发布进度（详细笔记等
+                独立 progress 契约的流程不注入，维持自身既有写入方）。
         """
         with self._lock:
             self._progress_sink = sink
-
-    def report_subprogress(self, done: int, total: int) -> bool:
-        """发布当前阶段的 done/total 细粒度计数（详细笔记阶段契约）。
-
-        进度文档只有一个属主（本入口）：调用方不再自行整份覆盖
-        task_status.progress，done/total 随当前阶段文档一起发布，
-        处理中查看页与 /api/task 消费方读到的结构保持一致。
-
-        Args:
-            done: 已完成条目数。
-            total: 总条目数。
-
-        Returns:
-            bool: 是否成功发布；False 表示未注入 sink 或当前没有
-                running 阶段（拒绝不打断业务主流程，由调用方记日志）。
-        """
-        with self._lock:
-            if self._progress_sink is None or self._publishing is None:
-                return False
-            self._subprogress = {"done": done, "total": total}
-            document = self._build_progress_document_locked()
-        return self._publish(document)
 
     @contextmanager
     def track(self, stage: str, *, publish_as: Optional[str] = None):
@@ -106,8 +84,8 @@ class PerfTracker:
             stage: 阶段名称（如 "download", "transcription", "llm_processing"）
             publish_as: 进度文档对外展示的阶段名；缺省发布 stage 本身。
                 仅当观测口径锁死了内部名、而用户可见阶段需要另一个名字时
-                使用（如 llm_processing 对主流程发布 llm、对详细笔记任务
-                发布 notes），新代码不要随手加映射。
+                使用（llm_processing 的观测名被终态快照消费方锁死，用户
+                可见名为 llm），新代码不要随手加映射。
 
         Yields:
             None
@@ -167,7 +145,6 @@ class PerfTracker:
         """退出阶段：记录已完成区间并发布终态文档。"""
         with self._lock:
             self._publishing = None
-            self._subprogress = None
             self._published_stages.append(
                 {
                     "stage": publish_name,
@@ -182,7 +159,7 @@ class PerfTracker:
         """组装进度文档；调用方必须已持有 self._lock。
 
         文档形状（契约见 docs/guides/task-observability.md）：
-        {"stage", "stage_state", "started_at", "stages": [...], "done"?, "total"?}
+        {"stage", "stage_state", "started_at", "stages": [...]}
         """
         if self._publishing is not None:
             stage = self._publishing["stage"]
@@ -197,7 +174,7 @@ class PerfTracker:
             stage = ""
             stage_state = "running"
             started_at = ""
-        document: Dict[str, Any] = {
+        return {
             "stage": stage,
             "stage_state": stage_state,
             "started_at": started_at,
@@ -210,10 +187,6 @@ class PerfTracker:
                 for record in self._published_stages
             ],
         }
-        if self._subprogress is not None:
-            document["done"] = self._subprogress["done"]
-            document["total"] = self._subprogress["total"]
-        return document
 
     def _publish(self, document: Dict[str, Any]) -> bool:
         """把进度文档交给注入的 sink；失败降级为可 grep 日志，不传播。

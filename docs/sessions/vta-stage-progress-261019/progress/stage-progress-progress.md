@@ -21,4 +21,12 @@
 - **关键决策与已否决方案**:展示文本在 resolver 侧预渲染(而非模板里做 i18n 逻辑)——Jinja 模板与浏览器夹具(tests/browser_server.py 直渲染模板)只面对最终文本,契约最窄。done/total 只在 notes 阶段 running 时发布,阶段退出即清(过期计数不该在完成后显示),transcript.html 前端轮询窗口与 notes 运行窗口重合,契约不破坏(vitest 12 条原样通过)。
 - **下一步唯一动作**:transcription.py/llm_ops.py 接线 + 从 process_transcription 生产入口驱动的端到端断言测试 + 红验①。
 
+## 里程碑 4:业务接线 + 生产入口端到端断言
+
+- **当前阶段**:implementing(接线完成,E2E 断言测试 19 条全绿)
+- **本段结论**:transcription.py:1061 经惰性 lambda 绑定 sink(publish 时刻才解析 `cache_manager.stage_progress_sink`,15+ 个喂 FakeCacheManager 的既有测试不受影响,替身缺失该绑定时走入口既有 stage_progress_failed 降级路径);llm_ops.py:718 加 `publish_as="llm"`(观测名 llm_processing 被终态快照消费方锁死)。E2E 断言测试 `TestProcessTranscriptionStagePublishing` 从 process_transcription 生产入口驱动,只在下载器/转录器最外层打桩,桩内用独立 sqlite 连接断言 download running / transcription running 且 download done,随后 resolver 视图数据与渲染 HTML 都带阶段信息。
+- **关键决策与已否决方案**:详细笔记路径维持既有直写 update_task_progress(`{"stage":"notes","done","total"}` 契约,卡面约束明文豁免的「notes 细节更新」),notes-only 任务的 tracker 不接 sink(无交接 tracker),故 `report_subprogress` 失去消费者按反熵条款撤除;否决「把 notes 细粒度计数并入入口文档」——会打破 tests/integration/test_llm_ops_generate_notes.py:223 的整字典契约断言且该文件在 Scope-Globs 外。notes 阶段运行时 status=processing(非终态),终态限定不影响其写入。
+- **下一步唯一动作**:红验①(入口进入不写库 → 阶段进行中可见测试转红)。
+
+
 

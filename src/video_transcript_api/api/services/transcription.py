@@ -1057,8 +1057,15 @@ def process_transcription(
     if notification_webhooks is None:
         notification_webhooks = {}
     processing_options = normalize_processing_options(processing_options)
-    # 性能追踪器：记录各阶段耗时
+    # 性能追踪器：记录各阶段耗时。track 边界同时是任务阶段进度的唯一发布
+    # 入口——经 sink 把 running/done/failed 文档写进 task_status.progress，
+    # 供 /view/<view_token> 处理中页面展示。sink 在首次发布时才解析绑定：
+    # 进度是从属元数据，绑定缺失或写入失败走入口的 stage_progress_failed
+    # 降级日志，绝不打断转录主流程。
     tracker = PerfTracker(task_id=task_id)
+    tracker.attach_progress_sink(
+        lambda document: cache_manager.stage_progress_sink(task_id)(document)
+    )
 
     # ---- 临时文件生命周期（见评审决议 D10/D11/codex#1,#9）----
     # 进入处理：标记活跃（受在途保护）、绑定当前线程任务、建任务专属目录、
