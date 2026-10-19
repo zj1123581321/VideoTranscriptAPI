@@ -26,3 +26,10 @@ Base: `c2fa382e18734a0da410fdec1912da4c7b6c26d2`
 - **本段结论**：逐行比对 base 与 HEAD 的中文注释流，发现 `speaker_inference` 降级段的中文句「避免把低置信度的猜测当作确定结论展示给用户」被折进英文译句、中文读者丢失了原句；已恢复中文原文并保持「中文行后紧跟英文行」的同一风格。复查结果：中文注释流相对 base 只剩新增（`language` 段、`按钮文案`、英文行里引用的 `企业级客户`），无删除、无改写；48 个注释块全部中文英文双全，不存在单语块；`commentjson` 解析 base 与 HEAD 两版，`added=['language'] removed=[] changed=[]`。
 - **关键决策与已否决方案**：中文注释流比对用 CJK 字符序列做 `difflib` 差分，而不是按行 diff——逐行 diff 会把「中文行与英文行调换顺序」误判成内容改动，CJK 字符流差分只暴露真正的中文增删改。否决「顺手把 `README.md` 里过期的 `make test` 范围描述（只跑 unit + cache）改对」——超出本卡允许的改动边界，只在报告里记为继承问题。
 - **下一步唯一动作**：跑 `make test` 与 `card_scope_check.py`，把原始输出写进 report.md。
+
+## 里程碑 4：修掉两处「凭空多出/过期说法」+ 全量验收（commit 9879637b、eaa7ac68）
+
+- **当前阶段**：verifying（实现与文档均已完成，只剩最终验收）
+- **本段结论**：逐条对照卡面「约束」又清出两处偏差：（1）`config.example.jsonc` 的 `label` 行在 base 里本无注释，上一轮给它加了「按钮文案 / Button label」，等于给中文读者凭空多一句，已还原为无注释；（2）英文 README 原样照抄了中文 README 里「`make test` 只跑 `tests/unit` 和 `tests/cache`」这句过期说法（Makefile 自 396e6b3b 起跑 `pytest -q tests`，仅排除 `tests/manual/`），已按 Makefile 与 `tests/README.md` 的实际范围改写。中文 README 正文不在本卡允许的改动范围内，未同步修改。
+- **关键决策与已否决方案**：两句（Makefile 与 tests/README.md）互相印证后才改写英文版命令范围，不单信 README.md 一句话。否决「顺手把中文 README 的同一句也改对」——卡面「非目标」明确 README.md 只允许顶部互链 + 配置章节一行 `language` 说明，这个过期说法记进报告交主脑另开卡。
+- **下一步唯一动作**：跑 `make test` 与 `card_scope_check.py`，把原始输出写进 report.md。
