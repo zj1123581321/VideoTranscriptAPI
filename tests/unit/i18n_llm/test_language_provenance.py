@@ -5,6 +5,7 @@ Console output must stay ASCII-only (no emoji).
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -375,3 +376,19 @@ def test_generate_notes_allows_language_mismatch(tmp_path, monkeypatch, language
         assert exc_info.value.status_code == 400
     finally:
         manager.close()
+
+
+def test_read_fresh_notes_status_rejects_invalid_json(tmp_path):
+    from video_transcript_api.api.routes.tasks import _read_fresh_notes_status
+
+    (tmp_path / "llm_status.json").write_text("{", encoding="utf-8")
+    with pytest.raises(json.JSONDecodeError):
+        _read_fresh_notes_status(str(tmp_path))
+
+
+def test_read_fresh_notes_status_rejects_non_object(tmp_path):
+    from video_transcript_api.api.routes.tasks import _read_fresh_notes_status
+
+    (tmp_path / "llm_status.json").write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="JSON object"):
+        _read_fresh_notes_status(str(tmp_path))

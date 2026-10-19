@@ -126,8 +126,13 @@ def _admit_upload_reprocess(cursor, view_token, user_id, cache_data):
     return ""
 
 
-def _read_fresh_notes_status(cache_dir: str | None) -> str | None:
-    """Read notes_status directly from the authoritative cache status file."""
+def _read_fresh_notes_status(cache_dir: str | None) -> dict | None:
+    """Read the authoritative llm_status.json object from the cache directory.
+
+    Returns the JSON object so callers can take notes_status and hand the same
+    payload to language_mismatched_generation_layers. Missing file returns
+    None. Invalid JSON or a non-object payload raises (fail-loud).
+    """
     if not cache_dir:
         raise ValueError("Detailed notes cache directory is unavailable")
     status_file = Path(cache_dir) / "llm_status.json"
@@ -136,7 +141,7 @@ def _read_fresh_notes_status(cache_dir: str | None) -> str | None:
     status_payload = json.loads(status_file.read_text(encoding="utf-8"))
     if not isinstance(status_payload, dict):
         raise ValueError("llm_status.json must contain a JSON object")
-    return status_payload.get("notes_status")
+    return status_payload
 
 
 # K1 路由站点观察面（CI review 第 3 轮 major）：_fail_task_after_creation
@@ -1341,20 +1346,17 @@ async def generate_notes(
                 )
 
                 if inflight_notes_task_id is None:
-                    fresh_notes_cache = cache_manager.get_cache(
-                        platform,
-                        media_id,
-                        use_speaker_recognition=use_speaker_recognition,
-                    ) or {}
+                    fresh_status = _read_fresh_notes_status(cache_file_path)
                     notes_generated_during_admission = (
-                        (fresh_notes_cache.get("llm_status") or {}).get(
-                            "notes_status"
-                        )
+                        (fresh_status or {}).get("notes_status")
                         == NotesStatus.GENERATED
                         and not any(
                             layer == "notes"
                             for layer, _old, _new in language_mismatched_generation_layers(
-                                fresh_notes_cache
+                                {
+                                    "llm_status": fresh_status or {},
+                                    "file_path": cache_file_path,
+                                }
                             )
                         )
                     )

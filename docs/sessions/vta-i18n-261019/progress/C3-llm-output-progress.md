@@ -48,3 +48,10 @@
 - **本段结论**：从 `_GENERATION_LAYER_FILES` 删除 share_card。en 下 summary 已是 en 且仅有分享卡文件时 mismatch 为空。HEAD `7882798b` 上该测试以 AssertionError 先红（`('share_card', 'zh-CN', 'en')`）。
 - **关键决策与已否决方案**：否决给分享卡补 provenance；它随总结重生删除重建。
 - **下一步唯一动作**：generate_notes 准入恢复 `_read_fresh_notes_status` 权威读。
+
+## 2026-10-19 generate_notes 准入恢复权威读
+
+- **当前阶段**：implementing
+- **本段结论**：准入段改回读 `llm_status.json`。函数返回整份 payload，调用方取 notes_status 并把 payload 交给语言判定。非法 JSON / 非 object 仍抛错。不再在准入段调 get_cache。
+- **关键决策与已否决方案**：保留函数名 `_read_fresh_notes_status`，扩大返回值为整份 status 对象而不是另起函数。
+- **下一步唯一动作**：跑 Narrow-Verify 与 make test，scope check 后 push。
