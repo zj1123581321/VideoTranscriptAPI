@@ -60,6 +60,12 @@
 - 关键决策与已否决方案：将缺省分支也改为目录 key，避免未知状态在 en 下泄露中文；不改变 task status 字段、HTTP code 或历史数据库数据。
 - 下一步唯一动作：提交并推送 D，然后运行最终窄/全量验收与 scope 检查并写完整报告。
 
+### 里程碑 12：修订卡最终验收
+- 当前阶段：completed
+- 本段结论：A/B/C/D 均已逐项提交并推送；最终窄验证与 `make test` 全绿，compileall、locale 字典序/双语 key/CJK 检查及最终 Scope-Globs 检查通过，工作区干净。默认 422 形状、Starlette 404/405 原始 detail 与失败原因具体异常值均有响应级测试。
+- 关键决策与已否决方案：task_status 的英文固定文案本地化但异常值原样保留；通知参数与日志继续使用原文；不迁移历史失败原因。
+- 下一步唯一动作：在当前 dispatch 的 `report.md` 写入完整 error_code 表、门禁 finding 答复、验证输出和最终提交/推送证据。
+
 ### 里程碑 12：C5 修订验收收敛
 - 当前阶段：completed
 - 本段结论：A/B/C/D 均已按序提交并推送；最终窄测试与 `make test` 通过，compileall 与最终 scope 检查通过，工作区干净。C 的 task_status 原因保留具体异常文本，通知与日志原文仍不变。
