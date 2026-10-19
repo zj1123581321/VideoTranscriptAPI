@@ -27,3 +27,10 @@
 - **本段结论**：生成层 provenance 写入 `language`（缺字段=zh-CN）。`get_cache` 对语言不一致的总结/笔记/章节视为缺失，转录路径会重跑该层。`LANGUAGE-MISMATCH-REGENERATE` 在 llm_ops 打 WARNING。校对层不因 language 重跑。分享卡文案不进 provenance，随总结重生删除旧卡。
 - **关键决策与已否决方案**：否决改缓存键；否决改 transcription.py。用 get_cache 隐藏层 + llm_ops 磁盘判定双保险。
 - **下一步唯一动作**：红验 LANGUAGE-MISMATCH-REGENERATE 断言，再跑 make test 与 scope check。
+
+## 2026-10-19 验收与红验
+
+- **当前阶段**：implementing
+- **本段结论**：改坏日志字面量后 `test_language_mismatch_regenerate_log_locked` 以 AssertionError 转红并已还原。`make test` 退出码 0。`card_scope_check.py` 对 Base..HEAD 绿。本机无 LLM 凭据且出站网络被拦，真实样本补跑留给主脑。
+- **关键决策与已否决方案**：红验只改 `log_language_mismatch_regenerate` 那一行日志前缀，未整文件 checkout。
+- **下一步唯一动作**：提交本段进度并 push 到 `card/VideoTranscriptAPI-20261019-05`。
