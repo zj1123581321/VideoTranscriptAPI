@@ -14,3 +14,11 @@
 - **关键决策与已否决方案**:否决「update_task_progress 返回 True 时清空 progress 列」——终态后 progress 保留在行里,/api/task 原样透出是卡面非目标外的既有行为;查看页按生命周期状态过滤(决策 6)即可,不动 API 外形。
 - **下一步唯一动作**:i18n 词表 + resolver 阶段展示 + processing.html 渲染。
 
+## 里程碑 3:i18n 词表 + resolver 展示 + 模板渲染
+
+- **当前阶段**:implementing(用户可见面已接通,业务接线未做)
+- **本段结论**:两份词表新增 `web.processing.stage.*`/`web.processing.progress.*`/`web.processing.duration.*` 共 13 键;`view_token_resolver` 的 processing 分支把 progress TEXT 解析后经 `build_stage_progress_display` 转成整行展示文本(current_line/notes_line/completed_header/completed_items),views.py 无需改动(`**view_data` 自动透传);processing.html 加 `.stage-progress` 块。瞬时阶段(url_parse/cache_check/metadata)在页面归入「准备」,不单独成步;无词表条目的新阶段以内部名直接上页(零额外代码可见性的展示侧保障),由 test_new_stage_without_catalog_entry_still_renders 锁定。
+- **关键决策与已否决方案**:展示文本在 resolver 侧预渲染(而非模板里做 i18n 逻辑)——Jinja 模板与浏览器夹具(tests/browser_server.py 直渲染模板)只面对最终文本,契约最窄。done/total 只在 notes 阶段 running 时发布,阶段退出即清(过期计数不该在完成后显示),transcript.html 前端轮询窗口与 notes 运行窗口重合,契约不破坏(vitest 12 条原样通过)。
+- **下一步唯一动作**:transcription.py/llm_ops.py 接线 + 从 process_transcription 生产入口驱动的端到端断言测试 + 红验①。
+
+

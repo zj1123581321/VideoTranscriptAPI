@@ -1,4 +1,17 @@
 {
   "common.language_name": "English",
-  "common.language_selected": "UI language: {language}"
+  "common.language_selected": "UI language: {language}",
+  "web.processing.stage.preparing": "Preparation",
+  "web.processing.stage.download": "Download",
+  "web.processing.stage.transcription": "Transcription",
+  "web.processing.stage.llm": "AI post-processing",
+  "web.processing.stage.notes": "Detailed notes",
+  "web.processing.progress.current": "Current stage: {stage} (elapsed {elapsed})",
+  "web.processing.progress.current_plain": "Current stage: {stage}",
+  "web.processing.progress.notes_detail": "Detailed notes progress: {done}/{total}",
+  "web.processing.progress.completed_header": "Completed stages",
+  "web.processing.progress.completed_item": "{stage} (took {elapsed})",
+  "web.processing.duration.seconds": "{seconds}s",
+  "web.processing.duration.minutes": "{minutes}m {seconds}s",
+  "web.processing.duration.hours": "{hours}h {minutes}m"
 }

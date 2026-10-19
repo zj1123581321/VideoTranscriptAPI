@@ -1,4 +1,17 @@
 {
   "common.language_name": "中文",
-  "common.language_selected": "界面语言：{language}"
+  "common.language_selected": "界面语言：{language}",
+  "web.processing.stage.preparing": "准备",
+  "web.processing.stage.download": "下载",
+  "web.processing.stage.transcription": "转录",
+  "web.processing.stage.llm": "AI 后处理",
+  "web.processing.stage.notes": "详细笔记",
+  "web.processing.progress.current": "当前阶段：{stage}（已进行 {elapsed}）",
+  "web.processing.progress.current_plain": "当前阶段：{stage}",
+  "web.processing.progress.notes_detail": "详细笔记进度：{done}/{total}",
+  "web.processing.progress.completed_header": "已完成阶段",
+  "web.processing.progress.completed_item": "{stage}（耗时 {elapsed}）",
+  "web.processing.duration.seconds": "{seconds} 秒",
+  "web.processing.duration.minutes": "{minutes} 分 {seconds} 秒",
+  "web.processing.duration.hours": "{hours} 小时 {minutes} 分"
 }
