@@ -251,7 +251,7 @@ Detailed documentation lives under [docs/](docs/) (currently written in Chinese)
 make test
 ```
 
-`make test` runs only `tests/unit` and `tests/cache`; it is not the full suite.
+`make test` is the local gate: it runs `uv sync --frozen` and then `uv run --frozen pytest -q tests`, so it discovers the whole `tests/` tree and skips only `tests/manual/` (the explicitly opt-in suite).
 
 ---
 
