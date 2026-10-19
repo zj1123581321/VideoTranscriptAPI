@@ -62,15 +62,15 @@ def test_jinja_pages_match_base_goldens(language_config):
     install_i18n(env)
     env.globals["asset_v"] = "baseline"
     pages = {
-        "result.html": "transcript.html",
-        "processing.html": "processing.html",
-        "error.html": "error.html",
-        "cleaned.html": "cleaned.html",
+        "result.txt": "transcript.html",
+        "processing.txt": "processing.html",
+        "error.txt": "error.html",
+        "cleaned.txt": "cleaned.html",
     }
     for filename, template_name in pages.items():
         current = env.get_template(template_name).render(**RESULT_CONTEXT)
         golden = (BASELINES / filename).read_text(encoding="utf-8")
-        assert visible_text(current) == visible_text(golden), filename
+        assert visible_text(current) + "\n" == golden, filename
 
 
 def test_static_titles_match_base_golden():

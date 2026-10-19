@@ -15,7 +15,37 @@ import ast
 import json
 from pathlib import Path
 
+from html.parser import HTMLParser
+
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+
+class _VisibleText(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+        self._skip = 0
+
+    def handle_starttag(self, tag, attrs) -> None:
+        if tag in ("script", "style"):
+            self._skip += 1
+
+    def handle_endtag(self, tag) -> None:
+        if tag in ("script", "style") and self._skip:
+            self._skip -= 1
+
+    def handle_data(self, data) -> None:
+        if self._skip:
+            return
+        text = " ".join(data.split())
+        if text:
+            self.parts.append(text)
+
+
+def _visible_text(html: str) -> str:
+    parser = _VisibleText()
+    parser.feed(html)
+    return "\n".join(parser.parts)
 
 RESULT_CONTEXT = {
     "request": None,
@@ -95,14 +125,14 @@ def main() -> None:
 
     env = _jinja_env(templates_dir)
     pages = {
-        "result.html": "transcript.html",
-        "processing.html": "processing.html",
-        "error.html": "error.html",
-        "cleaned.html": "cleaned.html",
+        "result.txt": "transcript.html",
+        "processing.txt": "processing.html",
+        "error.txt": "error.html",
+        "cleaned.txt": "cleaned.html",
     }
     for filename, template_name in pages.items():
         html = env.get_template(template_name).render(**RESULT_CONTEXT)
-        (out / filename).write_text(html, encoding="utf-8")
+        (out / filename).write_text(_visible_text(html) + "\n", encoding="utf-8")
 
     static_dir = src / "src/web/static"
     snapshots = {}
