@@ -28,9 +28,12 @@ from ...utils.logging import setup_logger
 from ...utils.llm_status import ChaptersStatus
 from ..core.config import LLMConfig
 from ..core.llm_client import LLMClient
-from ..prompts import (
-    CHAPTERS_SYSTEM_PROMPT,
+from ..prompts import en as en_prompts
+from ..prompts.localized import (
     build_chapters_user_prompt,
+    chapter_title_limits,
+    chapters_system_prompt,
+    is_english,
 )
 
 logger = setup_logger(__name__)
@@ -514,11 +517,12 @@ def _normalize_title_length(title: str, idx: int) -> str:
     Returns:
         str: 长度 <= `_TITLE_MAX_CHARS` 的标题（未超长时原样返回）
     """
-    if len(title) <= _TITLE_MAX_CHARS:
+    max_chars, truncate_to = chapter_title_limits()
+    if len(title) <= max_chars:
         return title
-    truncated = title[:_TITLE_TRUNCATE_TO] + "…"
+    truncated = title[:truncate_to] + "…"
     logger.warning(
-        f"[CHAPTERS] chapters[{idx}].title exceeds {_TITLE_MAX_CHARS} chars "
+        f"[CHAPTERS] chapters[{idx}].title exceeds {max_chars} chars "
         f"({len(title)}), truncating: {title!r} -> {truncated!r}"
     )
     return truncated
@@ -1426,9 +1430,11 @@ class ChaptersProcessor:
             try:
                 response = self.llm_client.call(
                     model=model,
-                    system_prompt=CHAPTERS_SYSTEM_PROMPT,
+                    system_prompt=chapters_system_prompt(),
                     user_prompt=user_prompt,
-                    response_schema=CHAPTERS_SCHEMA,
+                    response_schema=(
+                        en_prompts.CHAPTERS_SCHEMA if is_english() else CHAPTERS_SCHEMA
+                    ),
                     reasoning_effort=reasoning_effort,
                     task_type="chapters",
                     force_json_mode="json_object",

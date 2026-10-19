@@ -12,10 +12,12 @@ from ..core.summary_budget import (
     compute_summary_budget,
     resolve_summary_max_tokens,
 )
-from ..prompts import (
-    SUMMARY_SYSTEM_PROMPT_SINGLE_SPEAKER,
-    SUMMARY_SYSTEM_PROMPT_MULTI_SPEAKER,
+from ..prompts import en as en_prompts
+from ..prompts.localized import (
     build_summary_user_prompt,
+    is_english,
+    length_budget_coefficient,
+    summary_system_prompt,
 )
 
 logger = setup_logger(__name__)
@@ -100,9 +102,12 @@ class SummaryProcessor:
             不抛出异常，出错时返回 status=FAILED 的 SummaryResult
         """
         # 步骤 1: 长度检查
-        if len(text) < self.config.min_summary_threshold:
+        min_summary_threshold = int(
+            self.config.min_summary_threshold * length_budget_coefficient()
+        )
+        if len(text) < min_summary_threshold:
             logger.info(
-                f"Text too short for summary: {len(text)} < {self.config.min_summary_threshold}"
+                f"Text too short for summary: {len(text)} < {min_summary_threshold}"
             )
             return SummaryResult(text=None, status=SummaryStatus.SKIPPED_SHORT)
 
@@ -126,7 +131,11 @@ class SummaryProcessor:
             system_prompt = self._select_system_prompt(speaker_count)
 
             # 步骤 4: 篇幅预算（prompt / max_tokens / 后验校验共用）
-            budget = compute_summary_budget(len(text), self.config.summary_budget)
+            budget = compute_summary_budget(
+                len(text),
+                self.config.summary_budget,
+                coefficient=length_budget_coefficient(),
+            )
             sent_max_tokens = resolve_summary_max_tokens(budget, reasoning_effort)
 
             user_prompt = build_summary_user_prompt(
@@ -174,7 +183,11 @@ class SummaryProcessor:
                 logger.info(f"Summary generated successfully (length: {len(working_text)})")
                 return SummaryResult(text=working_text, status=SummaryStatus.GENERATED)
 
-            retry_suffix = _SUMMARY_BUDGET_RETRY_SUFFIX.format(
+            retry_suffix = (
+                en_prompts.SUMMARY_BUDGET_RETRY_SUFFIX
+                if is_english()
+                else _SUMMARY_BUDGET_RETRY_SUFFIX
+            ).format(
                 actual_len=len(working_text),
                 hard_cap=budget.hard_cap,
             )
@@ -246,7 +259,11 @@ class SummaryProcessor:
         budget: SummaryBudget,
     ) -> Optional[str]:
         """Retry once after truncation; truncated text is never returned."""
-        retry_suffix = _SUMMARY_TRUNCATION_RETRY_SUFFIX.format(hard_cap=budget.hard_cap)
+        retry_suffix = (
+            en_prompts.SUMMARY_TRUNCATION_RETRY_SUFFIX
+            if is_english()
+            else _SUMMARY_TRUNCATION_RETRY_SUFFIX
+        ).format(hard_cap=budget.hard_cap)
         retry_prompt = f"{user_prompt}\n\n{retry_suffix}"
         try:
             retry_response = self._call_summary_llm(
@@ -285,7 +302,7 @@ class SummaryProcessor:
         )
 
     def _select_system_prompt(self, speaker_count: int) -> str:
-        """根据说话人数量选择 System Prompt
+        """根据说话人数量与输出语言选择 System Prompt
 
         Args:
             speaker_count: 说话人数量
@@ -294,10 +311,7 @@ class SummaryProcessor:
             System Prompt 字符串
         """
         if speaker_count >= 2:
-            # 多说话人：强调对话动态、观点碰撞
             logger.debug("Using multi-speaker summary prompt")
-            return SUMMARY_SYSTEM_PROMPT_MULTI_SPEAKER
         else:
-            # 单说话人：强调论点提取、逻辑结构
             logger.debug("Using single-speaker summary prompt")
-            return SUMMARY_SYSTEM_PROMPT_SINGLE_SPEAKER
+        return summary_system_prompt(speaker_count)
