@@ -206,30 +206,10 @@
 
     // ========== Data extraction ==========
 
-    function findOutlineSection(label) {
-        const byKey = {
-            '内容总结': 'summary',
-            'Summary': 'summary',
-            '详细笔记': 'notes',
-            'Detailed notes': 'notes',
-            '校对文本': 'calibrated',
-            'Proofread transcript': 'calibrated',
-        };
-        const sectionKey = byKey[label];
-        if (sectionKey) {
-            const byAttr = document.querySelector('.section[data-section="' + sectionKey + '"]');
-            if (byAttr) return byAttr;
-        }
-        return Array.from(document.querySelectorAll('.section')).find(section => {
-            const h2 = section.querySelector('h2');
-            return h2 && h2.textContent.includes(label);
-        }) || null;
-    }
-
     function extractHeadings() {
         const headings = [];
 
-        const summarySection = document.querySelector('.section[data-section="summary"]') || findOutlineSection(tr('web.transcript.section_summary_plain'));
+        const summarySection = document.querySelector('.section[data-section="summary"]');
 
         if (!summarySection) {
             console.warn('Summary section not found');
@@ -328,12 +308,12 @@
 
     function findNotesSection() {
         return document.getElementById('notes-content-block')
-            ? (document.querySelector('.section[data-section="notes"]') || findOutlineSection(tr('web.transcript.section_notes_plain')))
+            ? document.querySelector('.section[data-section="notes"]')
             : null;
     }
 
     function findCalibratedSection() {
-        return document.querySelector('.section[data-section="calibrated"]') || findOutlineSection(tr('web.transcript.section_calibrated_plain'));
+        return document.querySelector('.section[data-section="calibrated"]');
     }
 
     /**
@@ -1304,7 +1284,7 @@
 
         mode = computeMode();
 
-        tocData.summarySection = document.querySelector('.section[data-section="summary"]') || findOutlineSection(tr('web.transcript.section_summary_plain'));
+        tocData.summarySection = document.querySelector('.section[data-section="summary"]');
         tocData.notesSection = findNotesSection();
         tocData.calibratedSection = findCalibratedSection();
         tocData.headings = extractHeadings();

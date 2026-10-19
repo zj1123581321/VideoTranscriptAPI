@@ -150,3 +150,17 @@ implementing
 
 ### 下一步唯一动作
 给笔记生成区块补 data-section，删除按标题文字定位的 TOC 回退。
+
+## 2026-10-19 TOC 只按 data-section 定位
+
+### 当前阶段
+implementing
+
+### 本段结论
+笔记生成区块补 `data-section="notes"`；删除 `findOutlineSection` 及中英标题映射。TOC 只读 `data-section`。
+
+### 关键决策与已否决方案
+- 已否决保留中英 h2 文字回退。
+
+### 下一步唯一动作
+抽出 /i18n.js 与首页渲染纯函数，去掉夹具复刻与 Jinja 全局补丁。
