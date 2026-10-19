@@ -1,42 +1,44 @@
 (function (root) {
   function t(key, vars) {
-    var table = root.I18N || {};
-    var text = table[key];
-    if (text == null) {
+    const table = root.I18N || {};
+    let text = table[key];
+    if (text === undefined || text === null) {
       throw new Error('missing i18n key ' + key);
     }
     if (vars) {
       Object.keys(vars).forEach(function (name) {
-        text = text.replace(new RegExp('\\{' + name + '\\}', 'g'), String(vars[name]));
+        text = text.replace(new RegExp('\\{' + name + '\\}', 'g'), function () {
+          return String(vars[name]);
+        });
       });
     }
     return text;
   }
 
   function applyI18n(rootEl) {
-    var lang = root.__VTA_LANG__;
+    const lang = root.__VTA_LANG__;
     if (lang && root.document && root.document.documentElement) {
       root.document.documentElement.setAttribute('lang', lang);
     }
-    var scope = rootEl || (root.document && root.document);
+    const scope = rootEl || (root.document && root.document);
     if (!scope || !scope.querySelectorAll) {
       return;
     }
-    var nodes = scope.querySelectorAll('[data-i18n]');
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
-      var key = el.getAttribute('data-i18n');
-      var attr = el.getAttribute('data-i18n-attr');
-      var value = t(key);
+    const nodes = scope.querySelectorAll('[data-i18n]');
+    for (let i = 0; i < nodes.length; i++) {
+      const el = nodes[i];
+      const key = el.getAttribute('data-i18n');
+      const attr = el.getAttribute('data-i18n-attr');
+      const value = t(key);
       if (attr) {
         el.setAttribute(attr, value);
       } else {
         el.textContent = value;
       }
     }
-    var attrNodes = scope.querySelectorAll('[data-i18n-placeholder], [data-i18n-title], [data-i18n-aria-label]');
-    for (var j = 0; j < attrNodes.length; j++) {
-      var node = attrNodes[j];
+    const attrNodes = scope.querySelectorAll('[data-i18n-placeholder], [data-i18n-title], [data-i18n-aria-label]');
+    for (let j = 0; j < attrNodes.length; j++) {
+      const node = attrNodes[j];
       if (node.hasAttribute('data-i18n-placeholder')) {
         node.setAttribute('placeholder', t(node.getAttribute('data-i18n-placeholder')));
       }
