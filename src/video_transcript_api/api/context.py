@@ -20,14 +20,149 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, TypeVar
 
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from ..i18n import t
 from ..utils.logging import load_config, setup_logger, shutdown_logger
 from ..utils.task_status import TaskStatus
 
 
 class ConfigError(ValueError):
     """Raised when production configuration is missing or invalid."""
+
+
+_API_ERROR_DETAILS = {
+    "上传分享不可用": ("upload_share_unavailable", {}),
+    "上传分享不可用或已关闭": ("upload_share_closed", {}),
+    "视频URL不能为空": ("invalid_url", {}),
+    "任务处理已达上限，请稍后重试": ("task_capacity_reached", {}),
+    "service busy or lock unavailable, retry shortly": ("service_busy", {}),
+    "任务队列已满，请稍后重试": ("transcription_queue_full", {}),
+    "LLM 队列已满，请稍后重试": ("llm_queue_full", {}),
+    "无重新校对权限": ("recalibration_permission_denied", {}),
+    "未找到对应的转录数据": ("transcript_not_found", {}),
+    "缓存中没有转录数据，无法重新校对": ("recalibration_transcript_missing", {}),
+    "归属校验暂时不可用，请稍后重试": ("ownership_check_unavailable", {}),
+    "无权对该任务发起重新校对": ("recalibration_ownership_denied", {}),
+    "无重新生成总结权限": ("resummary_permission_denied", {}),
+    "缓存中没有转录数据，无法重新生成总结": ("resummary_transcript_missing", {}),
+    "无权对该任务发起重新生成总结": ("resummary_ownership_denied", {}),
+    "总结已存在，无需重新生成": ("summary_already_exists", {}),
+    "无生成详细笔记权限": ("notes_permission_denied", {}),
+    "缓存中没有转录数据，无法生成详细笔记": ("notes_transcript_missing", {}),
+    "详细笔记依赖已生成的章节层，请先生成章节后再重试": ("notes_chapters_required", {}),
+    "详细笔记正在生成中，请等待当前任务完成": ("notes_already_in_progress", {}),
+    "详细笔记已存在，无需重复生成": ("notes_already_exists", {}),
+    "详细笔记任务状态查询失败，请稍后重试": ("notes_status_unavailable", {}),
+    "无权访问全局总结比例统计": ("summary_ratio_permission_denied", {}),
+    "无法确定调用方身份": ("caller_identity_missing", {}),
+    "source 仅支持 upload 或 url": ("invalid_history_source", {}),
+    "上传历史查询失败": ("upload_history_unavailable", {}),
+    "服务暂时不可用，请稍后重试": ("service_unavailable", {}),
+    "任务不存在或分享已关闭": ("task_not_found_or_share_closed", {}),
+    "任务不存在": ("task_not_found", {}),
+    "无权访问该任务": ("task_access_denied", {}),
+    "上传回执不存在": ("upload_receipt_not_found", {}),
+    "上传记录不存在": ("upload_record_not_found", {}),
+    "尚未正式受理的上传没有分享可关闭": ("upload_not_accepted", {}),
+    "未提供授权令牌": ("authorization_token_missing", {}),
+    "授权令牌格式错误": ("authorization_token_malformed", {}),
+    "授权令牌无效": ("authorization_token_invalid", {}),
+}
+
+_API_ERROR_PREFIXES = (
+    ("任务不存在: ", "task_id_not_found", "task_id"),
+    ("获取任务状态失败: ", "task_status_failed", "error"),
+    ("提交转录任务失败: ", "transcription_submission_failed", "error"),
+    ("创建重新校对任务失败: ", "recalibration_creation_failed", "error"),
+    ("重新校对任务转录数据格式化失败: ", "recalibration_formatting_failed", "error"),
+    ("重新生成总结任务转录数据格式化失败: ", "resummary_formatting_failed", "error"),
+    ("创建重新生成总结任务失败: ", "resummary_creation_failed", "error"),
+    ("创建详细笔记任务失败: ", "notes_creation_failed", "error"),
+    ("详细笔记任务加入队列失败: ", "notes_queue_failed", "error"),
+    ("任务加入队列失败: ", "task_queue_failed", "error"),
+    ("获取统计信息失败: ", "audit_stats_failed", "error"),
+    ("获取总结比例统计失败: ", "summary_ratio_failed", "error"),
+    ("获取调用记录失败: ", "audit_calls_failed", "error"),
+    ("上传历史查询失败: ", "upload_history_failed", "error"),
+    ("查询失败: ", "audit_query_failed", "error"),
+    ("获取摘要失败: ", "summary_fetch_failed", "error"),
+    ("获取用户配置失败: ", "user_profile_failed", "error"),
+)
+
+
+def _resolve_api_error(detail: str) -> tuple[str, dict[str, str]]:
+    """Map a legacy Chinese API detail to its stable code and format values."""
+    resolved = _API_ERROR_DETAILS.get(detail)
+    if resolved is not None:
+        return resolved
+    for prefix, error_code, parameter in _API_ERROR_PREFIXES:
+        if detail.startswith(prefix):
+            return error_code, {parameter: detail[len(prefix):]}
+    for original, error_code in (
+        ("任务队列已满，请稍后重试", "transcription_queue_full"),
+        ("LLM 队列已满，请稍后重试", "llm_queue_full"),
+    ):
+        if detail.startswith(original + "；"):
+            return error_code, {"note": detail[len(original):]}
+    raise KeyError(f"unmapped API error detail: {detail!r}")
+
+
+class ApiError(HTTPException):
+    """HTTP error with a stable code and a localized string detail."""
+
+    def __init__(
+        self, status_code: int, detail: str, *, error_code: str | None = None,
+    ) -> None:
+        if error_code is None:
+            error_code, values = _resolve_api_error(detail)
+        else:
+            values = {"detail": detail}
+        if error_code in {"transcription_queue_full", "llm_queue_full"}:
+            values.setdefault("note", "")
+        self.error_code = error_code
+        localized_detail = t(f"error.{error_code}", **values)
+        super().__init__(status_code=status_code, detail=localized_detail)
+
+
+def localize_task_error(reason: str) -> str:
+    """Preserve Chinese task diagnostics and emit a language-safe English reason."""
+    return t("error.task_failure_reason", reason=reason)
+
+
+def install_api_error_handlers(app) -> None:
+    """Add stable error codes to JSON API HTTP errors; leave validation 422 intact."""
+    from ..i18n import t
+
+    @app.exception_handler(StarletteHTTPException)
+    async def handle_http_error(request: Request, exc: StarletteHTTPException):
+        if isinstance(exc, ApiError):
+            return JSONResponse(
+                {"detail": exc.detail, "error_code": exc.error_code},
+                status_code=exc.status_code,
+                headers=exc.headers,
+            )
+        if (
+            request.url.path == "/api"
+            or request.url.path.startswith("/api/")
+        ) and exc.status_code != 422:
+            error_code = {
+                404: "resource_not_found",
+                405: "method_not_allowed",
+            }.get(exc.status_code, "api_error")
+            return JSONResponse(
+                {"detail": t(f"error.{error_code}"), "error_code": error_code},
+                status_code=exc.status_code,
+                headers=exc.headers,
+            )
+        return JSONResponse(
+            {"detail": exc.detail},
+            status_code=exc.status_code,
+            headers=exc.headers,
+        )
 
 
 # Default deep-read prompt keeps the full calibrated transcript in scope.
@@ -1762,7 +1897,9 @@ def _retry_terminal_write_pending(cache_manager, task_ids: set[str], logger) -> 
             finalize_terminal_status_and_notify(
                 task_id,
                 TaskStatus.FAILED,
-                error_message="LLM 任务提交失败，终态写入曾经失败，已由运行期维护补偿写入",
+                error_message=localize_task_error(
+                    "LLM 任务提交失败，终态写入曾经失败，已由运行期维护补偿写入"
+                ),
                 cache_manager=cache_manager,
             )
         except Exception:

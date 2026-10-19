@@ -7,11 +7,12 @@ from pathlib import Path
 import time
 from typing import Callable, Optional, Dict, Any
 
-from fastapi import HTTPException, Header, Request
+from fastapi import Header, Request
 from pydantic import BaseModel, Field, StrictBool, field_validator
 from ..processing_options import ProcessingOptions, normalize_processing_options
 
 from ..context import (
+    ApiError as HTTPException,
     get_audit_logger,
     get_cache_manager,
     get_config,
@@ -24,6 +25,7 @@ from ..context import (
     get_temp_manager,
     get_user_manager,
     lazy_resource,
+    localize_task_error,
     run_with_runtime,
 )
 from ...downloaders import create_downloader
@@ -647,7 +649,9 @@ async def process_task_queue():
                             task_id,
                             TaskStatus.FAILED,
                             platform="local_upload",
-                            error_message="Local upload durable admission or media mapping is missing",
+                            error_message=localize_task_error(
+                                "Local upload durable admission or media mapping is missing"
+                            ),
                             suppress_terminal_notification=True,
                         )
                         get_runtime().inflight_registry.release("transcription", task_id)
@@ -709,7 +713,9 @@ async def process_task_queue():
                         finalize_terminal_status_and_notify(
                             task_id,
                             TaskStatus.FAILED,
-                            error_message=f"{failure_label}转录任务失败: {exc}",
+                            error_message=localize_task_error(
+                                f"{failure_label}转录任务失败: {exc}"
+                            ),
                             url=url,
                             notify_error=str(exc),
                             channel_name=notification_channel,
@@ -779,7 +785,7 @@ async def process_task_queue():
                     finalize_terminal_status_and_notify(
                         task_id,
                         TaskStatus.FAILED,
-                        error_message=f"提交任务失败: {exc}",
+                        error_message=localize_task_error(f"提交任务失败: {exc}"),
                         url=url,
                         channel_name=notification_channel,
                         webhooks=notification_webhooks,
@@ -901,7 +907,7 @@ def _handoff_to_llm_stage(
             finalize_terminal_status_and_notify(
                 task_id,
                 TaskStatus.FAILED,
-                error_message=f"任务状态写入异常: {status_exc}",
+                error_message=localize_task_error(f"任务状态写入异常: {status_exc}"),
                 terminal_snapshot={"observability": observability},
                 cache_manager=cache_manager,
                 notify_via=task_notifier,
@@ -972,7 +978,7 @@ def _handoff_to_llm_stage(
             fail_status_written = finalize_terminal_status_and_notify(
                 task_id,
                 TaskStatus.FAILED,
-                error_message=f"LLM任务加入队列失败: {exc}",
+                error_message=localize_task_error(f"LLM任务加入队列失败: {exc}"),
                 notify_error=f"【LLM任务加入队列失败】{exc}",
                 terminal_snapshot={"observability": observability},
                 cache_manager=cache_manager,
@@ -1178,7 +1184,7 @@ def process_transcription(
                     task_id,
                     TaskStatus.FAILED,
                     download_url=download_url,
-                    error_message=error_msg,
+                    error_message=localize_task_error(error_msg),
                     url=display_url,
                     title=title,
                     author=author_name,
@@ -2738,7 +2744,7 @@ def process_transcription(
                 task_id,
                 TaskStatus.FAILED,
                 download_url=download_url,
-                error_message=failure_message,
+                error_message=localize_task_error(failure_message),
                 url=display_url,
                 notify_error=str(exc),
                 channel_name=notification_channel,

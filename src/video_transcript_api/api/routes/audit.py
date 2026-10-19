@@ -9,9 +9,10 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException as FastAPIHTTPException, Query
 
 from ..context import (
+    ApiError as HTTPException,
     get_audit_logger,
     get_cache_manager,
     get_config,
@@ -117,7 +118,7 @@ def _normalize_history_status(status: Optional[str]) -> str:
     """Limit history filters to statuses represented by terminal snapshots."""
     effective_status = status or "success"
     if effective_status not in {"success", "failed", "all"}:
-        raise HTTPException(
+        raise FastAPIHTTPException(
             status_code=422,
             detail="status must be one of: success, failed, all",
         )

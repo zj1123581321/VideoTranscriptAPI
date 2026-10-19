@@ -5,9 +5,10 @@ import os
 import queue
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
 from ..context import (
+    ApiError as HTTPException,
     get_audit_logger,
     get_cache_manager,
     get_config,
@@ -34,6 +35,7 @@ from ...cache.cache_manager import language_mismatched_generation_layers
 from ...utils.notifications import send_view_link_wechat, get_notification_router
 from ...utils.task_status import TaskStatus, http_code_for_status
 from ..services.terminal_status import finalize_terminal_status_and_notify
+from ...i18n import t
 
 logger = lazy_resource(get_logger)
 config = lazy_resource(get_config)
@@ -552,14 +554,14 @@ async def get_task_status(
             "progress": progress,
         }
         if status == TaskStatus.FAILED:
-            data["error"] = task_info.get("error_message") or "任务处理失败"
+            data["error"] = task_info.get("error_message") or t("error.task_failed")
 
         message_map = {
             TaskStatus.QUEUED: "任务排队中",
             TaskStatus.PROCESSING: "任务处理中",
             TaskStatus.CALIBRATING: "转录完成，校对/总结生成中",
             TaskStatus.SUCCESS: "任务已完成",
-            TaskStatus.FAILED: "任务处理失败",
+            TaskStatus.FAILED: t("error.task_failed"),
         }
         message = message_map.get(status, "获取任务状态成功")
 

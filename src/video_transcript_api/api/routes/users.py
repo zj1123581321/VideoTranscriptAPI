@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
+from ..context import ApiError as HTTPException
 from ..context import get_logger, get_user_manager, lazy_resource
 from ..services.transcription import TranscribeResponse, verify_token
 

@@ -13,10 +13,11 @@ import uuid
 from pathlib import PurePosixPath
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse
 
 from ..context import (
+    ApiError as HTTPException,
     get_cache_manager,
     get_config,
     get_inflight_registry,
@@ -178,7 +179,13 @@ def _receipt(upload: dict) -> dict:
 
 def _reject(status_code: int, reason: str, detail: str) -> HTTPException:
     logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", reason, status_code)
-    return HTTPException(status_code=status_code, detail=detail)
+    return HTTPException(
+        status_code=status_code,
+        detail=detail,
+        error_code=(
+            reason if reason.startswith("upload_") else f"upload_{reason}"
+        ),
+    )
 
 
 @router.get("/capabilities")

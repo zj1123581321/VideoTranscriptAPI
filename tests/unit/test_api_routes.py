@@ -45,6 +45,8 @@ def _build_test_app() -> FastAPI:
     before importing the router modules.
     """
     app = FastAPI()
+    from video_transcript_api.api.context import install_api_error_handlers
+    install_api_error_handlers(app)
 
     # We need to override verify_token globally via dependency_overrides
     from video_transcript_api.api.services.transcription import verify_token
@@ -824,6 +826,9 @@ class TestGetTaskStatus:
         mock_cache_manager.get_task_by_id.return_value = None
         resp = client.get("/api/task/nonexistent-task")
         assert resp.status_code == 404
+        body = resp.json()
+        assert isinstance(body["detail"], str)
+        assert body["error_code"] == "task_id_not_found"
 
     def test_task_queued_returns_202(self, client, mock_cache_manager):
         mock_cache_manager.get_task_by_id.return_value = self._row(status="queued")
