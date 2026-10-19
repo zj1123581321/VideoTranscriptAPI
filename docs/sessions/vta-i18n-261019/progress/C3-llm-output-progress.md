@@ -55,3 +55,10 @@
 - **本段结论**：准入段改回读 `llm_status.json`。函数返回整份 payload，调用方取 notes_status 并把 payload 交给语言判定。非法 JSON / 非 object 仍抛错。不再在准入段调 get_cache。
 - **关键决策与已否决方案**：保留函数名 `_read_fresh_notes_status`，扩大返回值为整份 status 对象而不是另起函数。
 - **下一步唯一动作**：跑 Narrow-Verify 与 make test，scope check 后 push。
+
+## 2026-10-19 笔记篇幅阈值按输出语言缩放
+
+- **当前阶段**：implementing
+- **本段结论**：笔记生成与重试后的超长判定都按当前输出语言系数缩放；100 字符源、81 字符输出在 en 下单次调用，在 zh-CN 下仍触发原重试。
+- **关键决策与已否决方案**：保留中文阈值 0.8，英文阈值只乘既有 `length_budget_coefficient()`，不增设配置。
+- **下一步唯一动作**：统一 coordinator 与 SummaryProcessor 的最短总结阈值计算。

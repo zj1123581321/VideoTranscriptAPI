@@ -23,6 +23,7 @@ from ..prompts import en as en_prompts
 from ..prompts.localized import (
     build_notes_user_prompt,
     is_english,
+    length_budget_coefficient,
     notes_system_prompt,
 )
 from .chapters_processor import _compute_fingerprint
@@ -542,8 +543,9 @@ class NotesProcessor:
                     raise RuntimeError(f"chapter {position} notes response is empty")
 
                 body_length = _notes_slice_body_length(chapter.segments)
+                max_notes_ratio = 0.8 * length_budget_coefficient()
                 ratio = len(chapter_notes) / body_length
-                if ratio > 0.8:
+                if ratio > max_notes_ratio:
                     density_retry = (
                         en_prompts.NOTES_DENSITY_RETRY_PROMPT
                         if is_english()
@@ -556,7 +558,7 @@ class NotesProcessor:
                     if not retry_notes:
                         raise RuntimeError(f"chapter {position} notes response is empty")
                     ratio = len(retry_notes) / body_length
-                    if ratio > 0.8:
+                    if ratio > max_notes_ratio:
                         logger.warning(
                             f"Notes chapter {position} remains over length budget after retry: ratio={ratio:.3f}"
                         )
