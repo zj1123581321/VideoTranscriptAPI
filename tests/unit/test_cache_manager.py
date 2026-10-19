@@ -376,6 +376,66 @@ class TestSaveLLMResult:
         assert "llm_summary" in result
         assert result["llm_summary"] == "Summary."
 
+    def test_get_cache_hides_generation_layers_on_language_mismatch(self, cm):
+        from video_transcript_api.utils.logging.logger import load_config
+
+        _save_sample_capswriter(cm)
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="calibrated",
+            content="Calibrated.",
+        )
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="summary",
+            content="Chinese summary.",
+        )
+        cm.save_llm_status(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            calibration_status="full",
+            summary_status="generated",
+            artifact_provenance={
+                "schema_version": "artifact-provenance-v1",
+                "layers": {
+                    "calibration": {"language": "zh-CN"},
+                    "summary": {"language": "zh-CN"},
+                },
+            },
+        )
+        config = load_config()
+        had_key = "language" in config
+        original = config.get("language")
+        config["language"] = "en"
+        try:
+            result = cm.get_cache(platform="youtube", media_id="vid1")
+            assert "llm_calibrated" in result
+            assert result["llm_calibrated"] == "Calibrated."
+            assert "llm_summary" not in result
+            assert result["file_path"]
+        finally:
+            if had_key:
+                config["language"] = original
+            else:
+                config.pop("language", None)
+
+    def test_get_cache_keeps_legacy_summary_when_language_is_zh_cn(self, cm):
+        _save_sample_capswriter(cm)
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="summary",
+            content="Legacy summary.",
+        )
+        result = cm.get_cache(platform="youtube", media_id="vid1")
+        assert result["llm_summary"] == "Legacy summary."
+
     def test_notes_layer_preserves_existing_artifacts_and_status(self, cm):
         _save_sample_capswriter(cm)
         cm.save_llm_result(
