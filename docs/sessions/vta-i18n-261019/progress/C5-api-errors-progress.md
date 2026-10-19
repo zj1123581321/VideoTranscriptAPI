@@ -41,3 +41,9 @@
 - 本段结论：删除按中文 detail 反查错误码的实现；已授权 JSON 路由与鉴权调用点改为显式 `ApiError(status_code, error_code, **values)`，动态错误部分通过 locale 占位符格式化。新增 AST 判据扫描 routes（排除 views）及 transcription 服务。
 - 关键决策与已否决方案：保留原生 422 校验异常；不对未知文案作错误码推断，不引入默认/回退翻译。
 - 下一步唯一动作：提交并推送本段 A；提交后执行一次 AST 断言红验，随后进入 C 任务失败原因保真。
+
+### 里程碑 8：A 红验与 scope 批准续作
+- 当前阶段：implementing
+- 本段结论：A 已提交并推送；将 `tasks.py` 一处 `ApiError` 暂时改回 `HTTPException(detail=...)` 后，AST 测试按预期 AssertionError 转红并定位该行，随后只还原该行。修订 dispatch 已批准 seq 1 对 `llm_ops.py` 的 scope 扩展，可继续完成 C。
+- 关键决策与已否决方案：不删除默认 422 校验异常；AST 只扫描 routes（排除 views）及 transcription service，检查调用形式而不是文本。
+- 下一步唯一动作：按修订要求处理 C 的各 task_status.error_message 写入点并为具体英文原因补测试。
