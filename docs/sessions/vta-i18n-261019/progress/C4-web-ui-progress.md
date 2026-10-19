@@ -61,3 +61,18 @@ Jinja 模板与结果页走 `t()`/`html_lang()`；静态页通过 `/i18n.js` + `
 
 ### 下一步唯一动作
 提交本段改动，跑 scope check，写报告。
+
+## 2026-10-19 分享图 PNG 按语言分文件
+
+### 当前阶段
+implementing
+
+### 本段结论
+分享图缓存改为 `og_card.{lang}.png`；同一 cache_dir 先 zh-CN 再 en 得到不同文件，en 标签为 `AI Summary`。旧的 `og_card.png` 不迁移、不读取。
+
+### 关键决策与已否决方案
+- 文件名每次按 `get_language()` 计算；已否决继续写 `og_card.png` 或双写兼容。
+- Scope seq=1 申请了 `tests/og_card/test_og_route.py`（路由测试仍读旧常量会红）。
+
+### 下一步唯一动作
+把剩余用户可见中文接到 C1 目录，CJK 断言转绿。

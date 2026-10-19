@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ...i18n import t
+from ...i18n import get_language, t
 from ...llm.processors.share_card_processor import _validate_card
 from ...llm.prompts.schemas.share_card import SHARE_CARD_FORMAT_VERSION
 from ..logging import setup_logger
@@ -31,7 +31,14 @@ from ..logging import setup_logger
 logger = setup_logger("og_card")
 
 CARD_FILENAME = "llm_share_card.json"
-PNG_FILENAME = "og_card.png"
+
+
+def png_filename(language: str | None = None) -> str:
+    """Return the language-specific OG PNG cache name.
+
+    Old ``og_card.png`` files are neither migrated nor read.
+    """
+    return f"og_card.{language or get_language()}.png"
 
 # Debian fonts-noto-cjk defaults. Both are .ttc collections whose face 0 is
 # the JP variant; _load_font picks the SC face when available.

@@ -31,8 +31,8 @@ from ...utils.rendering.og_card import (
     CARD_FILENAME,
     DEFAULT_FONT_BOLD_PATH,
     DEFAULT_FONT_PATH,
-    PNG_FILENAME,
     load_share_card,
+    png_filename,
     render_og_card,
 )
 from ...i18n import get_language, t
@@ -1638,9 +1638,9 @@ async def og_share_card(view_token: str):
     """Serve the 1200x630 share-card PNG for a view token (X/Twitter card).
 
     404 when the token is unknown or the task has no contract-valid
-    llm_share_card.json (no fallback card). The rendered og_card.png is cached
-    in the task directory and reused while it is not older than the card JSON;
-    a regenerated card JSON triggers a re-render.
+    llm_share_card.json (no fallback card). The rendered og_card.{lang}.png is
+    cached per UI language and reused while it is not older than the card JSON;
+    a regenerated card JSON triggers a re-render. Old og_card.png is ignored.
     """
     cache_data = await asyncio.to_thread(
         ViewTokenResolver(cache_manager).get_cache_by_view_token, view_token
@@ -1654,7 +1654,7 @@ async def og_share_card(view_token: str):
         raise HTTPException(status_code=404, detail="share card not found")
 
     json_path = cache_dir / CARD_FILENAME
-    png_path = cache_dir / PNG_FILENAME
+    png_path = cache_dir / png_filename()
 
     def _cache_is_fresh() -> bool:
         if not png_path.is_file():
