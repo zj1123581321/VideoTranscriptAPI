@@ -46,9 +46,51 @@ TEMPLATES = Environment(
     autoescape=select_autoescape(["html", "xml"]),
 )
 TEMPLATES.globals["asset_v"] = "browser-test"
-FIXTURE_TRANSCRIPT = "隔离浏览器夹具中的正文，验证公开阅读与导出。"
+FIXTURE_TRANSCRIPT_ZH = "隔离浏览器夹具中的正文，验证公开阅读与导出。"
+FIXTURE_TRANSCRIPT_EN = (
+    "Isolated browser fixture body used to verify public reading and export."
+)
 LOCALES_DIR = ROOT / "src" / "video_transcript_api" / "i18n" / "locales"
 _fixture_language = "zh-CN"
+
+
+def _fixture_transcript() -> str:
+    return FIXTURE_TRANSCRIPT_EN if _fixture_language == "en" else FIXTURE_TRANSCRIPT_ZH
+
+
+def _fixture_title() -> str:
+    return "Browser regression sample" if _fixture_language == "en" else "浏览器回归示例"
+
+
+def _fixture_summary_html() -> str:
+    if _fixture_language == "en":
+        return "<p>Sample summary shown by the original page template.</p>"
+    return "<p>这是原页面模板显示的样例总结。</p>"
+
+
+def _fixture_error_message() -> str:
+    return "Fixture failed status" if _fixture_language == "en" else "夹具失败状态"
+
+
+def _fixture_calibrated_html() -> str:
+    body = _fixture_transcript()
+    if _fixture_language == "en":
+        pending = "Unconfirmed"
+        speaker = "Speaker 1"
+    else:
+        pending = "待确认"
+        speaker = "说话人1"
+    return (
+        '<div class="dialog-container">'
+        '<div id="dlg-0" class="dialog-item">'
+        '<div class="speaker-header">'
+        f'<div class="speaker-tag" title="{pending}" data-confidence-level="{pending}">'
+        f"{speaker}"
+        f'<span class="speaker-status-badge speaker-pending" data-speaker-status="pending">{pending}</span>'
+        "</div></div>"
+        f'<div class="dialog-content"><p>{body}</p></div>'
+        "</div></div>"
+    )
 
 
 def _locale_catalog(language: str) -> dict[str, str]:
@@ -188,11 +230,16 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
                 html = html.replace('lang="zh-CN"', f'lang="{_fixture_language}"', 1)
                 catalog = _locale_catalog(_fixture_language)
                 zh_catalog = _locale_catalog("zh-CN")
+                replacements = []
                 for key, english in catalog.items():
                     if key.startswith("web.home."):
                         chinese = zh_catalog[key]
-                        if chinese and chinese in html:
-                            html = html.replace(chinese, english, 1)
+                        if chinese:
+                            replacements.append((chinese, english))
+                replacements.sort(key=lambda item: len(item[0]), reverse=True)
+                for chinese, english in replacements:
+                    if chinese in html:
+                        html = html.replace(chinese, english, 1)
             self.send_bytes(200, html.encode("utf-8"), "text/html; charset=utf-8")
             return
         if path == "/add_task_by_web":
@@ -224,15 +271,17 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
             if "raw" in query:
                 self.send_bytes(
                     200,
-                    ("# 浏览器回归示例\n\n" + FIXTURE_TRANSCRIPT).encode("utf-8"),
+                    ("# " + _fixture_title() + "\n\n" + _fixture_transcript()).encode("utf-8"),
                     "text/plain; charset=utf-8",
                 )
                 return
             if "page" in query:
                 self.send_bytes(
                     200,
-                    ("<!doctype html><html><body><h1>浏览器回归示例</h1><p>"
-                     + FIXTURE_TRANSCRIPT
+                    ("<!doctype html><html><body><h1>"
+                     + _fixture_title()
+                     + "</h1><p>"
+                     + _fixture_transcript()
                      + "</p></body></html>").encode("utf-8"),
                     "text/html; charset=utf-8",
                 )
@@ -563,20 +612,20 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
         context: dict[str, object] = {
             "request": None,
             "view_token": view_token,
-            "title": "浏览器回归示例",
+            "title": _fixture_title(),
             "platform": "local_upload" if view_token.startswith("upload_") else "YouTube",
             "url": "https://www.youtube.com/watch?v=fixture",
             "status": status,
             "created_at": "2026-10-08T12:00:00",
-            "summary_html": '<p>这是原页面模板显示的样例总结。</p>',
+            "summary_html": _fixture_summary_html(),
             "summary_state": "generated",
-            "calibrated_html": f"<p>{FIXTURE_TRANSCRIPT}</p>",
-            "calibrated_text": FIXTURE_TRANSCRIPT,
-            "stats": {"original_length": len(FIXTURE_TRANSCRIPT), "calibrated_length": len(FIXTURE_TRANSCRIPT), "summary_length": 13},
+            "calibrated_html": _fixture_calibrated_html(),
+            "calibrated_text": _fixture_transcript(),
+            "stats": {"original_length": len(_fixture_transcript()), "calibrated_length": len(_fixture_transcript()), "summary_length": 13},
             "deep_read_prompt_presets": [],
-            "page_title": "浏览器回归示例",
-            "error_message": "夹具失败状态",
-            "message": "夹具失败状态",
+            "page_title": _fixture_title(),
+            "error_message": _fixture_error_message(),
+            "message": _fixture_error_message(),
         }
         if view_token == VIEW_TOKEN_WITH_CARD:
             port = self.server.server_address[1]

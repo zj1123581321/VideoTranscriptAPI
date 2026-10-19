@@ -631,6 +631,7 @@ describe('local upload frontend logic', () => {
 
     window.eval(authSource);
     window.VideoTranscriptAuthStorage.writeAuthToken('valid-token', { remember: true });
+    installI18n(window);
     const scriptElements = dom.window.document.querySelectorAll('script');
     for (const s of scriptElements) {
       if (!s.src) {
@@ -690,6 +691,7 @@ describe('local upload frontend logic', () => {
 
     window.eval(authSource);
     window.VideoTranscriptAuthStorage.writeAuthToken('valid-token', { remember: true });
+    installI18n(window);
     const scriptElements = dom.window.document.querySelectorAll('script');
     for (const s of scriptElements) {
       if (!s.src) {

@@ -529,8 +529,8 @@ describe('homepage auth integration contract', () => {
     expect(authIndex).toBeGreaterThanOrEqual(0);
     expect(authIndex).toBeLessThan(appIndex);
     expect(appSource).toContain('VideoTranscriptAuthStorage');
-    expect(appSource).toContain('安全错误：统一鉴权模块加载失败，已禁用受保护操作');
-    expect(appSource).toContain('禁用受保护操作');
+    expect(appSource).toContain('web.transcript.auth_module_failed');
+    expect(appSource).toContain('disableProtectedActions');
   });
 
   it('fails closed when the shared auth script is unavailable', async () => {

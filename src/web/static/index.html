@@ -11,7 +11,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="web.index.title">视频转录 - VideoTranscriptAPI</title>
-    <meta name="description" content="提交视频转录任务，支持 YouTube、Bilibili、抖音、小红书、微信视频号、小宇宙等多平台">
+    <meta name="description" data-i18n="web.index.meta_description" data-i18n-attr="content" content="提交视频转录任务，支持 YouTube、Bilibili、抖音、小红书、微信视频号、小宇宙等多平台">
     <meta name="theme-color" content="#4f46e5">
     <meta name="robots" content="noindex">
     <link rel="manifest" href="/static/manifest.webmanifest">
@@ -166,7 +166,7 @@
 <body>
     <div class="container">
         <header class="header">
-            <button id="theme-toggle" class="theme-toggle" title="切换到浅色模式">
+            <button id="theme-toggle" class="theme-toggle" data-i18n-title="web.theme.to_light" title="切换到浅色模式">
                 ☀️
             </button>
             <nav class="site-nav">
@@ -174,6 +174,7 @@
                 <a href="/static/history.html" class="site-nav-link" data-i18n="web.nav.history">📋 任务历史</a>
                 <button type="button" id="pwa-install-btn" class="site-nav-link"
                         style="display:none; min-height:44px; background:none; cursor:pointer; font:inherit;"
+                        data-i18n="web.nav.install" data-i18n-aria-label="web.nav.install_aria"
                         aria-label="安装应用到桌面">📥 安装应用</button>
             </nav>
             <h1 data-i18n="web.index.heading">🎬 视频转录服务</h1>
@@ -183,21 +184,22 @@
         <main class="main-content">
             <form id="transcribe-form" class="form-container">
                 <!-- 提交模式切换：链接转录 / 本地音视频 -->
-                <div class="mode-tabs" role="tablist" aria-label="转录方式">
-                    <button type="button" role="tab" id="mode-tab-url" class="mode-tab active" aria-selected="true" aria-controls="url-mode-panel">🔗 链接转录</button>
-                    <button type="button" role="tab" id="mode-tab-upload" class="mode-tab" aria-selected="false" aria-controls="upload-mode-panel">📁 本地音视频</button>
+                <div class="mode-tabs" role="tablist" data-i18n-aria-label="web.index.mode_aria" aria-label="转录方式">
+                    <button type="button" role="tab" id="mode-tab-url" class="mode-tab active" aria-selected="true" aria-controls="url-mode-panel" data-i18n="web.index.mode_url">🔗 链接转录</button>
+                    <button type="button" role="tab" id="mode-tab-upload" class="mode-tab" aria-selected="false" aria-controls="upload-mode-panel" data-i18n="web.index.mode_upload">📁 本地音视频</button>
                 </div>
 
                 <!-- URL 模式面板 -->
                 <div id="url-mode-panel" class="mode-panel">
                     <!-- URL输入区域 -->
                     <div class="form-group share-input-group">
-                        <label for="share-content" class="form-label">
+                        <label for="share-content" class="form-label" data-i18n="web.index.paste_label">
                             📋 粘贴分享内容或视频链接
                         </label>
                         <textarea
                             id="share-content"
                             class="form-textarea"
+                            data-i18n-placeholder="web.index.paste_placeholder"
                             placeholder="粘贴链接或完整分享文案"
                             rows="3"
                             autocapitalize="sentences"
@@ -216,23 +218,23 @@
                 <div id="upload-mode-panel" class="mode-panel" hidden>
                     <!-- 上传未开启/不可用警告条 -->
                     <div id="upload-disabled-banner" class="upload-disabled-banner" role="alert" hidden>
-                        <span>⚠️ 本地上传服务当前未开启或暂不可用</span>
+                        <span data-i18n="web.index.upload_disabled">⚠️ 本地上传服务当前未开启或暂不可用</span>
                     </div>
 
                     <!-- 公开只读与外部处理提示 -->
-                    <div class="upload-privacy-notice" role="note">
+                    <div class="upload-privacy-notice" role="note" data-i18n="web.index.upload_privacy">
                         ℹ️ 提示：上传的音视频将通过外部语音识别引擎转录，并通过 AI 模型进行智能校对与总结；转录完成将生成公开只读分享链接，请勿上传包含个人敏感隐私的内容。
                     </div>
 
                     <!-- 文件选择与拖拽区域 -->
                     <div class="form-group">
-                        <label class="form-label">📁 选择或拖入音视频文件</label>
-                        <div id="upload-drop-zone" class="upload-drop-zone" tabindex="0" role="button" aria-label="点击或拖拽选择音视频文件">
+                        <label class="form-label" data-i18n="web.index.upload_file_label">📁 选择或拖入音视频文件</label>
+                        <div id="upload-drop-zone" class="upload-drop-zone" tabindex="0" role="button" data-i18n-aria-label="web.index.upload_drop_aria" aria-label="点击或拖拽选择音视频文件">
                             <input type="file" id="upload-file-input" accept="audio/*,video/*" style="display:none">
                             <div class="drop-zone-prompt" id="drop-zone-prompt">
                                 <span class="drop-zone-icon">📤</span>
-                                <span class="drop-zone-text">点击选择 或 将音视频文件拖至此处</span>
-                                <span class="drop-zone-hint" id="upload-limits-hint">支持常见音频与视频格式</span>
+                                <span class="drop-zone-text" data-i18n="web.index.upload_drop_text">点击选择 或 将音视频文件拖至此处</span>
+                                <span class="drop-zone-hint" id="upload-limits-hint" data-i18n="web.index.upload_drop_hint">支持常见音频与视频格式</span>
                             </div>
                             <div id="upload-file-info" class="upload-file-info" hidden>
                                 <span class="upload-file-icon">🎬</span>
@@ -240,7 +242,7 @@
                                     <span id="upload-file-name" class="upload-file-name"></span>
                                     <span id="upload-file-size" class="upload-file-size"></span>
                                 </div>
-                                <button type="button" id="upload-file-clear" class="btn-clear" aria-label="取消已选文件">✕</button>
+                                <button type="button" id="upload-file-clear" class="btn-clear" data-i18n-aria-label="web.index.upload_clear_aria" aria-label="取消已选文件">✕</button>
                             </div>
                         </div>
                         <p id="upload-input-feedback" class="input-feedback" role="status" aria-live="polite" hidden></p>
@@ -248,30 +250,30 @@
 
                     <!-- 选填标题 -->
                     <div class="form-group">
-                        <label for="upload-title" class="form-label">📌 标题（选填）</label>
-                        <input type="text" id="upload-title" class="form-input" maxlength="200" placeholder="选填，最多200字，留空自动提取文件名">
+                        <label for="upload-title" class="form-label" data-i18n="web.index.upload_title_label">📌 标题（选填）</label>
+                        <input type="text" id="upload-title" class="form-input" maxlength="200" data-i18n-placeholder="web.index.upload_title_placeholder" placeholder="选填，最多200字，留空自动提取文件名">
                     </div>
 
                     <!-- 选填来源链接 -->
                     <div class="form-group">
-                        <label for="upload-source-url" class="form-label">🌐 来源链接（选填）</label>
-                        <input type="url" id="upload-source-url" class="form-input" maxlength="2048" placeholder="选填，http(s) 链接，仅展示不抓取">
+                        <label for="upload-source-url" class="form-label" data-i18n="web.index.upload_source_label">🌐 来源链接（选填）</label>
+                        <input type="url" id="upload-source-url" class="form-input" maxlength="2048" data-i18n-placeholder="web.index.upload_source_placeholder" placeholder="选填，http(s) 链接，仅展示不抓取">
                     </div>
 
                     <!-- 保留期限 -->
                     <div class="form-group retention-group">
-                        <label class="form-label">⏱️ 内容保留期限</label>
+                        <label class="form-label" data-i18n="web.index.retention_label">⏱️ 内容保留期限</label>
                         <div class="retention-options">
                             <label class="retention-radio-label">
                                 <input type="radio" name="upload-retention" value="30d" checked>
-                                <span>30天保留（默认，转录终态起算）</span>
+                                <span data-i18n="web.index.retention_30d">30天保留（默认，转录终态起算）</span>
                             </label>
                             <label class="retention-radio-label">
                                 <input type="radio" name="upload-retention" value="never">
-                                <span>永久保留（每次新选文件重置）</span>
+                                <span data-i18n="web.index.retention_never">永久保留（每次新选文件重置）</span>
                             </label>
                         </div>
-                        <small class="form-help">保留期限从转录终态（成功/失败）起算；到期或停止分享后链接失效</small>
+                        <small class="form-help" data-i18n="web.index.retention_help">保留期限从转录终态（成功/失败）起算；到期或停止分享后链接失效</small>
                     </div>
                 </div>
 
@@ -280,30 +282,30 @@
                     <button type="button" id="transcription-options-toggle"
                             class="transcription-options-toggle"
                             aria-expanded="false" aria-controls="transcription-options">
-                        <span class="toggle-left">🎤 转录选项</span>
-                        <span id="transcription-options-summary" class="transcription-options-summary">未启用说话人识别</span>
+                        <span class="toggle-left" data-i18n="web.index.options_label">🎤 转录选项</span>
+                        <span id="transcription-options-summary" class="transcription-options-summary" data-i18n="web.index.speaker_off">未启用说话人识别</span>
                         <span class="toggle-icon">▼</span>
                     </button>
                     <div id="transcription-options" class="transcription-options-panel" hidden>
                         <div class="checkbox-group">
                             <input type="checkbox" id="speaker-recognition" class="form-checkbox">
                             <label for="speaker-recognition" class="checkbox-label">
-                                启用说话人识别
-                                <span class="checkbox-desc">适用于多人对话、访谈等场景</span>
+                                <span data-i18n="web.index.opt_speaker">启用说话人识别</span>
+                                <span class="checkbox-desc" data-i18n="web.index.opt_speaker_desc">适用于多人对话、访谈等场景</span>
                             </label>
                         </div>
                         <div class="checkbox-group" style="margin-top: 10px;">
                             <input type="checkbox" id="calibrate-option" class="form-checkbox" checked>
                             <label for="calibrate-option" class="checkbox-label">
-                                启用 AI 智能校对
-                                <span class="checkbox-desc">使用 LLM 修复语音识别中的错别字与断句</span>
+                                <span data-i18n="web.index.opt_calibrate">启用 AI 智能校对</span>
+                                <span class="checkbox-desc" data-i18n="web.index.opt_calibrate_desc">使用 LLM 修复语音识别中的错别字与断句</span>
                             </label>
                         </div>
                         <div class="checkbox-group" style="margin-top: 10px;">
                             <input type="checkbox" id="summarize-option" class="form-checkbox" checked>
                             <label for="summarize-option" class="checkbox-label">
-                                启用内容总结与章节
-                                <span class="checkbox-desc">生成全文摘要、重点回顾与章节大纲</span>
+                                <span data-i18n="web.index.opt_summary">启用内容总结与章节</span>
+                                <span class="checkbox-desc" data-i18n="web.index.opt_summary_desc">生成全文摘要、重点回顾与章节大纲</span>
                             </label>
                         </div>
                     </div>
@@ -313,9 +315,9 @@
                 <div id="auth-missing-prompt" class="auth-missing-prompt" role="status"
                      hidden
                      aria-live="polite">
-                    <span>尚未配置访问令牌</span>
+                    <span data-i18n="web.index.token_missing">尚未配置访问令牌</span>
                     <button type="button" id="auth-settings-link" class="auth-settings-link"
-                            aria-controls="advanced-settings">去设置</button>
+                            aria-controls="advanced-settings" data-i18n="web.index.token_go_settings">去设置</button>
                 </div>
 
                 <!-- 主操作 -->
@@ -330,8 +332,8 @@
                 <div class="form-group advanced-group">
                     <button type="button" id="advanced-toggle" class="advanced-toggle"
                             aria-expanded="false" aria-controls="advanced-settings">
-                        <span class="toggle-left">⚙️ 更多设置</span>
-                        <span class="advanced-summary">访问令牌 · Webhook</span>
+                        <span class="toggle-left" data-i18n="web.index.more_settings">⚙️ 更多设置</span>
+                        <span class="advanced-summary" data-i18n="web.index.more_settings_summary">访问令牌 · Webhook</span>
                         <span class="toggle-icon">▼</span>
                     </button>
 
@@ -339,26 +341,27 @@
                         <!-- 访问令牌 -->
                         <div class="form-group">
                             <label for="bearer-token" class="form-label required">
-                                🔐 访问令牌 <span class="required-mark">*</span>
+                                <span data-i18n="web.index.token_label">🔐 访问令牌</span> <span class="required-mark">*</span>
                             </label>
                             <div class="input-group">
                                 <input
                                     type="password"
                                     id="bearer-token"
                                     class="form-input"
+                                    data-i18n-placeholder="web.index.token_placeholder"
                                     placeholder="请输入访问令牌"
                                     required
                                 >
                                 <button type="button" id="toggle-token-visibility" class="input-btn">👁️</button>
                             </div>
                             <small class="form-help">
-                                <span class="required-text">必填项</span> - 令牌将安全地保存在浏览器本地
+                                <span class="required-text" data-i18n="web.index.required">必填项</span><span data-i18n="web.index.token_help"> - 令牌将安全地保存在浏览器本地</span>
                             </small>
                         </div>
 
                         <!-- 企业微信 Webhook -->
                         <div class="form-group">
-                            <label for="wechat-webhook" class="form-label">
+                            <label for="wechat-webhook" class="form-label" data-i18n="web.index.webhook_label">
                                 📢 企业微信 Webhook 地址
                             </label>
                             <div class="input-group">
@@ -370,21 +373,21 @@
                                 >
                                 <button type="button" id="clear-webhook" class="input-btn">🗑️</button>
                             </div>
-                            <small class="form-help">
+                            <small class="form-help" data-i18n="web.index.webhook_help">
                                 可选项 - 用于接收任务完成通知，留空则使用系统默认配置。输入后自动保存到浏览器本地
                             </small>
                         </div>
 
                         <!-- 任务完成通知（PWA E5，仅浏览器支持 Notification 时由 pwa.js 显示） -->
                         <div class="form-group" id="pwa-notify-group" style="display:none">
-                            <label class="form-label">
+                            <label class="form-label" data-i18n="web.index.notify_label">
                                 🔔 任务完成通知
                             </label>
                             <button type="button" id="pwa-notify-btn" class="advanced-toggle"
-                                    style="min-height:44px" aria-label="开启任务完成通知">
+                                    style="min-height:44px" data-i18n="web.index.notify_enable" data-i18n-aria-label="web.index.notify_enable_aria" aria-label="开启任务完成通知">
                                 开启通知
                             </button>
-                            <small class="form-help">
+                            <small class="form-help" data-i18n="web.index.notify_help">
                                 可选项 - 页面打开期间，任务完成时弹出系统通知，点击直达结果页
                             </small>
                         </div>
@@ -402,7 +405,7 @@
 
             <!-- 历史记录区域 -->
             <div id="history-container" class="history-container" style="display: none;">
-                <h3>📋 最近任务</h3>
+                <h3 data-i18n="web.index.recent_tasks">📋 最近任务</h3>
                 <div id="history-list" class="history-list">
                     <!-- 动态内容 -->
                 </div>

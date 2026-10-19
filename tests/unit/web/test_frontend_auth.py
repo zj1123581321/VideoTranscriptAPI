@@ -34,7 +34,7 @@ def test_homepage_syncs_shared_auth_storage_events_and_save_failures():
     source = APP_JS.read_text(encoding="utf-8")
     assert "window.addEventListener('storage', handleHomepageAuthStorageEvent)" in source
     assert "AUTH_STORAGE_KEYS" in source
-    assert "仍使用当前访问令牌" in source
+    assert "web.js.token_save_failed_hint" in source
     assert "e.target.value = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN) || ''" in source
 
 
@@ -47,8 +47,8 @@ def test_api_requests_use_shared_header_builder():
 def test_missing_auth_script_fails_closed_with_visible_safety_error():
     source = APP_JS.read_text(encoding="utf-8")
     assert "VideoTranscriptAuthStorage" in source
-    assert "安全错误：统一鉴权模块加载失败，已禁用受保护操作" in source
-    assert "禁用受保护操作" in source
+    assert "web.transcript.auth_module_failed" in source
+    assert "disableProtectedActions" in source
 
 
 def test_url_preview_keeps_escape_html_at_all_external_interpolation_points():
@@ -81,7 +81,7 @@ def test_history_reset_and_401_contracts_are_explicit():
     assert "abortPrivateHistoryRequests" in source
     assert "const requestSnapshot = authStorage.snapshotAuthToken()" in source
     assert "authStorage.clearAuthTokenIfMatch(requestSnapshot)" in source
-    assert "安全错误：统一鉴权模块加载失败，已禁用历史私有操作" in source
+    assert "web.history.auth_module_failed" in source
     assert "esc(item.title)" in source
     assert "esc(item.view_token)" in source
 
@@ -90,7 +90,7 @@ def test_history_and_transcript_clear_failures_are_visible():
     history = HISTORY_HTML.read_text(encoding="utf-8")
     transcript = TRANSCRIPT_HTML.read_text(encoding="utf-8")
     assert "if (!storage.clearAuthToken())" in history
-    assert "鉴权清除失败" in history
+    assert "web.history.clear_failed" in history
     assert "if (!authStorage.clearAuthToken())" in transcript
     assert "web.transcript.auth_clear_failed" in transcript
 

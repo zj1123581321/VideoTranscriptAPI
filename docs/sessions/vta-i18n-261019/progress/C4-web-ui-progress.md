@@ -76,3 +76,19 @@ implementing
 
 ### 下一步唯一动作
 把剩余用户可见中文接到 C1 目录，CJK 断言转绿。
+
+## 2026-10-19 剩余可见中文与 CJK 断言
+
+### 当前阶段
+implementing
+
+### 本段结论
+`language=en` 时首页/提交/历史/结果/处理中/错误/清洗稿的 title、body.innerText 与 placeholder/aria-label/title 不再含 CJK。静态页补 data-i18n，app.js/history/pwa 走 `t()`，夹具英文样本避免误报。CJK 断言先在 HEAD 转红再修到绿。
+
+### 关键决策与已否决方案
+- 首页夹具替换按中文长度降序，避免 `任务历史` 吃掉 feature 行。
+- history 内联 `const t = window.t`，不用 `function t` 以免覆盖 `window.t` 递归。
+- 已否决前端独立文案文件；白名单无「中文」语言切换例外。
+
+### 下一步唯一动作
+跑 scope check，提交本段并写报告。

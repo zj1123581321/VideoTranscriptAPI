@@ -11,6 +11,10 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { installI18n } from './install-i18n.js';
+
+globalThis.window = globalThis;
+installI18n(globalThis);
 
 const require = createRequire(import.meta.url);
 const { escapeHTML, buildHistoryItemHTML } = require('../static/js/app.js');

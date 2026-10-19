@@ -44,7 +44,7 @@ describe('history page unified auth contract', () => {
   });
 
   it('fails closed when shared auth is missing and retains HTML escaping', () => {
-    expect(historySource).toContain('安全错误：统一鉴权模块加载失败，已禁用历史私有操作');
+    expect(historySource).toContain('web.history.auth_module_failed');
     expect(historySource).toContain('historyAuthUnavailable');
     expect(historySource).toContain('esc(item.title)');
     expect(historySource).toContain('esc(item.view_token)');

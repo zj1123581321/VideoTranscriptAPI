@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#4f46e5">
-    <title>任务历史 - VideoTranscriptAPI</title>
+    <title data-i18n="web.history.title">任务历史 - VideoTranscriptAPI</title>
     <link rel="manifest" href="/static/manifest.webmanifest">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -472,115 +472,116 @@
             <a href="/" class="site-nav-link" data-i18n="web.nav.back_home">← 返回主页</a>
             <button type="button" id="pwa-install-btn" class="site-nav-link"
                     style="display:none; min-height:44px; background:none; cursor:pointer; font:inherit;"
+                    data-i18n="web.nav.install" data-i18n-aria-label="web.nav.install_aria"
                     aria-label="安装应用到桌面">📥 安装应用</button>
         </nav>
     </div>
 
     <!-- Unified access token input -->
     <div class="auth-bar">
-        <label for="apiKeyInput">访问令牌</label>
-        <input type="password" id="apiKeyInput" placeholder="输入访问令牌..." autocomplete="off">
-        <button class="btn btn-primary" id="historyQueryBtn" onclick="loadHistory()">查询</button>
-        <button class="btn btn-ghost" id="historyClearBtn" onclick="clearHistoryAuth()">清除鉴权</button>
+        <label for="apiKeyInput" data-i18n="web.history.token_label">访问令牌</label>
+        <input type="password" id="apiKeyInput" data-i18n-placeholder="web.history.token_placeholder" placeholder="输入访问令牌..." autocomplete="off">
+        <button class="btn btn-primary" id="historyQueryBtn" onclick="loadHistory()" data-i18n="web.history.query">查询</button>
+        <button class="btn btn-ghost" id="historyClearBtn" onclick="clearHistoryAuth()" data-i18n="web.history.clear_auth">清除鉴权</button>
         <span class="auth-status" id="authStatus" style="display:none"></span>
         <span style="flex:1"></span>
         <button class="btn btn-ghost" id="aliasToggle" onclick="toggleAliasPanel()" style="display:none; font-size:0.8rem; padding:6px 12px">
-            Webhook 别名
+            <span data-i18n="web.history.webhook_alias">Webhook 别名</span>
         </button>
     </div>
 
     <!-- Webhook 别名设置面板 -->
     <div class="alias-panel" id="aliasPanel">
-        <h3>Webhook 别名（保存在本地浏览器）</h3>
+        <h3 data-i18n="web.history.alias_heading">Webhook 别名（保存在本地浏览器）</h3>
         <div id="aliasRows"></div>
-        <button class="btn btn-primary" onclick="saveAliases()" style="margin-top:10px; font-size:0.8rem; padding:6px 14px">
+        <button class="btn btn-primary" onclick="saveAliases()" style="margin-top:10px; font-size:0.8rem; padding:6px 14px" data-i18n="web.history.alias_save">
             保存别名
         </button>
-        <div class="alias-save-hint">* 别名仅存储在本地，清除浏览器数据后会丢失</div>
+        <div class="alias-save-hint" data-i18n="web.history.alias_hint">* 别名仅存储在本地，清除浏览器数据后会丢失</div>
     </div>
 
     <!-- 过滤栏 -->
     <div class="filter-bar" id="filterBar" style="display:none">
         <div class="filter-group">
-            <label>来源</label>
+            <label data-i18n="web.history.filter_source">来源</label>
             <select id="filterSource" onchange="serializeFiltersToURL(); applyFilter()">
-                <option value="url">链接转录</option>
-                <option value="upload">本地音视频</option>
+                <option value="url" data-i18n="web.history.source_url">链接转录</option>
+                <option value="upload" data-i18n="web.history.source_upload">本地音视频</option>
             </select>
         </div>
         <div class="filter-group">
-            <label>开始日期</label>
+            <label data-i18n="web.history.filter_start">开始日期</label>
             <input type="date" id="filterStartDate">
         </div>
         <div class="filter-group">
-            <label>结束日期</label>
+            <label data-i18n="web.history.filter_end">结束日期</label>
             <input type="date" id="filterEndDate">
         </div>
         <div class="filter-group">
             <label>Webhook</label>
             <select id="filterWebhook">
-                <option value="">全部</option>
+                <option value="" data-i18n="web.history.filter_all">全部</option>
             </select>
         </div>
         <div class="filter-group">
-            <label>平台</label>
+            <label data-i18n="web.history.filter_platform">平台</label>
             <select id="filterPlatform">
-                <option value="">全部</option>
+                <option value="" data-i18n="web.history.filter_all">全部</option>
             </select>
         </div>
         <div class="filter-group" style="position:relative">
-            <label>频道</label>
+            <label data-i18n="web.history.filter_channel">频道</label>
             <div id="authorMultiSelect" class="multi-select" onclick="toggleAuthorDropdown(event)">
-                <span id="authorDisplay">全部</span>
+                <span id="authorDisplay" data-i18n="web.history.filter_all">全部</span>
                 <span style="font-size:0.6rem; margin-left:auto">&#9662;</span>
             </div>
             <div id="authorDropdown" class="multi-dropdown" style="display:none">
                 <div class="multi-opt" onclick="toggleAllAuthors(event)">
-                    <input type="checkbox" id="authorSelectAll" checked> <span>全部</span>
+                    <input type="checkbox" id="authorSelectAll" checked> <span data-i18n="web.history.filter_all">全部</span>
                 </div>
                 <div id="authorOptions"></div>
             </div>
             <input type="hidden" id="filterAuthor" value="">
         </div>
         <div class="filter-group">
-            <label>状态</label>
+            <label data-i18n="web.history.filter_status">状态</label>
             <select id="filterStatus">
-                <option value="success">已完成</option>
-                <option value="all">全部</option>
-                <option value="processing">处理中</option>
-                <option value="failed">失败</option>
+                <option value="success" data-i18n="web.history.status_success">已完成</option>
+                <option value="all" data-i18n="web.history.filter_all">全部</option>
+                <option value="processing" data-i18n="web.history.status_processing">处理中</option>
+                <option value="failed" data-i18n="web.history.status_failed">失败</option>
             </select>
         </div>
         <div class="filter-group">
-            <label>已读</label>
+            <label data-i18n="web.history.filter_read">已读</label>
             <select id="filterRead" onchange="serializeFiltersToURL(); applyReadFilter()">
-                <option value="all">全部</option>
-                <option value="unread">未读</option>
-                <option value="read">已读</option>
+                <option value="all" data-i18n="web.history.filter_all">全部</option>
+                <option value="unread" data-i18n="web.history.read_unread">未读</option>
+                <option value="read" data-i18n="web.history.read_read">已读</option>
             </select>
         </div>
         <div class="filter-group" style="min-width:200px; flex:1">
-            <label>搜索</label>
-            <input type="text" id="filterQ" placeholder="标题 / 频道 / URL..."
+            <label data-i18n="web.history.filter_search">搜索</label>
+            <input type="text" id="filterQ" data-i18n-placeholder="web.history.search_placeholder" placeholder="标题 / 频道 / URL..."
                    style="width:100%; background:var(--bg-secondary); border:1px solid var(--border-primary);
                           border-radius:8px; padding:7px 10px; color:var(--text-primary); font-size:0.8rem;">
         </div>
         <div class="filter-actions">
-            <button class="btn btn-primary" onclick="applyFilter()">搜索</button>
-            <button class="btn btn-ghost" onclick="resetFilter()">重置</button>
+            <button class="btn btn-primary" onclick="applyFilter()" data-i18n="web.history.search">搜索</button>
+            <button class="btn btn-ghost" onclick="resetFilter()" data-i18n="web.history.reset">重置</button>
         </div>
     </div>
 
     <!-- 统计条 -->
     <div class="stats-bar" id="statsBar" style="display:none">
-        <input type="checkbox" id="selectAllChk" class="row-checkbox" title="全选当页" onchange="toggleSelectAll(this.checked)">
+        <input type="checkbox" id="selectAllChk" class="row-checkbox" data-i18n-title="web.history.select_page" title="全选当页" onchange="toggleSelectAll(this.checked)">
         <span id="totalCount"></span>
         <span class="unread-badge" id="unreadBadge" style="display:none"></span>
         <span id="selectedCount" style="display:none; color:var(--accent-primary); font-weight:600"></span>
         <button class="btn btn-ghost" id="markSelectedBtn" onclick="markSelectedRead()" style="display:none; font-size:0.75rem; padding:3px 10px">
-            标记已读
+            <span data-i18n="web.history.mark_read">标记已读</span>
         </button>
-        <button class="btn btn-ghost" onclick="markAllRead()" style="font-size:0.75rem; padding:3px 10px">
+        <button class="btn btn-ghost" onclick="markAllRead()" style="font-size:0.75rem; padding:3px 10px" data-i18n="web.history.mark_all_read">
             全部标为已读
         </button>
     </div>
@@ -589,15 +590,15 @@
     <div id="listArea">
         <div class="state-box">
             <div class="icon">🔑</div>
-            <div>输入访问令牌后点击查询</div>
+            <div data-i18n="web.history.prompt_query">输入访问令牌后点击查询</div>
         </div>
     </div>
 
     <!-- 分页 -->
     <div class="pagination" id="paginationBar" style="display:none">
-        <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled>← 上一页</button>
+        <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled data-i18n="web.history.prev">← 上一页</button>
         <span class="page-info" id="pageInfo"></span>
-        <button class="page-btn" id="nextBtn" onclick="changePage(1)" disabled>下一页 →</button>
+        <button class="page-btn" id="nextBtn" onclick="changePage(1)" disabled data-i18n="web.history.next">下一页 →</button>
     </div>
 </div>
 
@@ -614,16 +615,14 @@
 if (typeof window.applyI18n === 'function') {
     window.applyI18n();
 }
-function t(key, vars) {
-    return window.t(key, vars);
-}
+const t = window.t;
 
 // ===================== 状态 =====================
 const STORAGE_KEY_READ  = () => `vta_read_${getMasked()}`;
 const STORAGE_KEY_ALIAS = () => `vta_webhook_alias_${getMasked()}`;
 const PAGE_SIZE = 20;
 const authStorage = typeof window !== 'undefined' ? window.VideoTranscriptAuthStorage : null;
-const HISTORY_AUTH_ERROR = '安全错误：统一鉴权模块加载失败，已禁用历史私有操作';
+const HISTORY_AUTH_ERROR = () => t('web.history.auth_module_failed');
 let historyAuthUnavailable = !authStorage;
 let privateRequestControllers = new Set();
 let privateRequestGeneration = 0;
@@ -646,10 +645,10 @@ function disableHistoryPrivateActions() {
     if (input) input.disabled = true;
     if (query) query.disabled = true;
     if (clear) clear.disabled = true;
-    showStatus('err', HISTORY_AUTH_ERROR);
+    showStatus('err', HISTORY_AUTH_ERROR());
     const list = document.getElementById('listArea');
     if (list) {
-        list.innerHTML = `<div class="state-box"><div class="icon">🔒</div><div>${esc(HISTORY_AUTH_ERROR)}</div></div>`;
+        list.innerHTML = `<div class="state-box"><div class="icon">🔒</div><div>${esc(HISTORY_AUTH_ERROR())}</div></div>`;
     }
 }
 
@@ -703,7 +702,7 @@ function resetPrivateHistoryState() {
     summaryVisible = false;
     _authorDropOpen = false;
     const list = document.getElementById('listArea');
-    if (list) list.innerHTML = '<div class="state-box"><div class="icon">🔑</div><div>请输入访问令牌后点击查询</div></div>';
+    if (list) list.innerHTML = `<div class="state-box"><div class="icon">🔑</div><div>${t('web.history.need_token_box')}</div></div>`;
     ['filterBar', 'statsBar', 'paginationBar', 'aliasToggle', 'aliasPanel'].forEach(id => {
         const element = document.getElementById(id);
         if (element) element.style.display = id === 'aliasPanel' ? 'none' : 'none';
@@ -746,12 +745,12 @@ function clearHistoryAuth() {
     if (!storage) return;
     if (!storage.clearAuthToken()) {
         document.getElementById('apiKeyInput').value = storage.readAuthToken() || '';
-        showStatus('err', '鉴权清除失败');
+        showStatus('err', t('web.history.clear_failed'));
         return;
     }
     resetPrivateHistoryState();
     document.getElementById('apiKeyInput').value = '';
-    showStatus('ok', '鉴权已清除');
+    showStatus('ok', t('web.history.cleared'));
 }
 
 // ===================== 工具函数 =====================
@@ -814,9 +813,9 @@ function updateSelectionUI() {
     const btnEl = document.getElementById('markSelectedBtn');
     if (count > 0) {
         cntEl.style.display = '';
-        cntEl.textContent = `已选 ${count} 条`;
+        cntEl.textContent = t('web.history.selected', { n: count });
         btnEl.style.display = '';
-        btnEl.textContent = `标记已读 (${count})`;
+        btnEl.textContent = t('web.history.mark_read_n', { n: count });
     } else {
         cntEl.style.display = 'none';
         btnEl.style.display = 'none';
@@ -936,10 +935,10 @@ function shortWebhook(url) {
 const PLATFORM_LABELS = {
     youtube: '🎬 YouTube',
     bilibili: '📺 Bilibili',
-    xiaoyuzhou: '🎵 小宇宙',
-    xiaohongshu: '📕 小红书',
-    douyin: '🎭 抖音',
-    wechat_channels: '📹 视频号',
+    xiaoyuzhou: t('web.history.platform_xiaoyuzhou'),
+    xiaohongshu: t('web.history.platform_xiaohongshu'),
+    douyin: t('web.history.platform_douyin'),
+    wechat_channels: t('web.history.platform_wechat'),
     twitter: '𝕏 X',
 };
 
@@ -960,13 +959,13 @@ async function loadHistory(page = 0) {
     const canonical = storage.readAuthToken() || '';
     if (!keyInput) {
         resetPrivateHistoryState();
-        showStatus('err', '请输入访问令牌');
+        showStatus('err', t('web.history.need_token'));
         return;
     }
     if (keyInput !== canonical) {
         resetPrivateHistoryState();
         if (!storage.writeAuthToken(keyInput)) {
-            showStatus('err', '鉴权保存失败');
+            showStatus('err', t('web.history.auth_save_failed'));
             return;
         }
     }
@@ -1017,7 +1016,7 @@ async function loadFilterOptions(requestGeneration = privateRequestGeneration) {
 function populateFilterDropdowns() {
     const aliasMap = getAliasMap();
     const webhookSel = document.getElementById('filterWebhook');
-    webhookSel.innerHTML = '<option value="">全部</option>';
+    webhookSel.innerHTML = `<option value="">${t('web.history.filter_all')}</option>`;
     filterOptions.webhooks.forEach(w => {
         const opt = document.createElement('option');
         opt.value = w;
@@ -1026,7 +1025,7 @@ function populateFilterDropdowns() {
     });
 
     const platformSel = document.getElementById('filterPlatform');
-    platformSel.innerHTML = '<option value="">全部</option>';
+    platformSel.innerHTML = `<option value="">${t('web.history.filter_all')}</option>`;
     filterOptions.platforms.forEach(p => {
         const opt = document.createElement('option');
         opt.value = p;
@@ -1096,7 +1095,7 @@ function updateAuthorDisplay() {
     const selected = [...checks].filter(c => c.checked).map(c => c.value);
     const display = document.getElementById('authorDisplay');
     if (selected.length === 0 || selected.length === checks.length) {
-        display.textContent = '全部';
+        display.textContent = t('web.history.filter_all');
     } else if (selected.length <= 2) {
         display.textContent = selected.join(', ');
     } else {
@@ -1149,7 +1148,7 @@ function changePage(delta) {
 // ===================== API 请求 =====================
 async function apiFetch(url, params = {}, requestGeneration = privateRequestGeneration, method = 'GET') {
     const authStorage = requireHistoryAuth();
-    if (!authStorage) throw new Error(HISTORY_AUTH_ERROR);
+    if (!authStorage) throw new Error(HISTORY_AUTH_ERROR());
     if (requestGeneration !== privateRequestGeneration) throw createSupersededPrivateHistoryError();
     const qs = method === 'GET' ? new URLSearchParams(params).toString() : '';
     const fullUrl = qs ? `${url}?${qs}` : url;
@@ -1174,7 +1173,7 @@ async function apiFetch(url, params = {}, requestGeneration = privateRequestGene
                 resetPrivateHistoryState();
                 document.getElementById('apiKeyInput').value = '';
             }
-            showStatus('err', '访问令牌无效');
+            showStatus('err', t('web.history.token_invalid'));
             throw new Error('401');
         }
         const body = await res.json();
@@ -1193,12 +1192,12 @@ async function apiFetch(url, params = {}, requestGeneration = privateRequestGene
  */
 async function stopShare(uploadId) {
     if (!uploadId) return;
-    const confirmed = confirm('确认关闭公开分享？关闭后将停止后续阅读、导出与重新处理，但不立即擦除正文，也不取消在途处理与通知。');
+    const confirmed = confirm(t('web.history.stop_share_confirm'));
     if (!confirmed) return;
 
     try {
         await apiFetch(`/api/uploads/${encodeURIComponent(uploadId)}/share`, {}, privateRequestGeneration, 'DELETE');
-        showStatus('ok', '已停止公开分享');
+        showStatus('ok', t('web.history.share_stopped'));
         const btn = document.querySelector(`.btn-stop-share[data-upload-id="${uploadId}"]`);
         if (btn) {
             const row = btn.closest('.task-row');
@@ -1214,13 +1213,13 @@ async function stopShare(uploadId) {
                         badge.className = 'task-status-badge status-failed';
                         badge.style.background = '';
                         badge.style.color = '';
-                        badge.textContent = '已停止分享';
+                        badge.textContent = t('web.history.share_stopped_badge');
                     }
                 }
             }
         }
     } catch (err) {
-        showStatus('err', '停止分享失败: ' + (err.message || '未知错误'));
+        showStatus('err', t('web.history.stop_share_failed', { err: err.message || t('web.js.unknown_error') }));
     }
 }
 if (typeof window !== 'undefined') {
@@ -1265,10 +1264,10 @@ async function fetchHistory(requestGeneration = privateRequestGeneration) {
     try {
         const res = await apiFetch('/api/audit/history', params, requestGeneration);
         if (requestGeneration !== privateRequestGeneration) return;
-        if (res.code !== 200) { showError(res.message || '查询失败'); return; }
+        if (res.code !== 200) { showError(res.message || t('web.history.query_failed')); return; }
 
         currentMasked = res.data.api_key_masked || currentMasked;
-        showStatus('ok', '认证成功');
+        showStatus('ok', t('web.history.auth_ok'));
         selectedSet.clear();
         updateSelectionUI();
 
@@ -1295,7 +1294,7 @@ async function fetchHistory(requestGeneration = privateRequestGeneration) {
         updateUnreadBadge(res.data.items);
     } catch(e) {
         if (requestGeneration !== privateRequestGeneration || e.name === 'AbortError') return;
-        if (e.message !== '401') showError('网络错误，请稍后重试');
+        if (e.message !== '401') showError(t('web.history.network_error'));
     }
 }
 
@@ -1303,7 +1302,7 @@ async function fetchHistory(requestGeneration = privateRequestGeneration) {
 function renderList(items) {
     const area = document.getElementById('listArea');
     if (!items.length) {
-        area.innerHTML = `<div class="state-box"><div class="icon">📭</div><div>暂无符合条件的任务记录</div></div>`;
+        area.innerHTML = `<div class="state-box"><div class="icon">📭</div><div>${t('web.history.empty')}</div></div>`;
         return;
     }
 
@@ -1339,16 +1338,16 @@ function buildRow(item, readSet) {
             ? item.request_time.replace('T', ' ').slice(0, 16)
             : '—';
 
-        const displayTitle = item.title || item.filename || '本地上传';
-        const retentionLabel = item.retention === 'never' ? '永久保留' : (item.retention === '30d' ? '30天保留' : (item.retention || '30天保留'));
+        const displayTitle = item.title || item.filename || t('web.history.local_upload');
+        const retentionLabel = item.retention === 'never' ? t('web.history.retention_never') : (item.retention === '30d' ? t('web.history.retention_30d') : (item.retention || t('web.history.retention_30d')));
 
         let shareBadge = '';
         if (item.share_active) {
-            shareBadge = '<span class="task-status-badge status-processing" style="background:var(--success-bg); color:var(--success-text);">分享中</span>';
+            shareBadge = `<span class="task-status-badge status-processing" style="background:var(--success-bg); color:var(--success-text);">${t('web.history.sharing')}</span>`;
         } else if (item.share_inactive_reason === 'expired') {
-            shareBadge = '<span class="task-status-badge status-unknown">已到期</span>';
+            shareBadge = `<span class="task-status-badge status-unknown">${t('web.history.expired')}</span>`;
         } else {
-            shareBadge = '<span class="task-status-badge status-failed">已停止分享</span>';
+            shareBadge = `<span class="task-status-badge status-failed">${t('web.history.share_stopped_badge')}</span>`;
         }
 
         const titleHtml = `
@@ -1357,7 +1356,7 @@ function buildRow(item, readSet) {
                 ${item.filename ? `<span>📁 ${esc(item.filename)}</span>` : ''}
                 <span>⏱️ ${esc(retentionLabel)}</span>
                 ${shareBadge}
-                ${item.source_url ? `<span title="${esc(item.source_url)}">🌐 来源链接</span>` : ''}
+                ${item.source_url ? `<span title="${esc(item.source_url)}">${t('web.history.source_link')}</span>` : ''}
             </div>
         `;
 
@@ -1374,16 +1373,16 @@ function buildRow(item, readSet) {
             ? `<input type="checkbox" class="row-checkbox" onclick="event.stopPropagation()">`
             : `<span></span>`;
 
-        let actionHtml = `<div class="task-platform">📁 本地上传</div>`;
+        let actionHtml = `<div class="task-platform">📁 ${t('web.history.local_upload')}</div>`;
         if (item.share_active && item.upload_id) {
             actionHtml = `
                 <div style="display:flex; flex-direction:column; gap:4px; align-items:center;">
-                    <div class="task-platform">📁 本地上传</div>
+                    <div class="task-platform">📁 ${t('web.history.local_upload')}</div>
                     <button type="button" class="btn btn-ghost btn-stop-share"
                             style="font-size:0.7rem; padding:2px 8px; color:var(--error-text); border-color:var(--error-border); white-space:nowrap;"
                             data-upload-id="${esc(item.upload_id)}"
                             onclick="event.stopPropagation(); stopShare('${esc(item.upload_id)}')">
-                        停止分享
+                        ${t('web.history.stop_share')}
                     </button>
                 </div>
             `;
@@ -1409,7 +1408,7 @@ function buildRow(item, readSet) {
 
     const titleHtml = item.title
         ? `<div class="task-title">${esc(item.title)}</div><div class="task-author">${esc(item.author || '')}</div>`
-        : `<div class="task-title" style="color:var(--text-tertiary)">${esc(item.video_url || '(无标题)')}</div>
+        : `<div class="task-title" style="color:var(--text-tertiary)">${esc(item.video_url || t('web.history.no_title'))}</div>
            ${!isCompleted ? `<div class="task-author"><span class="task-status-badge status-${esc(item.status)}">${esc(item.status)}</span></div>` : ''}`;
 
     const platformLabel = esc(item.platform ? (PLATFORM_LABELS[item.platform] || item.platform) : '—');
@@ -1456,10 +1455,10 @@ function updateUnreadBadge(items) {
     const unread = items.filter(i => i.view_token && !readSet.has(i.view_token) && i.status === 'success').length;
     const badge = document.getElementById('unreadBadge');
     const total = document.getElementById('totalCount');
-    total.textContent = `共 ${totalItems} 条`;
+    total.textContent = t('web.history.total', { n: totalItems });
     if (unread > 0) {
         badge.style.display = '';
-        badge.textContent = `${unread} 条未读`;
+        badge.textContent = t('web.history.unread_n', { n: unread });
     } else {
         badge.style.display = 'none';
     }
@@ -1472,7 +1471,7 @@ function updateUnreadBadgeFromDOM() {
     rows.forEach(r => { if (!readSet.has(r.dataset.vt)) unread++; });
     const badge = document.getElementById('unreadBadge');
     badge.style.display = unread > 0 ? '' : 'none';
-    badge.textContent = `${unread} 条未读`;
+    badge.textContent = t('web.history.unread_n', { n: unread });
 }
 
 function renderPagination() {
@@ -1480,7 +1479,7 @@ function renderPagination() {
     const totalPages = Math.ceil(totalItems / PAGE_SIZE);
     if (totalPages <= 1) { bar.style.display = 'none'; return; }
     bar.style.display = 'flex';
-    document.getElementById('pageInfo').textContent = `第 ${currentPage + 1} / ${totalPages} 页`;
+    document.getElementById('pageInfo').textContent = t('web.history.page', { current: currentPage + 1, total: totalPages });
     document.getElementById('prevBtn').disabled = currentPage === 0;
     document.getElementById('nextBtn').disabled = currentPage >= totalPages - 1;
 }
@@ -1524,7 +1523,7 @@ async function fetchSummary(viewToken, rowEl) {
         if (res.code === 200) {
             const title = rowEl.querySelector('.task-title')?.textContent || '';
             document.getElementById('tooltipTitle').textContent = title;
-            document.getElementById('tooltipContent').textContent = res.data.summary || '（暂无摘要）';
+            document.getElementById('tooltipContent').textContent = res.data.summary || t('web.history.no_summary');
             const tooltip = document.getElementById('summaryTooltip');
             tooltip.classList.add('visible');
             summaryVisible = true;
@@ -1561,7 +1560,7 @@ function buildAliasRows() {
     container.innerHTML = filterOptions.webhooks.map(w => `
         <div class="alias-row">
             <span class="alias-url" title="${esc(w)}">${esc(w)}</span>
-            <input class="alias-input" type="text" placeholder="设置别名..."
+            <input class="alias-input" type="text" placeholder="${t('web.history.alias_placeholder')}"
                    data-url="${esc(w)}"
                    value="${esc(aliasMap[w] || '')}">
         </div>
@@ -1578,18 +1577,18 @@ function saveAliases() {
     });
     saveAliasMap(map);
     populateFilterDropdowns();
-    showStatus('ok', '别名已保存');
+    showStatus('ok', t('web.history.alias_saved'));
 }
 
 // ===================== UI 辅助 =====================
 function showListLoading() {
     document.getElementById('listArea').innerHTML =
-        `<div class="state-box"><div class="icon">⏳</div><div>加载中...</div></div>`;
+        `<div class="state-box"><div class="icon">⏳</div><div>${t('web.history.loading')}</div></div>`;
 }
 function showError(msg) {
     document.getElementById('listArea').innerHTML =
         `<div class="state-box"><div class="icon">⚠️</div><div>${esc(msg)}</div><br>
-         <button class="btn btn-ghost" onclick="loadHistory(0)" style="margin-top:8px">重试</button></div>`;
+         <button class="btn btn-ghost" onclick="loadHistory(0)" style="margin-top:8px">${t('web.history.retry')}</button></div>`;
 }
 function showStatus(type, msg) {
     const el = document.getElementById('authStatus');
@@ -1648,7 +1647,7 @@ window.addEventListener('storage', event => {
         currentIdentity = nextToken;
         loadHistory(0);
     } else {
-        showStatus('ok', '鉴权已清除');
+        showStatus('ok', t('web.history.cleared'));
     }
 });
 

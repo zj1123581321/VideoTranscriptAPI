@@ -59,6 +59,41 @@ test('zh-CN html lang and primary copy stay Chinese', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /内容总结/ })).toBeVisible();
 });
 
+const CJK_RE_SOURCE = '[\u4e00-\u9fff]';
+const EN_PAGES: Array<{ path: string; name: string }> = [
+  { path: '/', name: 'home' },
+  { path: '/add_task_by_web', name: 'submit' },
+  { path: '/static/history.html', name: 'history' },
+  { path: '/view/browser-fixture-view', name: 'result' },
+  { path: '/view/processing', name: 'processing' },
+  { path: '/view/failed', name: 'error' },
+  { path: '/view/cleaned', name: 'cleaned' },
+];
+
+async function collectCjkHits(page: Page): Promise<string[]> {
+  return page.evaluate((reSource: string) => {
+    const re = new RegExp(reSource);
+    const hits: string[] = [];
+    const pushSnippets = (label: string, text: string | null) => {
+      if (!text || !re.test(text)) return;
+      for (const line of text.split(/\n+/)) {
+        const trimmed = line.trim();
+        if (trimmed && re.test(trimmed)) {
+          hits.push(`${label}: ${trimmed.slice(0, 160)}`);
+        }
+      }
+    };
+    pushSnippets('title', document.title);
+    pushSnippets('body', document.body ? document.body.innerText : '');
+    for (const el of Array.from(document.querySelectorAll('[placeholder], [aria-label], [title]'))) {
+      pushSnippets('placeholder', el.getAttribute('placeholder'));
+      pushSnippets('aria-label', el.getAttribute('aria-label'));
+      pushSnippets('title-attr', el.getAttribute('title'));
+    }
+    return hits;
+  }, CJK_RE_SOURCE);
+}
+
 test('en html lang and primary copy switch after fixture language change', async ({ page, request }) => {
   await setLanguage(request, 'en');
 
@@ -89,4 +124,17 @@ test('en html lang and primary copy switch after fixture language change', async
   await page.goto('/view/cleaned');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.getByRole('heading', { name: /Content cleaned up/ })).toBeVisible();
+});
+
+test('en pages expose no CJK in title, body text, or labeled attributes', async ({ page, request }) => {
+  await setLanguage(request, 'en');
+  const failures: string[] = [];
+  for (const pageInfo of EN_PAGES) {
+    await page.goto(pageInfo.path);
+    const hits = await collectCjkHits(page);
+    if (hits.length > 0) {
+      failures.push(`${pageInfo.name} ${pageInfo.path}\n  ${hits.join('\n  ')}`);
+    }
+  }
+  expect(failures, failures.join('\n\n')).toEqual([]);
 });

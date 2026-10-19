@@ -101,7 +101,7 @@
 
     if (hasToken) {
       if (ui) {
-        ui.showStatus('success', '已从分享填入链接');
+        ui.showStatus('success', window.t('web.pwa.share_filled'));
       }
       return;
     }
@@ -119,7 +119,7 @@
         tokenInput.focus();
       }, 100);
       if (ui) {
-        ui.showStatus('error', '请先配置访问令牌', '已从分享填入链接，配置令牌后即可提交');
+        ui.showStatus('error', window.t('web.pwa.need_token_share'), window.t('web.pwa.need_token_share_hint'));
       }
     }
   }
@@ -158,8 +158,8 @@
     }
     // iOS: no beforeinstallprompt ever fires; offer the guided hint instead.
     if (isIOS() && !dismissedRecently(IOS_HINT_DISMISS_KEY)) {
-      btn.textContent = '分享 → 添加到主屏幕';
-      btn.setAttribute('aria-label', '查看安装引导：分享 → 添加到主屏幕');
+      btn.textContent = window.t('web.pwa.install_ios');
+      btn.setAttribute('aria-label', window.t('web.pwa.install_ios_aria'));
       btn.style.display = '';
       return;
     }
@@ -207,15 +207,11 @@
       'background:var(--bg-primary,#fff);color:var(--text-primary,#222);' +
       'border:1px solid var(--border-primary,#ccc);box-shadow:0 8px 32px rgba(0,0,0,.25);' +
       'font-size:.9rem;line-height:1.7;';
-    hint.innerHTML =
-      '<strong>安装到主屏幕</strong><br>' +
-      '1. 点击 Safari 底部的「分享」按钮<br>' +
-      '2. 选择「添加到主屏幕」<br>' +
-      '3. 点击「添加」即可像 App 一样使用';
+    hint.innerHTML = window.t('web.pwa.install_guide');
     var close = document.createElement('button');
     close.type = 'button';
-    close.textContent = '知道了';
-    close.setAttribute('aria-label', '关闭安装引导');
+    close.textContent = window.t('web.pwa.install_ok');
+    close.setAttribute('aria-label', window.t('web.pwa.install_close_aria'));
     close.style.cssText =
       'display:block;margin:12px auto 0;min-height:44px;min-width:88px;' +
       'padding:8px 20px;border:none;border-radius:8px;cursor:pointer;' +
@@ -359,7 +355,7 @@
 
     function renderButton() {
       if (Notification.permission === 'granted') {
-        btn.textContent = '通知已开启';
+        btn.textContent = window.t('web.pwa.notify_on');
         btn.disabled = true;
       } else if (Notification.permission === 'denied') {
         // 永久隐藏入口 + 一次性提示去系统设置开
@@ -375,13 +371,13 @@
           if (typeof UIManager !== 'undefined') {
             UIManager.showStatus(
               'error',
-              '通知权限已被拒绝',
-              '请在浏览器/系统设置中允许本站通知后刷新页面'
+              window.t('web.pwa.notify_denied'),
+              window.t('web.pwa.notify_denied_hint')
             );
           }
         }
       } else {
-        btn.textContent = '开启通知';
+        btn.textContent = window.t('web.index.notify_enable');
         btn.disabled = false;
       }
     }
@@ -401,8 +397,8 @@
           if (typeof UIManager !== 'undefined') {
             UIManager.showStatus(
               'error',
-              '通知授权失败',
-              '请在已安装的应用内或浏览器设置中开启通知'
+              window.t('web.pwa.notify_failed'),
+              window.t('web.pwa.notify_failed_hint')
             );
           }
         });
@@ -565,9 +561,9 @@
      *   the task tracked (Codex R3-1).
      */
     async function notifySuccess(item) {
-      var title = '转录任务完成';
+      var title = window.t('web.pwa.task_done_title');
       var options = {
-        body: '点击查看转录结果',
+        body: window.t('web.pwa.task_done_body'),
         icon: '/static/icons/icon-192.png',
       };
       var viewUrl = '/view/' + item.view_token;

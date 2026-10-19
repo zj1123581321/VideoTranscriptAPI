@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
+import { installI18n } from './install-i18n.js';
 
 const historySource = readFileSync(
   fileURLToPath(new URL('../static/history.html', import.meta.url)),
@@ -89,6 +90,7 @@ function createHistoryFixture({ token = '' } = {}) {
   dom.window.VideoTranscriptAuthStorage = authStorage;
   dom.window.fetch = vi.fn();
   dom.window.console.error = vi.fn();
+  installI18n(dom.window);
   dom.window.eval(inlineScript);
   return { dom, authStorage, state, fetchMock: dom.window.fetch };
 }
