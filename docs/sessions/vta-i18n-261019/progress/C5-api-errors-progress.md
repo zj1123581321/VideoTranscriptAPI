@@ -11,3 +11,9 @@
 - 本段结论：`make test` 首轮发现 `generate_notes` 的跨用户拒绝文案未映射；补齐 `notes_ownership_denied` 后，窄测和全量测试均通过。FastAPI 默认 422 校验错误仍保持只有 `detail` 的原形状。
 - 关键决策与已否决方案：未将未映射错误静默降级为通用文案；按 fail-fast 映射具体文案与稳定错误码，并让全量测试验证遗漏。
 - 下一步唯一动作：处理 seq 1 scope-request 对 `llm_ops.py` 的审批结果，覆盖剩余 task_status 写入路径或在报告中明确未授权边界。
+
+### 里程碑 3：验证收敛与权限边界
+- 当前阶段：blocked
+- 本段结论：窄验证、全量 `make test`、Python 编译检查和 card scope 检查均通过；英文错误文案无 CJK，两个 locale 的 key 集合相同且按字典序排列。seq 1 的 `llm_ops.py` scope-request 在 120 秒等待后仍无审批结果，该文件两个 `task_status.error_message` 写入点因此未改，C5 的失败原因本地化目标尚未闭合。
+- 关键决策与已否决方案：不越权修改未获批准的 `llm_ops.py`；保留 `notify_error` 与日志原文、只本地化已授权文件中的 task_status 写入，不迁移历史失败数据。
+- 下一步唯一动作：由主脑处理 seq 1 scope-request；获批后本执行器只需本地化 `llm_ops.py` 两个失败写入点并重跑验收，未批准则按当前 failed/blocked 报告收尾。

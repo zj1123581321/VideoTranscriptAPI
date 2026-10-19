@@ -179,7 +179,6 @@ def test_api_errors_are_english_without_cjk(language_config, source_detail, expe
         "upload_not_accepted",
         "upload_observed_size_limit",
         "upload_queue_full",
-        "upload_receive_incomplete",
         "upload_receiver_limit",
         "upload_receipt_not_found",
         "upload_record_not_found",
@@ -338,16 +337,35 @@ def test_error_catalog_keys_exist_for_each_language():
     }
     error_keys.update(
         {
+            f"error.{code}"
+            for code in [
+                "upload_acceptance_window_expired",
+                "upload_content_type",
+                "upload_declared_size",
+                "upload_declared_size_mismatch",
+                "upload_disabled_or_not_ready",
+                "upload_idempotency",
+                "upload_idempotency_key",
+                "upload_inflight_limit",
+                "upload_metadata",
+                "upload_observed_size_limit",
+                "upload_queue_full",
+                "upload_receiver_limit",
+                "upload_temp_budget",
+            ]
+        }
+    )
+    error_keys.update(
+        {
             "error.api_error",
             "error.method_not_allowed",
             "error.resource_not_found",
             "error.task_failed",
             "error.task_failure_reason",
-            "error.upload_metadata",
-            "error.upload_idempotency",
         }
     )
     for language, catalog in catalogs.items():
-        assert error_keys <= set(catalog)
+        catalog_error_keys = {key for key in catalog if key.startswith("error.")}
+        assert catalog_error_keys == error_keys
     assert set(catalogs["zh-CN"]) == set(catalogs["en"])
     assert all(not _CJK.search(value) for value in catalogs["en"].values())

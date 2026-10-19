@@ -67,7 +67,6 @@
   "error.upload_observed_size_limit": "The received upload exceeds the declared or allowed size",
   "error.upload_queue_full": "The transcription queue is full; the upload was not accepted",
   "error.upload_receipt_not_found": "The upload receipt was not found",
-  "error.upload_receive_incomplete": "The upload was not received completely",
   "error.upload_receiver_limit": "The upload receiver concurrency limit has been reached",
   "error.upload_record_not_found": "The upload record was not found",
   "error.upload_share_closed": "Upload sharing is unavailable or has been disabled",

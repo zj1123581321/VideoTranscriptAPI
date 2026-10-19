@@ -67,7 +67,6 @@
   "error.upload_observed_size_limit": "实际上传字节超过声明或允许大小",
   "error.upload_queue_full": "转录队列已满，上传未正式受理",
   "error.upload_receipt_not_found": "上传回执不存在",
-  "error.upload_receive_incomplete": "上传接收未完成",
   "error.upload_receiver_limit": "上传接收并发已满",
   "error.upload_record_not_found": "上传记录不存在",
   "error.upload_share_closed": "上传分享不可用或已关闭",
