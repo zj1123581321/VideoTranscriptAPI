@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import ast
 import base64
 import hashlib
 import json
@@ -17,41 +16,32 @@ from urllib.parse import parse_qs, urlsplit
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from video_transcript_api.i18n import get_language, web_catalog_script
+from video_transcript_api.utils.logging.logger import load_config
+from video_transcript_api.utils.rendering.home_page import render_home_html
+from video_transcript_api.utils.rendering.i18n_jinja import install_i18n
+
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "src" / "web" / "static"
 TEMPLATE_DIR = ROOT / "src" / "web" / "templates"
-VIEWS_SOURCE = ROOT / "src" / "video_transcript_api" / "api" / "routes" / "views.py"
 FIXTURE_TOKEN = "browser-fixture-token"
 VIEW_TOKEN = "browser-fixture-view"
 VIEW_TOKEN_WITH_CARD = "browser-fixture-view-og"
 UPLOAD_VIEW_TOKEN = "upload_browser_fixture_view_1"
 UPLOAD_ID = "browser-fixture-upload-1"
 
-
-def read_home_page() -> str:
-    """Read the exact HTML constant used by the production `/` route."""
-    module = ast.parse(VIEWS_SOURCE.read_text(encoding="utf-8"))
-    for node in module.body:
-        if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "_HOME_HTML"
-            for target in node.targets
-        ):
-            return ast.literal_eval(node.value)
-    raise RuntimeError("Production home page constant _HOME_HTML was not found")
-
-
-HOME_HTML = read_home_page()
 TEMPLATES = Environment(
     loader=FileSystemLoader(TEMPLATE_DIR),
     autoescape=select_autoescape(["html", "xml"]),
 )
 TEMPLATES.globals["asset_v"] = "browser-test"
+install_i18n(TEMPLATES)
 FIXTURE_TRANSCRIPT_ZH = "隔离浏览器夹具中的正文，验证公开阅读与导出。"
 FIXTURE_TRANSCRIPT_EN = (
     "Isolated browser fixture body used to verify public reading and export."
 )
-LOCALES_DIR = ROOT / "src" / "video_transcript_api" / "i18n" / "locales"
 _fixture_language = "zh-CN"
+load_config()["language"] = "zh-CN"
 
 
 def _fixture_transcript() -> str:
@@ -91,42 +81,6 @@ def _fixture_calibrated_html() -> str:
         f'<div class="dialog-content"><p>{body}</p></div>'
         "</div></div>"
     )
-
-
-def _locale_catalog(language: str) -> dict[str, str]:
-    return json.loads((LOCALES_DIR / f"{language}.json").read_text(encoding="utf-8"))
-
-
-def _t(key: str, **kwargs: object) -> str:
-    return _locale_catalog(_fixture_language)[key].format(**kwargs)
-
-
-def _html_lang() -> str:
-    return _fixture_language
-
-
-def _og_locale() -> str:
-    return "en" if _fixture_language == "en" else "zh_CN"
-
-
-def _i18n_js() -> bytes:
-    catalog = _locale_catalog(_fixture_language)
-    web_catalog = {
-        key: value for key, value in catalog.items() if key.startswith("web.")
-    }
-    payload = (
-        "window.__VTA_LANG__ = "
-        + json.dumps(_fixture_language, ensure_ascii=False)
-        + ";\nwindow.I18N = "
-        + json.dumps(web_catalog, ensure_ascii=False)
-        + ";\n"
-    )
-    return payload.encode("utf-8")
-
-
-TEMPLATES.globals["t"] = _t
-TEMPLATES.globals["html_lang"] = _html_lang
-TEMPLATES.globals["og_locale"] = _og_locale
 
 
 def initialize_database(db_path: Path) -> None:
@@ -222,25 +176,18 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
             self.send_bytes(200, b"ready", "text/plain; charset=utf-8")
             return
         if path == "/i18n.js":
-            self.send_bytes(200, _i18n_js(), "application/javascript; charset=utf-8")
+            self.send_bytes(
+                200,
+                web_catalog_script(get_language()).encode("utf-8"),
+                "application/javascript; charset=utf-8",
+            )
             return
         if path == "/":
-            html = HOME_HTML
-            if _fixture_language != "zh-CN":
-                html = html.replace('lang="zh-CN"', f'lang="{_fixture_language}"', 1)
-                catalog = _locale_catalog(_fixture_language)
-                zh_catalog = _locale_catalog("zh-CN")
-                replacements = []
-                for key, english in catalog.items():
-                    if key.startswith("web.home."):
-                        chinese = zh_catalog[key]
-                        if chinese:
-                            replacements.append((chinese, english))
-                replacements.sort(key=lambda item: len(item[0]), reverse=True)
-                for chinese, english in replacements:
-                    if chinese in html:
-                        html = html.replace(chinese, english, 1)
-            self.send_bytes(200, html.encode("utf-8"), "text/html; charset=utf-8")
+            self.send_bytes(
+                200,
+                render_home_html().encode("utf-8"),
+                "text/html; charset=utf-8",
+            )
             return
         if path == "/add_task_by_web":
             self.serve_static(STATIC_DIR / "index.html")
@@ -471,6 +418,7 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/__e2e__/reset":
             _fixture_language = "zh-CN"
+            load_config()["language"] = "zh-CN"
             with sqlite3.connect(self.db_path) as db:
                 seed_database(db)
             self.send_json(200, {"ok": True})
@@ -482,6 +430,7 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"error": "unsupported language"})
                 return
             _fixture_language = language
+            load_config()["language"] = language
             self.send_json(200, {"ok": True, "language": language})
             return
         if path == "/api/transcribe":

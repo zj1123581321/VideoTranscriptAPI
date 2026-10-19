@@ -164,3 +164,18 @@ implementing
 
 ### 下一步唯一动作
 抽出 /i18n.js 与首页渲染纯函数，去掉夹具复刻与 Jinja 全局补丁。
+
+## 2026-10-19 抽出共用渲染并去掉测试复刻
+
+### 当前阶段
+implementing
+
+### 本段结论
+`web_catalog_script(language)` 与 `render_home_html()` 由生产和夹具共用；夹具删掉首页替换与 `_t`/`_i18n_js`。去掉 Jinja `Environment.__init__` 全局补丁，自建 env 显式 `install_i18n`。
+
+### 关键决策与已否决方案
+- 首页骨架用 `@@TOKEN@@` 避免 CSS `{}` 与 `str.format` 冲突；zh-CN/en 都走 `t()`。
+- 已否决继续在夹具里复刻目录读取。
+
+### 下一步唯一动作
+从 Base worktree 生成 zh-CN 逐字夹具并锁死对照测试。

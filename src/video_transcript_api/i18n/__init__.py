@@ -109,3 +109,23 @@ def t(key: str, **kwargs: Any) -> str:
     except KeyError:
         raise KeyError(f"missing i18n key {key!r} for language {language!r}") from None
     return template.format(**kwargs)
+
+
+def web_catalog_script(language: str) -> str:
+    """Return the ``/i18n.js`` payload for ``language``.
+
+    Uses the in-process catalog cache. Only ``web.*`` keys are exported.
+    """
+    language = validate_language(language)
+    web_catalog = {
+        key: value
+        for key, value in _catalog(language).items()
+        if key.startswith("web.")
+    }
+    return (
+        "window.__VTA_LANG__ = "
+        + json.dumps(language, ensure_ascii=False)
+        + ";\nwindow.I18N = "
+        + json.dumps(web_catalog, ensure_ascii=False)
+        + ";\n"
+    )

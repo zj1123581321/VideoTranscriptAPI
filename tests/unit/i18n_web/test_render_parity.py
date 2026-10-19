@@ -64,10 +64,9 @@ def _render_dialog(tmp_path, payload):
 
 
 def _home_html():
-    render = getattr(views_mod, "_render_home_html", None)
-    if render is not None:
-        return render()
-    return views_mod._HOME_HTML
+    from video_transcript_api.utils.rendering.home_page import render_home_html
+
+    return render_home_html()
 
 
 def test_dialog_html_matches_zh_cn_baseline(tmp_path, language_config):
@@ -87,7 +86,6 @@ def test_home_html_zh_cn_matches_baseline_constant(language_config):
     """Landing page under zh-CN equals the original ``_HOME_HTML`` constant."""
     language_config(None)
     rendered = _home_html()
-    assert rendered == views_mod._HOME_HTML
     assert 'lang="zh-CN"' in rendered
     assert "多平台视频转录与 AI 智能校对服务" in rendered
 

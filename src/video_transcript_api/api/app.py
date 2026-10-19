@@ -347,25 +347,10 @@ def create_app(
     @app.get("/i18n.js", include_in_schema=False)
     async def i18n_catalog_script() -> Response:
         """Inject ``window.I18N`` (web.* catalog subset) for static pages."""
-        from ..i18n import get_language
+        from ..i18n import get_language, web_catalog_script
 
-        language = get_language()
-        locales_dir = Path(__file__).resolve().parents[1] / "i18n" / "locales"
-        catalog = json.loads(
-            (locales_dir / f"{language}.json").read_text(encoding="utf-8")
-        )
-        web_catalog = {
-            key: value for key, value in catalog.items() if key.startswith("web.")
-        }
-        payload = (
-            "window.__VTA_LANG__ = "
-            + json.dumps(language, ensure_ascii=False)
-            + ";\nwindow.I18N = "
-            + json.dumps(web_catalog, ensure_ascii=False)
-            + ";\n"
-        )
         return Response(
-            content=payload,
+            content=web_catalog_script(get_language()),
             media_type="application/javascript; charset=utf-8",
             headers={"Cache-Control": "no-cache"},
         )
