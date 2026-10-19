@@ -255,6 +255,31 @@ def test_upload_error_codes_have_english_details(language_config, error_code):
     assert _CJK.search(error.detail) is None
 
 
+def test_framework_http_errors_preserve_starlette_detail(language_config):
+    language_config("zh-CN")
+    app = FastAPI()
+    install_api_error_handlers(app)
+
+    @app.get("/api/known")
+    async def known():
+        return {"ok": True}
+
+    client = TestClient(app)
+    not_found = client.get("/api/missing")
+    method_not_allowed = client.post("/api/known")
+
+    assert not_found.status_code == 404
+    assert not_found.json() == {
+        "detail": "Not Found",
+        "error_code": "resource_not_found",
+    }
+    assert method_not_allowed.status_code == 405
+    assert method_not_allowed.json() == {
+        "detail": "Method Not Allowed",
+        "error_code": "method_not_allowed",
+    }
+
+
 def test_error_handler_serializes_error_code_and_preserves_fastapi_422(language_config):
     language_config("en")
     app = FastAPI()
@@ -507,9 +532,6 @@ def test_error_catalog_keys_exist_for_each_language():
     )
     error_keys.update(
         {
-            "error.api_error",
-            "error.method_not_allowed",
-            "error.resource_not_found",
             "error.task_failed",
             "error.terminal_write_note",
         }

@@ -48,6 +48,12 @@
 - 关键决策与已否决方案：通知的 `notify_error`、日志变量保留原字符串，只有 task_status.error_message 本地化；不把失败原因折叠为通用英文提示。
 - 下一步唯一动作：提交并推送 C；随后修订 B 的 Starlette 原始 detail 与 D 的 task status message 本地化。
 
+### 里程碑 10：修订 B——保留框架原始 detail
+- 当前阶段：implementing
+- 本段结论：`/api` 下非 `ApiError` 的 404/405/其他错误现在保留 Starlette 的 `exc.detail`，只按状态添加顶层错误码；删除未再引用的通用错误目录文案。测试锁定 `Not Found`、`Method Not Allowed` 原文和 422 形状。
+- 关键决策与已否决方案：框架错误不经目录翻译，避免无意改变 Base 默认 detail；只对自定义 ApiError 使用本地化目录。
+- 下一步唯一动作：提交并推送 B；随后完成 D 的 task status message 本地化。
+
 ### 里程碑 8：A 红验与 scope 批准续作
 - 当前阶段：implementing
 - 本段结论：A 已提交并推送；将 `tasks.py` 一处 `ApiError` 暂时改回 `HTTPException(detail=...)` 后，AST 测试按预期 AssertionError 转红并定位该行，随后只还原该行。修订 dispatch 已批准 seq 1 对 `llm_ops.py` 的 scope 扩展，可继续完成 C。

@@ -1,7 +1,6 @@
 {
   "common.language_name": "English",
   "common.language_selected": "UI language: {language}",
-  "error.api_error": "The request failed",
   "error.audit_calls_failed": "Failed to retrieve API call records: {error}",
   "error.audit_query_failed": "The query failed: {error}",
   "error.audit_stats_failed": "Failed to retrieve statistics: {error}",
@@ -12,7 +11,6 @@
   "error.invalid_history_source": "Source must be upload or url",
   "error.invalid_url": "The video URL is required",
   "error.llm_queue_full": "The task processing capacity has been reached. Please try again later.{note}",
-  "error.method_not_allowed": "The request method is not allowed",
   "error.notes_already_exists": "Detailed notes already exist",
   "error.notes_already_in_progress": "Detailed notes are already being generated",
   "error.notes_chapters_required": "Generate chapters before requesting detailed notes",
@@ -28,7 +26,6 @@
   "error.recalibration_ownership_denied": "You are not authorized to recalibrate this task",
   "error.recalibration_permission_denied": "You do not have permission to recalibrate",
   "error.recalibration_transcript_missing": "No transcript is available for recalibration",
-  "error.resource_not_found": "The resource was not found",
   "error.resummary_creation_failed": "Failed to create the summary regeneration task: {error}",
   "error.resummary_formatting_failed": "Failed to format transcript data for summary regeneration: {error}{note}",
   "error.resummary_ownership_denied": "You are not authorized to regenerate the summary for this task",
