@@ -1,4 +1,10 @@
 {
+  "api.task_status.calibrating": "转录完成，校对/总结生成中",
+  "api.task_status.failed": "任务处理失败",
+  "api.task_status.processing": "任务处理中",
+  "api.task_status.query_succeeded": "获取任务状态成功",
+  "api.task_status.queued": "任务排队中",
+  "api.task_status.success": "任务已完成",
   "common.language_name": "中文",
   "common.language_selected": "界面语言：{language}",
   "error.audit_calls_failed": "获取调用记录失败: {error}",

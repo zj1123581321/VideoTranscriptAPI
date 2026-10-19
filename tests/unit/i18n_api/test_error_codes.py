@@ -306,6 +306,55 @@ def test_error_handler_serializes_error_code_and_preserves_fastapi_422(language_
     assert set(validation_response.json()) == {"detail"}
 
 
+@pytest.mark.parametrize(
+    ("language", "status", "expected_message"),
+    [
+        ("zh-CN", "queued", "任务排队中"),
+        ("zh-CN", "processing", "任务处理中"),
+        ("zh-CN", "calibrating", "转录完成，校对/总结生成中"),
+        ("zh-CN", "success", "任务已完成"),
+        ("zh-CN", "failed", "任务处理失败"),
+        ("zh-CN", "unknown", "获取任务状态成功"),
+        ("en", "queued", "Task queued"),
+        ("en", "processing", "Task is being processed"),
+        ("en", "calibrating", "Transcription complete; proofreading/summary generation in progress"),
+        ("en", "success", "Task completed"),
+        ("en", "failed", "Task failed"),
+        ("en", "unknown", "Task status retrieved successfully"),
+    ],
+)
+def test_get_task_status_message_is_localized(language_config, monkeypatch, language, status, expected_message):
+    language_config(language)
+    from video_transcript_api.api.routes import tasks
+    from video_transcript_api.api.services.transcription import verify_token
+
+    cache_manager = MagicMock()
+    cache_manager.get_task_by_id.return_value = {
+        "task_id": "task-status-message",
+        "status": status,
+        "error_message": None,
+        "view_token": "view-status-message",
+    }
+    monkeypatch.setattr(tasks, "cache_manager", cache_manager)
+    monkeypatch.setattr(tasks, "audit_logger", MagicMock())
+    monkeypatch.setattr(tasks, "logger", MagicMock())
+
+    app = FastAPI()
+    install_api_error_handlers(app)
+    app.include_router(tasks.router)
+    app.dependency_overrides[verify_token] = lambda: {
+        "user_id": "test-user",
+        "api_key": "test-key",
+    }
+    response = TestClient(app).get("/api/task/task-status-message")
+
+    assert response.status_code == 200
+    message = response.json()["message"]
+    assert message == expected_message
+    if language == "en":
+        assert _CJK.search(message) is None
+
+
 def test_real_authentication_and_transcription_errors_are_localized(language_config, monkeypatch):
     language_config("en")
     from video_transcript_api.api.routes import tasks
@@ -539,5 +588,15 @@ def test_error_catalog_keys_exist_for_each_language():
     for language, catalog in catalogs.items():
         catalog_error_keys = {key for key in catalog if key.startswith("error.")}
         assert catalog_error_keys == error_keys
+    task_status_keys = {
+        "api.task_status.calibrating",
+        "api.task_status.failed",
+        "api.task_status.processing",
+        "api.task_status.query_succeeded",
+        "api.task_status.queued",
+        "api.task_status.success",
+    }
+    for catalog in catalogs.values():
+        assert task_status_keys <= set(catalog)
     assert set(catalogs["zh-CN"]) == set(catalogs["en"])
     assert all(not _CJK.search(value) for value in catalogs["en"].values())

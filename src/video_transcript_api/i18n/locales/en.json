@@ -1,4 +1,10 @@
 {
+  "api.task_status.calibrating": "Transcription complete; proofreading/summary generation in progress",
+  "api.task_status.failed": "Task failed",
+  "api.task_status.processing": "Task is being processed",
+  "api.task_status.query_succeeded": "Task status retrieved successfully",
+  "api.task_status.queued": "Task queued",
+  "api.task_status.success": "Task completed",
   "common.language_name": "English",
   "common.language_selected": "UI language: {language}",
   "error.audit_calls_failed": "Failed to retrieve API call records: {error}",

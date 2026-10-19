@@ -557,13 +557,13 @@ async def get_task_status(
             data["error"] = task_info.get("error_message") or t("error.task_failed")
 
         message_map = {
-            TaskStatus.QUEUED: "任务排队中",
-            TaskStatus.PROCESSING: "任务处理中",
-            TaskStatus.CALIBRATING: "转录完成，校对/总结生成中",
-            TaskStatus.SUCCESS: "任务已完成",
-            TaskStatus.FAILED: t("error.task_failed"),
+            TaskStatus.QUEUED: t("api.task_status.queued"),
+            TaskStatus.PROCESSING: t("api.task_status.processing"),
+            TaskStatus.CALIBRATING: t("api.task_status.calibrating"),
+            TaskStatus.SUCCESS: t("api.task_status.success"),
+            TaskStatus.FAILED: t("api.task_status.failed"),
         }
-        message = message_map.get(status, "获取任务状态成功")
+        message = message_map.get(status, t("api.task_status.query_succeeded"))
 
         processing_time_ms = int(
             (datetime.datetime.now() - start_time).total_seconds() * 1000

@@ -54,6 +54,12 @@
 - 关键决策与已否决方案：框架错误不经目录翻译，避免无意改变 Base 默认 detail；只对自定义 ApiError 使用本地化目录。
 - 下一步唯一动作：提交并推送 B；随后完成 D 的 task status message 本地化。
 
+### 里程碑 11：修订 D——task status message 双语化
+- 当前阶段：implementing
+- 本段结论：`GET /api/task` 的 queued、processing、calibrating、success、failed 与未知状态 message 全部走 `api.task_status.*`；逐项验证 zh-CN 与 Base 字面量一致、en 无 CJK。C 的具体失败原因本地化继续由各写入点的 `error.task_failure.*` key 负责。
+- 关键决策与已否决方案：将缺省分支也改为目录 key，避免未知状态在 en 下泄露中文；不改变 task status 字段、HTTP code 或历史数据库数据。
+- 下一步唯一动作：提交并推送 D，然后运行最终窄/全量验收与 scope 检查并写完整报告。
+
 ### 里程碑 8：A 红验与 scope 批准续作
 - 当前阶段：implementing
 - 本段结论：A 已提交并推送；将 `tasks.py` 一处 `ApiError` 暂时改回 `HTTPException(detail=...)` 后，AST 测试按预期 AssertionError 转红并定位该行，随后只还原该行。修订 dispatch 已批准 seq 1 对 `llm_ops.py` 的 scope 扩展，可继续完成 C。
