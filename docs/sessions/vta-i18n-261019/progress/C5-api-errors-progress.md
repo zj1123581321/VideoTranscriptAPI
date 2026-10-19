@@ -23,3 +23,9 @@
 - 本段结论：补齐真实路由层 `language=en` 的无效令牌、缺失任务和空 URL 请求断言，响应均断言实际 JSON 序列化 payload 中的字符串 `detail` 与稳定 `error_code`。
 - 关键决策与已否决方案：以 TestClient 读取响应体验证 HTTP 序列化边界，不用对异常对象的同进程断言替代 API 契约。
 - 下一步唯一动作：对这次仅测试与进度文件的增量再跑 Accept-Check 与 scope 检查，然后提交并推送；`llm_ops.py` 未获 scope 仍按 blocked 上报。
+
+### 里程碑 5：锁定生产应用注册
+- 当前阶段：blocked
+- 本段结论：新增 `create_app` 注册异常处理器的断言，并与独立的 TestClient 序列化测试配套；窄测通过，移除测试时启动未绑定 Runtime 的错误探针。
+- 关键决策与已否决方案：不为验证处理器而启动完整服务生命周期；独立测试验证 JSON payload，生产 app 测试锁定异常处理器的实际注册。
+- 下一步唯一动作：对最终测试文件状态运行全量 Accept-Check 与 scope 检查后提交、推送；未授权的 `llm_ops.py` 保持不变。

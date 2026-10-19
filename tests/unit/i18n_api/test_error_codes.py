@@ -275,6 +275,16 @@ def test_real_authentication_and_transcription_errors_are_localized(language_con
     }
 
 
+def test_create_app_registers_the_json_error_handler(language_config):
+    language_config("en")
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    from video_transcript_api.api.app import create_app
+
+    app = create_app(start_background=False)
+
+    assert app.exception_handlers[StarletteHTTPException].__name__ == "handle_http_error"
+
+
 def test_task_failure_reason_is_localized_before_terminal_write(language_config, monkeypatch):
     language_config("en")
     from video_transcript_api.api.services import transcription
