@@ -48,6 +48,20 @@ TEMPLATES = Environment(
 TEMPLATES.globals["asset_v"] = "browser-test"
 FIXTURE_TRANSCRIPT = "隔离浏览器夹具中的正文，验证公开阅读与导出。"
 
+# processing.html 的 stage_progress 展示结构（生产侧由
+# view_token_resolver.build_stage_progress_display 从 task_status.progress
+# 预渲染，词表为 zh-CN；夹具按同一契约给出最终文本，模板渲染行为由
+# e2e/tests/pages.spec.ts 的 processing 阶段断言锁定）。
+FIXTURE_STAGE_PROGRESS = {
+    "current_line": "当前阶段：下载（已进行 1 分 23 秒）",
+    "notes_line": None,
+    "completed_header": "已完成阶段",
+    "completed_items": [
+        "准备（耗时 2 秒）",
+        "转录（耗时 1 分 05 秒）",
+    ],
+}
+
 
 def initialize_database(db_path: Path) -> None:
     with sqlite3.connect(db_path) as db:
@@ -516,6 +530,8 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
             "error_message": "夹具失败状态",
             "message": "夹具失败状态",
         }
+        if status == "processing":
+            context["stage_progress"] = dict(FIXTURE_STAGE_PROGRESS)
         if view_token == VIEW_TOKEN_WITH_CARD:
             port = self.server.server_address[1]
             context["share_card"] = {
