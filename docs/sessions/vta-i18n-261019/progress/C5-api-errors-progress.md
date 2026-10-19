@@ -60,6 +60,12 @@
 - 关键决策与已否决方案：将缺省分支也改为目录 key，避免未知状态在 en 下泄露中文；不改变 task status 字段、HTTP code 或历史数据库数据。
 - 下一步唯一动作：提交并推送 D，然后运行最终窄/全量验收与 scope 检查并写完整报告。
 
+### 里程碑 12：C5 修订验收收敛
+- 当前阶段：completed
+- 本段结论：A/B/C/D 均已按序提交并推送；最终窄测试与 `make test` 通过，compileall 与最终 scope 检查通过，工作区干净。C 的 task_status 原因保留具体异常文本，通知与日志原文仍不变。
+- 关键决策与已否决方案：API 错误码由调用点显式声明；非 ApiError 框架错误保留 Starlette detail；task_status 失败原因不折叠为通用句；所有 task status message 都经 locale 目录。
+- 下一步唯一动作：在本 dispatch 的 report.md 写入完整错误码表、门禁答复、测试与红验原始输出，以及最终提交/推送状态。
+
 ### 里程碑 8：A 红验与 scope 批准续作
 - 当前阶段：implementing
 - 本段结论：A 已提交并推送；将 `tasks.py` 一处 `ApiError` 暂时改回 `HTTPException(detail=...)` 后，AST 测试按预期 AssertionError 转红并定位该行，随后只还原该行。修订 dispatch 已批准 seq 1 对 `llm_ops.py` 的 scope 扩展，可继续完成 C。
