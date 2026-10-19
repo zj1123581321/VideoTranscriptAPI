@@ -29,3 +29,9 @@
 - 本段结论：新增 `create_app` 注册异常处理器的断言，并与独立的 TestClient 序列化测试配套；窄测通过，移除测试时启动未绑定 Runtime 的错误探针。
 - 关键决策与已否决方案：不为验证处理器而启动完整服务生命周期；独立测试验证 JSON payload，生产 app 测试锁定异常处理器的实际注册。
 - 下一步唯一动作：对最终测试文件状态运行全量 Accept-Check 与 scope 检查后提交、推送；未授权的 `llm_ops.py` 保持不变。
+
+### 里程碑 6：授权范围内的交付收敛
+- 当前阶段：blocked
+- 本段结论：`make test` 与窄验证通过，scope 检查通过，分支已推送且工作区干净；JSON API 错误码、本地化及已授权的任务失败写入路径均已提交。由于 seq 1 scope-request 等待超时，`llm_ops.py` 两处 task_status 失败写入未能纳入，故不能宣告 C5 全目标完成。
+- 关键决策与已否决方案：按卡面授权只提交 scope 内产物；没有绕过 scope 闸，也没有把未授权的 task_status 写入伪称为已本地化。
+- 下一步唯一动作：主脑处理 dispatch `dlg-20261019-171404-e584c4` 的 seq 1 scope-request；获批后补改 `llm_ops.py` 并重新验收，否则由主脑按当前 blocked 交付验收。
