@@ -495,6 +495,7 @@
         // truncation, which lost samples from speakers who appear late.
         // 【降级】confidence 低于阈值时不采用推断姓名，改用"说话人N"占位，
         // [Degradation] When confidence is below the threshold the inferred name is not used and a
+        //         避免把低置信度的猜测当作确定结论展示给用户
         //         "speaker N" placeholder takes its place, so a low-confidence guess is never shown
         //         to users as a settled conclusion.
         // ------------------------------------------------------
