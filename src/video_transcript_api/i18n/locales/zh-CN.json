@@ -328,6 +328,8 @@
   "web.processing.page_title": "正在处理 - {title}",
   "web.processing.refresh": "🔄 刷新页面",
   "web.processing.title": "处理中",
+  "web.punct.colon": "：",
+  "web.punct.period": "。",
   "web.pwa.install_close_aria": "关闭安装引导",
   "web.pwa.install_guide": "<strong>安装到主屏幕</strong><br>1. 点击 Safari 底部的「分享」按钮<br>2. 选择「添加到主屏幕」<br>3. 点击「添加」即可像 App 一样使用",
   "web.pwa.install_ios": "分享 → 添加到主屏幕",

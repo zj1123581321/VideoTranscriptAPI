@@ -59,7 +59,7 @@ test('zh-CN html lang and primary copy stay Chinese', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /内容总结/ })).toBeVisible();
 });
 
-const CJK_RE_SOURCE = '[\u4e00-\u9fff]';
+const CJK_RE_SOURCE = '[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]';
 const EN_PAGES: Array<{ path: string; name: string }> = [
   { path: '/', name: 'home' },
   { path: '/add_task_by_web', name: 'submit' },

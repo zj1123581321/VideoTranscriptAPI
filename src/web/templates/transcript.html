@@ -428,16 +428,16 @@
     {% if stats.calibration_status == 'none' %}
     <div class="calibration-warning" style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:0.9em;color:#991b1b;display:flex;align-items:center;gap:8px;">
         <span>&#x26A0;&#xFE0F;</span>
-        <span><strong>{{ t('web.transcript.cal_failed') }}</strong>：{{ t('web.transcript.cal_failed_body') }}</span>
+        <span><strong>{{ t('web.transcript.cal_failed') }}</strong>{{ t('web.punct.colon') }}{{ t('web.transcript.cal_failed_body') }}</span>
     </div>
     {% elif stats.calibration_status == 'partial' %}
     <div class="calibration-warning" style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:0.9em;color:#92400e;display:flex;align-items:center;gap:8px;">
         <span>&#x26A0;&#xFE0F;</span>
-        <span><strong>{{ t('web.transcript.cal_partial') }}</strong>：
+        <span><strong>{{ t('web.transcript.cal_partial') }}</strong>{{ t('web.punct.colon') }}
         {%- if cal and cal.total_chunks is defined %}
             {{ t('web.transcript.cal_partial_chunks', success=cal.success_count, total=cal.total_chunks, fallback=cal.fallback_count, failed=cal.failed_count) }}
         {%- elif cal and cal.total_segments is defined %}
-            {{ t('web.transcript.cal_partial_segments', success=cal.calibrated_segments, total=cal.total_segments, fallback=cal.fallback_segments) }}{% if cal.low_quality_segments %}{{ t('web.transcript.cal_partial_low_quality', n=cal.low_quality_segments) }}{% endif %}。
+            {{ t('web.transcript.cal_partial_segments', success=cal.calibrated_segments, total=cal.total_segments, fallback=cal.fallback_segments) }}{% if cal.low_quality_segments %}{{ t('web.transcript.cal_partial_low_quality', n=cal.low_quality_segments) }}{% endif %}{{ t('web.punct.period') }}
         {%- endif %}
         {{ t('web.transcript.cal_partial_typos') }}</span>
     </div>
@@ -634,7 +634,7 @@
         {% if stats and stats.calibration_status == 'disabled' %}
         <div class="calibration-warning" style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:0.9em;color:#1e40af;display:flex;align-items:center;gap:8px;">
             <span>&#x2139;&#xFE0F;</span>
-            <span>{{ t('web.transcript.calibration_disabled') }}{% if use_speaker_recognition %}{{ t('web.transcript.calibration_disabled_speakers') }}{% endif %}。</span>
+            <span>{{ t('web.transcript.calibration_disabled') }}{% if use_speaker_recognition %}{{ t('web.transcript.calibration_disabled_speakers') }}{% endif %}{{ t('web.punct.period') }}</span>
         </div>
         {% endif %}
         {% if use_speaker_recognition %}

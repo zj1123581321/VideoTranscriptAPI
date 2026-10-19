@@ -92,3 +92,18 @@ implementing
 
 ### 下一步唯一动作
 跑 scope check，提交本段并写报告。
+
+## 2026-10-19 全角标点并入目录并扩 CJK 断言
+
+### 当前阶段
+implementing
+
+### 本段结论
+e2e CJK 正则扩到 CJK 标点与全角形式，先在 HEAD 抓到 error.html 的 `：`，再把模板里的 `：`/`。` 并入 `web.punct.colon` / `web.punct.period`。英文页不再漏全角标点。
+
+### 关键决策与已否决方案
+- 标点做独立 key 而不是改已有 hint 值，zh-CN 原硬编码值保持不变。
+- 已否决把 HTML `<strong>` 整段塞进目录。
+
+### 下一步唯一动作
+修 floating-toc aria-label 拼接为带占位符的整句 key。

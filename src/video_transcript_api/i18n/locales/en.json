@@ -328,6 +328,8 @@
   "web.processing.page_title": "Processing - {title}",
   "web.processing.refresh": "🔄 Refresh",
   "web.processing.title": "Processing",
+  "web.punct.colon": ": ",
+  "web.punct.period": ".",
   "web.pwa.install_close_aria": "Close the install guide",
   "web.pwa.install_guide": "<strong>Install to Home Screen</strong><br>1. Tap Share at the bottom of Safari<br>2. Choose Add to Home Screen<br>3. Tap Add to use it like an app",
   "web.pwa.install_ios": "Share → Add to Home Screen",
