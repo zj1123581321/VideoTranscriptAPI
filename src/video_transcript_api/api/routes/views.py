@@ -35,12 +35,15 @@ from ...utils.rendering.og_card import (
     load_share_card,
     render_og_card,
 )
+from ...i18n import get_language, t
+from ...utils.rendering.i18n_jinja import install_i18n
 from ...utils.timeutil import format_datetime_for_display
 from ...utils.llm_status import CalibrationStatus, ChaptersStatus, NotesStatus
 
 logger = lazy_resource(get_logger)
 cache_manager = lazy_resource(get_cache_manager)
 templates = get_templates()
+install_i18n(templates.env)
 static_dir = get_static_dir()
 
 
@@ -63,6 +66,49 @@ _PLATFORM_DISPLAY_MAP = {
     "twitter": "X",
     "generic": "自定义",
 }
+
+_PLATFORM_DISPLAY_KEYS = {
+    "youtube": "web.platform.youtube",
+    "bilibili": "web.platform.bilibili",
+    "douyin": "web.platform.douyin",
+    "xiaohongshu": "web.platform.xiaohongshu",
+    "xiaoyuzhou": "web.platform.xiaoyuzhou",
+    "apple_podcast": "web.platform.apple_podcast",
+    "wechat_channels": "web.platform.wechat_channels",
+    "twitter": "web.platform.twitter",
+    "generic": "web.platform.generic",
+}
+
+_EXPORT_TYPE_KEYS = {
+    "calibrated": "web.export.content_calibrated",
+    "summary": "web.export.content_summary",
+    "notes": "web.export.content_notes",
+    "transcript": "web.export.content_transcript",
+}
+
+_EXPORT_TYPE_PAGE_KEYS = {
+    "calibrated": "web.export.content_calibrated",
+    "summary": "web.export.content_summary_page",
+    "notes": "web.export.content_notes",
+    "transcript": "web.export.content_transcript",
+}
+
+
+def _platform_display(platform: str) -> str:
+    key = _PLATFORM_DISPLAY_KEYS.get(platform or "")
+    if key:
+        return t(key)
+    return platform or ""
+
+
+def _export_type_label(export_type: str, *, page: bool = False) -> str:
+    keys = _EXPORT_TYPE_PAGE_KEYS if page else _EXPORT_TYPE_KEYS
+    key = keys.get(export_type)
+    return t(key) if key else export_type
+
+
+def _untitled() -> str:
+    return t("web.export.untitled")
 
 # robots.txt：允许首页和分享页面被收录，禁止 API 和静态资源
 _ROBOTS_TXT_TEMPLATE = """\
@@ -210,10 +256,42 @@ _HOME_HTML = """\
 """
 
 
+def _render_home_html() -> str:
+    """Landing page HTML for the current language.
+
+    ``zh-CN`` returns the original ``_HOME_HTML`` constant so the byte-for-byte
+    parity test stays pinned to the pre-i18n page. Other languages substitute
+    catalog strings into that same markup.
+    """
+    if get_language() == "zh-CN":
+        return _HOME_HTML
+    html = _HOME_HTML.replace('lang="zh-CN"', f'lang="{get_language()}"', 1)
+    replacements = (
+        ("多平台视频转录与 AI 智能校对服务", t("web.home.subtitle")),
+        (
+            "支持 YouTube、Bilibili、抖音、小红书、小宇宙播客及音视频直链",
+            t("web.home.feature_platforms"),
+        ),
+        ("本地语音转文字 + LLM 智能校对", t("web.home.feature_asr")),
+        ("自动生成内容总结", t("web.home.feature_summary")),
+        ("网页版查看 + 企业微信推送", t("web.home.feature_view")),
+        (
+            "任务历史：搜索、过滤、已读追踪、摘要预览",
+            t("web.home.feature_history"),
+        ),
+        ("提交任务", t("web.home.cta_submit")),
+        ("任务历史", t("web.home.cta_history")),
+        ("📖 开发契机和玩法分享", t("web.home.story_link")),
+    )
+    for original, translated in replacements:
+        html = html.replace(original, translated, 1)
+    return html
+
+
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def home():
     """首页：简洁的服务介绍，供搜索引擎收录以建立域名信任."""
-    return HTMLResponse(content=_HOME_HTML)
+    return HTMLResponse(content=_render_home_html())
 
 
 def resolve_export_file_path(cache_dir: str, export_type: str) -> Optional[Path]:
@@ -265,18 +343,11 @@ def _build_text_metadata_header(view_data: Dict[str, Any], export_type: str) -> 
     Returns:
         包含元数据的字符串，以 '---' 分隔
     """
-    type_map = {
-        "calibrated": "校对文本",
-        "summary": "总结文本",
-        "notes": "详细笔记",
-        "transcript": "原始转录",
-    }
-
-    raw_title = view_data.get("title", "未命名")
-    title = re.sub(r"[\r\n\t]+", " ", str(raw_title)) if raw_title else "未命名"
+    raw_title = view_data.get("title", _untitled())
+    title = re.sub(r"[\r\n\t]+", " ", str(raw_title)) if raw_title else _untitled()
     platform = view_data.get("platform", "unknown")
     source_url = view_data.get("url", "")
-    content_type_cn = type_map.get(export_type, export_type)
+    content_type_cn = _export_type_label(export_type)
     from ...utils.timeutil.timezone_helper import get_configured_timezone
     export_date = datetime.now(get_configured_timezone()).strftime("%Y-%m-%d")
 
@@ -358,7 +429,7 @@ def _build_metadata_headers(view_data: Dict[str, Any], export_type: str) -> dict
         "transcript": "transcript",
     }
 
-    title = view_data.get("title", "未命名")
+    title = view_data.get("title", _untitled())
     platform = view_data.get("platform", "unknown")
     source_url = view_data.get("url", "")
     content_type = type_map.get(export_type, export_type)
@@ -392,16 +463,9 @@ def _build_page_html(
     """
     import html as html_module
 
-    type_map = {
-        "calibrated": "校对文本",
-        "summary": "内容总结",
-        "notes": "详细笔记",
-        "transcript": "原始转录",
-    }
-
-    title = view_data.get("title", "未命名")
+    title = view_data.get("title", _untitled())
     platform = view_data.get("platform", "unknown")
-    content_type_cn = type_map.get(export_type, export_type)
+    content_type_cn = _export_type_label(export_type, page=True)
     source_url = view_data.get("url", "")
 
     # HTML 转义防止 XSS
@@ -411,11 +475,20 @@ def _build_page_html(
     safe_source_url = html_module.escape(source_url)
 
     page_title = f"{safe_title} - {safe_content_type}"
-    og_desc = f"{safe_title} 的{safe_content_type}（{safe_platform}）"
+    og_desc = html_module.escape(
+        t(
+            "web.export.og_desc",
+            title=title,
+            content_type=content_type_cn,
+            platform=platform,
+        )
+    )
+    html_lang = get_language()
+    og_loc = "en" if html_lang == "en" else "zh_CN"
 
     return f"""\
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{html_lang}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -426,7 +499,7 @@ def _build_page_html(
     <meta property="og:title" content="{page_title}">
     <meta property="og:description" content="{og_desc}">
     <meta property="og:type" content="article">
-    <meta property="og:locale" content="zh_CN">
+    <meta property="og:locale" content="{og_loc}">
     <meta property="og:site_name" content="Video Transcript API">
     <style>
         body {{
@@ -497,7 +570,7 @@ def _build_page_html(
         <div class="meta">
             <span>{safe_content_type}</span>
             {f' · <span>{safe_platform}</span>' if platform != 'unknown' else ''}
-            {f' · <a href="{safe_source_url}" rel="noopener">原始链接</a>' if source_url else ''}
+            {f' · <a href="{safe_source_url}" rel="noopener">{t("web.export.source_link")}</a>' if source_url else ''}
         </div>
         <div class="content">
             {body_html}
@@ -527,27 +600,27 @@ def handle_page_export(
 
     if status in ["queued", "processing"]:
         return HTMLResponse(
-            content="<html><body><p>校对文本正在生成中，请稍后再试...</p></body></html>",
+            content=f"<html><body><p>{t('web.export.page_calibrating')}</p></body></html>",
             status_code=202,
         )
     if status == "file_cleaned":
         return HTMLResponse(
-            content="<html><body><p>该文件已被清理</p></body></html>",
+            content=f"<html><body><p>{t('web.export.page_cleaned')}</p></body></html>",
             status_code=410,
         )
     if status == "failed":
         return HTMLResponse(
-            content="<html><body><p>任务处理失败</p></body></html>",
+            content=f"<html><body><p>{t('web.export.page_failed')}</p></body></html>",
             status_code=500,
         )
     if status not in _CONTENT_VIEW_STATUSES:
         return HTMLResponse(
-            content=f"<html><body><p>任务状态异常: {status}</p></body></html>",
+            content=f"<html><body><p>{t('web.export.page_status_abnormal', status=status)}</p></body></html>",
             status_code=400,
         )
     if not is_notes_export_generated(view_data, export_type):
         return HTMLResponse(
-            content="<html><body><p>详细笔记尚未成功生成</p></body></html>",
+            content=f"<html><body><p>{t('web.export.page_notes_missing')}</p></body></html>",
             status_code=404,
         )
 
@@ -555,7 +628,7 @@ def handle_page_export(
     cache_dir = view_data.get("cache_dir")
     if not cache_dir or not os.path.exists(cache_dir):
         return HTMLResponse(
-            content="<html><body><p>缓存文件不存在</p></body></html>",
+            content=f"<html><body><p>{t('web.export.page_cache_missing')}</p></body></html>",
             status_code=404,
         )
 
@@ -563,20 +636,15 @@ def handle_page_export(
     file_path = resolve_export_file_path(cache_dir, export_type)
     if file_path is None:
         return HTMLResponse(
-            content="<html><body><p>不支持的导出类型</p></body></html>",
+            content=f"<html><body><p>{t('web.export.page_unsupported')}</p></body></html>",
             status_code=400,
         )
 
     # 4. 检查文件存在
     if not file_path or not file_path.exists():
-        content_type_cn = {
-            "calibrated": "校对文本",
-            "summary": "总结文本",
-            "notes": "详细笔记",
-            "transcript": "原始转录",
-        }.get(export_type, export_type)
+        content_type_cn = _export_type_label(export_type)
         return HTMLResponse(
-            content=f"<html><body><p>{content_type_cn}文件不存在</p></body></html>",
+            content=f"<html><body><p>{t('web.export.file_missing', content_type=content_type_cn)}</p></body></html>",
             status_code=404,
         )
 
@@ -586,7 +654,7 @@ def handle_page_export(
     except Exception as exc:
         logger.error("读取文件失败: {}, 错误: {}", file_path, exc)
         return HTMLResponse(
-            content="<html><body><p>读取文件失败</p></body></html>",
+            content=f"<html><body><p>{t('web.export.page_read_failed')}</p></body></html>",
             status_code=500,
         )
 
@@ -635,7 +703,7 @@ def sanitize_filename(filename: str) -> str:
 
     # 如果文件名为空，返回默认值
     if not filename:
-        filename = "未命名"
+        filename = _untitled()
 
     return filename
 
@@ -656,15 +724,8 @@ def generate_download_filename(title: str, platform: str, content_type: str) -> 
     safe_title = sanitize_filename(title)
 
     # 内容类型映射
-    type_map = {
-        "calibrated": "校对文本",
-        "summary": "总结文本",
-        "notes": "详细笔记",
-        "transcript": "原始转录",
-    }
-
-    content_name = type_map.get(content_type, content_type)
-    platform_name = _PLATFORM_DISPLAY_MAP.get(platform, platform)
+    content_name = _export_type_label(content_type)
+    platform_name = _platform_display(platform)
 
     # 限制标题长度，避免文件名过长
     max_title_length = 50
@@ -692,34 +753,34 @@ def handle_raw_export(
 
     if status in ["queued", "processing"]:
         return Response(
-            content="⏳ 校对文本正在生成中，请稍后再试...\n\n请刷新页面或稍后访问此链接。",
+            content=t("web.export.raw_calibrating"),
             media_type="text/plain; charset=utf-8",
             status_code=202,
         )
 
     if status == "file_cleaned":
         return Response(
-            content="❌ 该文件已被清理\n\n如需重新获取，请重新提交转录任务。",
+            content=t("web.export.raw_cleaned"),
             media_type="text/plain; charset=utf-8",
             status_code=410,
         )
 
     if status == "failed":
         return Response(
-            content="❌ 任务处理失败\n\n请重新提交转录任务。",
+            content=t("web.export.raw_failed"),
             media_type="text/plain; charset=utf-8",
             status_code=500,
         )
 
     if status not in _CONTENT_VIEW_STATUSES:
         return Response(
-            content=f"❌ 任务状态异常: {status}",
+            content=t("web.export.raw_status_abnormal", status=status),
             media_type="text/plain; charset=utf-8",
             status_code=400,
         )
     if not is_notes_export_generated(view_data, export_type):
         return Response(
-            content="❌ 详细笔记尚未成功生成",
+            content=t("web.export.raw_notes_missing"),
             media_type="text/plain; charset=utf-8",
             status_code=404,
         )
@@ -728,7 +789,7 @@ def handle_raw_export(
     cache_dir = view_data.get("cache_dir")
     if not cache_dir or not os.path.exists(cache_dir):
         return Response(
-            content="❌ 缓存文件不存在\n\n该文件可能已被清理。",
+            content=t("web.export.raw_cache_missing"),
             media_type="text/plain; charset=utf-8",
             status_code=404,
         )
@@ -737,22 +798,16 @@ def handle_raw_export(
     file_path = resolve_export_file_path(cache_dir, export_type)
     if file_path is None:
         return Response(
-            content=f"❌ 不支持的导出类型: {export_type}\n\n支持的类型: calibrated, summary, notes, transcript",
+            content=t("web.export.raw_unsupported", export_type=export_type),
             media_type="text/plain; charset=utf-8",
             status_code=400,
         )
 
     # 4. 检查文件是否存在
     if not file_path or not file_path.exists():
-        content_type_cn = {
-            "calibrated": "校对文本",
-            "summary": "总结文本",
-            "notes": "详细笔记",
-            "transcript": "原始转录",
-        }.get(export_type, export_type)
-
+        content_type_cn = _export_type_label(export_type)
         return Response(
-            content=f"❌ {content_type_cn}文件不存在\n\n该任务可能未启用相关功能。",
+            content=t("web.export.raw_file_missing", content_type=content_type_cn),
             media_type="text/plain; charset=utf-8",
             status_code=404,
         )
@@ -763,7 +818,7 @@ def handle_raw_export(
     except Exception as exc:
         logger.error("读取文件失败: {}, 错误: {}", file_path, exc)
         return Response(
-            content="❌ 读取文件失败，请稍后重试",
+            content=t("web.export.raw_read_failed"),
             media_type="text/plain; charset=utf-8",
             status_code=500,
         )
@@ -805,7 +860,7 @@ async def add_task_by_web(request: Request):
         else:
             logger.error("Web任务添加页面文件不存在: {}", index_file)
             return HTMLResponse(
-                content="<h1>页面未找到</h1><p>请确保 index.html 文件存在于 static 目录中。</p>",
+                content=t("web.viewer.index_missing"),
                 status_code=404,
             )
     except Exception as exc:
@@ -832,13 +887,13 @@ async def export_content(view_token: str, export_type: str, request: Request):
         )
         if not view_data:
             return Response(
-                content="❌ 页面不存在\n\nview_token 无效或已过期。",
+                content=t("web.export.raw_page_missing"),
                 media_type="text/plain; charset=utf-8",
                 status_code=404,
             )
         if not is_notes_export_generated(view_data, export_type):
             return Response(
-                content="❌ 详细笔记尚未成功生成",
+                content=t("web.export.raw_notes_missing"),
                 media_type="text/plain; charset=utf-8",
                 status_code=404,
             )
@@ -846,7 +901,7 @@ async def export_content(view_token: str, export_type: str, request: Request):
         cache_dir = view_data.get("cache_dir")
         if not cache_dir or not os.path.exists(cache_dir):
             return Response(
-                content="❌ 缓存文件不存在\n\n该文件可能已被清理。",
+                content=t("web.export.raw_cache_missing"),
                 media_type="text/plain; charset=utf-8",
                 status_code=404,
             )
@@ -854,20 +909,15 @@ async def export_content(view_token: str, export_type: str, request: Request):
         file_path = resolve_export_file_path(cache_dir, export_type)
         if file_path is None:
             return Response(
-                content=f"❌ 不支持的导出类型: {export_type}\n\n支持的类型: calibrated, summary, notes, transcript",
+                content=t("web.export.raw_unsupported", export_type=export_type),
                 media_type="text/plain; charset=utf-8",
                 status_code=400,
             )
 
         if not file_path or not file_path.exists():
-            content_type_cn = {
-                "calibrated": "校对文本",
-                "summary": "总结文本",
-                "notes": "详细笔记",
-                "transcript": "原始转录",
-            }.get(export_type, export_type)
+            content_type_cn = _export_type_label(export_type)
             return Response(
-                content=f"❌ {content_type_cn}文件不存在\n\n该任务可能未启用相关功能。",
+                content=t("web.export.raw_file_missing", content_type=content_type_cn),
                 media_type="text/plain; charset=utf-8",
                 status_code=404,
             )
@@ -877,12 +927,12 @@ async def export_content(view_token: str, export_type: str, request: Request):
         except Exception as exc:
             logger.error("读取文件失败: {}, 错误: {}", file_path, exc)
             return Response(
-                content="❌ 读取文件失败，请稍后重试",
+                content=t("web.export.raw_read_failed"),
                 media_type="text/plain; charset=utf-8",
                 status_code=500,
             )
 
-        title = view_data.get("title", "未命名")
+        title = view_data.get("title", _untitled())
         platform = view_data.get("platform", "unknown")
         filename = generate_download_filename(title, platform, export_type)
         from urllib.parse import quote
@@ -920,7 +970,7 @@ async def export_content(view_token: str, export_type: str, request: Request):
     except Exception as exc:
         logger.exception("导出文件异常: {}", exc)
         return Response(
-            content="❌ 导出失败，请稍后重试",
+            content=t("web.export.raw_export_failed"),
             media_type="text/plain; charset=utf-8",
             status_code=500,
         )
@@ -1466,13 +1516,13 @@ async def view_transcript(
         if not view_data:
             if raw:
                 return Response(
-                    content="❌ 页面不存在\n\nview_token 无效或已过期。",
+                    content=t("web.export.raw_page_missing"),
                     media_type="text/plain; charset=utf-8",
                     status_code=404,
                 )
             elif page:
                 return HTMLResponse(
-                    content="<html><body><p>页面不存在</p></body></html>",
+                    content=f"<html><body><p>{t('web.export.page_missing')}</p></body></html>",
                     status_code=404,
                 )
             else:
@@ -1480,7 +1530,7 @@ async def view_transcript(
                     "error.html",
                     {
                         "request": request,
-                        "message": "view_token 无效或已过期",
+                        "message": t("web.error.message_token"),
                     },
                 )
 
@@ -1507,7 +1557,10 @@ async def view_transcript(
                 {
                     "request": request,
                     **view_data,
-                    "page_title": f"正在处理 - {view_data.get('title', '转录任务')}",
+                    "page_title": t(
+                        "web.processing.page_title",
+                        title=view_data.get("title") or t("web.processing.default_title"),
+                    ),
                 },
             )
         if view_data["status"] == "failed":
@@ -1515,7 +1568,7 @@ async def view_transcript(
                 "error.html",
                 {
                     "request": request,
-                    "message": view_data.get("error_message", "任务处理失败"),
+                    "message": view_data.get("error_message", t("web.error.message_failed")),
                     **view_data,
                 },
             )
@@ -1575,7 +1628,7 @@ async def view_transcript(
             "error.html",
             {
                 "request": request,
-                "message": "查看页面失败，请稍后重试",
+                "message": t("web.error.message_view"),
             },
         )
 
@@ -1622,9 +1675,7 @@ async def og_share_card(view_token: str):
         await asyncio.to_thread(
             render_og_card,
             card,
-            platform_display=_PLATFORM_DISPLAY_MAP.get(
-                cache_data.get("platform", ""), cache_data.get("platform", "")
-            ),
+            platform_display=_platform_display(cache_data.get("platform", "")),
             author=cache_data.get("author", ""),
             site_url=get_base_url(),
             font_path=web_config.get("og_font_path", DEFAULT_FONT_PATH),

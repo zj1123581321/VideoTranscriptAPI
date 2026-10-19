@@ -30,3 +30,18 @@ implementing
 
 ### 下一步唯一动作
 `views.py` 首页/导出元数据走 `t()`，Jinja 注入 `t`/`html_lang`，改模板。
+
+## 2026-10-19 首页导出与 /i18n.js
+
+### 当前阶段
+implementing
+
+### 本段结论
+首页 zh-CN 仍返回原 `_HOME_HTML` 常量；英文替换目录文案。导出元数据/文件名/平台展示名与 page/raw 提示走 `t()`。`GET /i18n.js` 注入 `window.I18N`（仅 `web.`）和 `__VTA_LANG__`。
+
+### 关键决策与已否决方案
+- 静态页文案源仍是 C1 目录，端点形状：`window.__VTA_LANG__ = "zh-CN"|"en"; window.I18N = {"web...": "..."}`。
+- 已否决：拆前端文案文件。HTTPException JSON `detail` 留给 C5。
+
+### 下一步唯一动作
+改 Jinja 模板与静态页/app.js，并给 tests/unit/web 的 Jinja 环境安装 `t`。
