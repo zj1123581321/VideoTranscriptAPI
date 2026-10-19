@@ -16,7 +16,11 @@ from .core.usage_context import set_context
 from .validators.unified_quality_validator import UnifiedQualityValidator
 from .processors.plain_text_processor import PlainTextProcessor
 from .processors.speaker_aware_processor import SpeakerAwareProcessor
-from .processors.summary_processor import SummaryProcessor, SummaryResult
+from .processors.summary_processor import (
+    SummaryProcessor,
+    SummaryResult,
+    effective_min_summary_threshold,
+)
 from .processors.chapters_processor import ChaptersProcessor, ChaptersResult
 from .processors.share_card_processor import ShareCardProcessor, ShareCardResult
 
@@ -658,9 +662,10 @@ class LLMCoordinator:
             仍保留完整检查作为独立调用时的兜底，两者判定口径一致。
         """
         # 检查长度阈值（与 SummaryProcessor.process() 内部检查口径一致）
-        if len(text) < self.config.min_summary_threshold:
+        min_summary_threshold = effective_min_summary_threshold(self.config)
+        if len(text) < min_summary_threshold:
             logger.info(
-                f"Text too short for summary: {len(text)} < {self.config.min_summary_threshold}"
+                f"Text too short for summary: {len(text)} < {min_summary_threshold}"
             )
             return SummaryResult(text=None, status=SummaryStatus.SKIPPED_SHORT)
 

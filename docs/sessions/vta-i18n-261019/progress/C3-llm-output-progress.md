@@ -62,3 +62,10 @@
 - **本段结论**：笔记生成与重试后的超长判定都按当前输出语言系数缩放；100 字符源、81 字符输出在 en 下单次调用，在 zh-CN 下仍触发原重试。
 - **关键决策与已否决方案**：保留中文阈值 0.8，英文阈值只乘既有 `length_budget_coefficient()`，不增设配置。
 - **下一步唯一动作**：统一 coordinator 与 SummaryProcessor 的最短总结阈值计算。
+
+## 2026-10-19 总结最短长度预检共用阈值
+
+- **当前阶段**：implementing
+- **本段结论**：SummaryProcessor 与 coordinator 都调用 `effective_min_summary_threshold()`；en 下 800 字输入在 500×1.8 阈值前被预检跳过，避免两处门槛不一致。
+- **关键决策与已否决方案**：以一个计算函数封装语言系数，否决 coordinator 自行重复计算。
+- **下一步唯一动作**：按总结 provenance 语言缩放审计 hard-cap 统计。

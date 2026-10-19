@@ -22,6 +22,12 @@ from ..prompts.localized import (
 
 logger = setup_logger(__name__)
 
+
+def effective_min_summary_threshold(config: LLMConfig) -> int:
+    """Return the configured minimum transcript length for the current output language."""
+    return int(config.min_summary_threshold * length_budget_coefficient())
+
+
 _SUMMARY_BUDGET_RETRY_SUFFIX = (
     "警告：你上一次的输出字数为 {actual_len} 字，超过了篇幅上限 {hard_cap} 字。"
     "请在保留全部信息点的前提下压缩篇幅，不得超过 {hard_cap} 字。"
@@ -102,9 +108,7 @@ class SummaryProcessor:
             不抛出异常，出错时返回 status=FAILED 的 SummaryResult
         """
         # 步骤 1: 长度检查
-        min_summary_threshold = int(
-            self.config.min_summary_threshold * length_budget_coefficient()
-        )
+        min_summary_threshold = effective_min_summary_threshold(self.config)
         if len(text) < min_summary_threshold:
             logger.info(
                 f"Text too short for summary: {len(text)} < {min_summary_threshold}"
