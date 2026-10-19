@@ -714,8 +714,7 @@ def _handle_llm_task(llm_task: dict):
                         f"chapters timeline seed for {task_id}: kind={chapters_seed_kind}"
                     )
 
-                # 调用新架构（包含校对、总结、章节）。publish_as=llm：观测名
-                # llm_processing 被终态快照消费方锁死，用户可见阶段名为 llm。
+                # 调用新架构（包含校对、总结、章节）；观测名 llm_processing 锁定，用户可见 llm。
                 with tracker.track("llm_processing", publish_as="llm"):
                     coordinator_result = llm_coordinator.process(
                         content=content,

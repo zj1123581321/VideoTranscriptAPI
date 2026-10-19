@@ -3154,22 +3154,12 @@ class CacheManager:
             )
 
     def update_task_progress(self, task_id: str, progress: dict) -> bool:
-        """更新任务进度；进度是从属元数据，绝不参与状态机。
-
-        该方法只更新 task_status.progress，不修改 status、completed_at 或
-        terminal_snapshot。与 update_task_status 同一条终态黏性规则：慢半拍
-        的阶段边界写入（统一阶段入口见 utils/perf_tracker.py）不得把已
-        success/failed 的任务行改回处理中观感，因此 UPDATE 以 status 非终态
-        限定；行已终态（或不存在）时返回 False，由调用方按拒绝记日志。
-        """
+        """仅更新非终态任务的 progress 元数据，不改变生命周期字段。"""
         try:
-            progress_json = json.dumps(
-                progress, ensure_ascii=False, sort_keys=True
-            )
+            progress_json = json.dumps(progress, ensure_ascii=False, sort_keys=True)
             with self._get_cursor() as cursor:
                 cursor.execute(
-                    "UPDATE task_status SET progress = ? "
-                    "WHERE task_id = ? "
+                    "UPDATE task_status SET progress = ? WHERE task_id = ? "
                     "AND status NOT IN ('success', 'failed')",
                     (progress_json, task_id),
                 )
@@ -3179,12 +3169,6 @@ class CacheManager:
             raise
 
     def stage_progress_sink(self, task_id: str) -> Callable[[dict], bool]:
-        """返回统一阶段入口（utils/perf_tracker.py）的持久化回调。
-
-        task_status.progress 只经这一个绑定落库：进度文档由入口独有，
-        业务代码不再各自拼文档直写。update_task_progress 的终态黏性
-        限定在这里自然生效。
-        """
         return lambda progress: self.update_task_progress(task_id, progress)
 
     def get_non_terminal_task_ids(self) -> frozenset:
