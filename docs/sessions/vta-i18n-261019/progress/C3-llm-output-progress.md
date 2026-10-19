@@ -76,3 +76,10 @@
 - **本段结论**：summary-ratio 读取每条媒体总结 provenance 的语言并经 `generation_layer_language()` 处理；原文长 10,000、摘要长 7,000 时 en 不超预算而 zh-CN 超预算。
 - **关键决策与已否决方案**：不读取当前配置语言；缺失 provenance 语言沿用该函数的 zh-CN 语义，英文系数引用 prompts/en.py 常量。
 - **下一步唯一动作**：合并章节标题长度限制的重复定义。
+
+## 2026-10-19 章节标题限制集中到语言 prompt 定义
+
+- **当前阶段**：implementing
+- **本段结论**：中文 24/23 字符限制集中在 localized.py，英文 12-word 提示与 48/47 字符截断都由 en.py 常量驱动；章节处理器不再另存中文数值。
+- **关键决策与已否决方案**：用英文 prompt 常量插值，JSON 示例转义后渲染文本不变；中文 prompt 模块未改动。
+- **下一步唯一动作**：跑指定 LLM/i18n 套件与 make test，再做 scope 与状态核对。

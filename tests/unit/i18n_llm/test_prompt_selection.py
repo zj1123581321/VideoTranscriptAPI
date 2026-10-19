@@ -26,6 +26,7 @@ from video_transcript_api.llm.prompts.localized import (
     build_chapters_user_prompt as build_chapters_user_prompt_localized,
     build_notes_user_prompt as build_notes_user_prompt_localized,
     build_summary_user_prompt as build_summary_user_prompt_localized,
+    chapter_title_limits,
     chapters_system_prompt,
     length_budget_coefficient,
     notes_system_prompt,
@@ -197,6 +198,23 @@ def test_english_prompts_are_native_not_chinese_plus_write_in_english(language_c
     assert "不超过 20 个字" not in chapters
     assert length_budget_coefficient() == 1.8
     assert en_prompts.LENGTH_BUDGET_COEFFICIENT == 1.8
+
+
+def test_chapter_title_limits_are_language_localized(language_config):
+    language_config("zh-CN")
+    assert chapter_title_limits() == (24, 23)
+
+    language_config("en")
+    assert chapter_title_limits() == (
+        en_prompts.CHAPTER_TITLE_MAX_CHARS,
+        en_prompts.CHAPTER_TITLE_TRUNCATE_TO,
+    )
+    assert en_prompts.CHAPTERS_SCHEMA["properties"]["chapters"]["items"]["properties"][
+        "title"
+    ]["description"] == (
+        f"Chapter title, at most {en_prompts.CHAPTER_TITLE_MAX_WORDS} words, "
+        "no ordinal prefix"
+    )
 
 
 def test_english_builders_use_english_labels(language_config):

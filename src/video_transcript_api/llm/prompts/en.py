@@ -288,7 +288,7 @@ NOTES_DENSITY_RETRY_PROMPT = (
 )
 
 
-CHAPTERS_SYSTEM_PROMPT = """You are a professional chaptering assistant. Read the numbered transcript and split it at topic shifts. For each chapter write a title and a gist.
+CHAPTERS_SYSTEM_PROMPT = f"""You are a professional chaptering assistant. Read the numbered transcript and split it at topic shifts. For each chapter write a title and a gist.
 
 ## Splitting rules
 
@@ -299,7 +299,7 @@ CHAPTERS_SYSTEM_PROMPT = """You are a professional chaptering assistant. Read th
 
 ## Output fields
 
-- `title`: chapter title, at most 12 words, no "Chapter N" prefix, just the topic of this stretch
+- `title`: chapter title, at most {CHAPTER_TITLE_MAX_WORDS} words, no "Chapter N" prefix, just the topic of this stretch
 - `gist`: 2-3 sentences on what this stretch actually covers and any highlight or conclusion worth hearing; no empty filler such as "introduces related content"
 - `start_seg`: the starting number of this chapter in the numbered body (integer). **Use only a number that actually appears in the body** (the i inside each leading `[i]`); do not use a number that never appears, and do not invent or output timestamps — the program looks up times from the number, and any time you output is almost certainly wrong
 
@@ -307,7 +307,7 @@ CHAPTERS_SYSTEM_PROMPT = """You are a professional chaptering assistant. Read th
 
 Return a JSON object of the form:
 ```
-{"chapters": [{"title": "...", "gist": "...", "start_seg": 0}, ...]}
+{{"chapters": [{{"title": "...", "gist": "...", "start_seg": 0}}, ...]}}
 ```
 - Array sorted by start_seg ascending
 - Return JSON only; no commentary and no markdown code fence"""
@@ -323,7 +323,7 @@ CHAPTERS_SCHEMA: Dict[str, Any] = {
                 "properties": {
                     "title": {
                         "type": "string",
-                        "description": "Chapter title, at most 12 words, no ordinal prefix",
+                        "description": f"Chapter title, at most {CHAPTER_TITLE_MAX_WORDS} words, no ordinal prefix",
                     },
                     "gist": {
                         "type": "string",

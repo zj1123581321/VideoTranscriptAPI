@@ -81,11 +81,7 @@ _MAX_CHAPTER_COUNT = 100
 _MIN_CHAPTER_SECONDS = 60          # 平均章节时长下限（秒），低于此值只 warning，不算失败
 _MAX_CHAPTER_SECONDS = 40 * 60     # 平均章节时长上限（秒）
 
-# prompt 里要求 title 不超过 20 字，但纯靠 LLM 自觉不可靠，本地不做硬校验
-# （不值得为超长标题触发重试/判 FAILED），超过此长度直接截断 + 记 warning。
-_TITLE_MAX_CHARS = 24
-_TITLE_TRUNCATE_TO = 23
-
+# Language-specific title limits are centralized in prompts.localized.chapter_title_limits().
 # description 来自外部平台（视频简介），长度不受本服务控制，理论上可以达到
 # 数 KB 甚至更长；防御性截断到此长度，只记 warning、不算失败（与 title 超长
 # 截断同一级别的软处理），详见 `_truncate_description`。
@@ -500,22 +496,22 @@ def _build_segment_lines(indexed_segments: List[Tuple[int, Dict[str, Any]]]) -> 
 
 
 def _normalize_title_length(title: str, idx: int) -> str:
-    """把已经 strip 过的 title 截断到 `_TITLE_MAX_CHARS` 字以内（软处理）。
+    """Soft-truncate a chapter title to the configured language-specific limit.
 
-    prompt 里声明 title 不超过 20 字，但完全依赖 LLM 自觉不可靠。超长标题
-    本身不是"语义错误"，不值得为它触发重试或判 FAILED——直接在本地截断为
-    前 `_TITLE_TRUNCATE_TO` 字 + "…"，只记一条 warning 日志，不影响结果状态。
+    The prompt limit is not reliable enough to enforce on its own. An overlong
+    title is not a semantic error, so truncate it locally and log a warning
+    instead of retrying or failing the whole generation.
 
     调用时机：必须在"相邻同名章节合并"（`_merge_adjacent_same_title`）及合并后
-    的数量校验**之后**才截断，不能提前——否则两个前 23 字相同但完整内容不同
-    的长标题会被截成同一字符串，被合并逻辑误判成"同名"而错误合并。
+    的数量校验**之后**才截断，不能提前——否则两个在截断后会变成相同前缀、但
+    完整内容不同的长标题会被合并逻辑误判成"同名"而错误合并。
 
     Args:
         title: 已经 strip 过的标题原文
         idx: 该章节在最终章节列表中的下标，仅用于日志定位
 
     Returns:
-        str: 长度 <= `_TITLE_MAX_CHARS` 的标题（未超长时原样返回）
+        str: Title within the configured character limit, unchanged when already within it.
     """
     max_chars, truncate_to = chapter_title_limits()
     if len(title) <= max_chars:
@@ -689,8 +685,8 @@ def _validate_and_normalize_start_segs(
 
     注意：title 长度规范化（超长截断）**不**在这里做。这里保留的是原始完整
     title（仅 strip），供调用方在"合并相邻同名章节"时用完整标题比较——如果在
-    这一步就截断，两个前 23 字相同但完整内容不同的长标题会被截成同一个字符
-    串，随后被 `_merge_adjacent_same_title` 误判成"同名"而错误合并。截断改
+    这一步就截断，两个最终截断结果相同但完整内容不同的长标题会被截成同一个
+    字符串，随后被 `_merge_adjacent_same_title` 误判成"同名"而错误合并。截断改
     为在合并（及合并后的数量校验）**之后**、构造最终 Chapter 列表前统一做
     （见 `_normalize_title_length` 的调用点）。
 
@@ -1355,7 +1351,7 @@ class ChaptersProcessor:
 
         # 步骤 7：构造最终 Chapter 列表——title 长度规范化（软处理，超长截断）
         # 必须放在合并与合并后数量校验之后：截断是有损操作，若提前做，两个
-        # 前 23 字相同但完整内容不同的长标题会被截成同一字符串，被步骤 5 的
+        # 最终截断结果相同但完整内容不同的长标题会被截成同一字符串，被步骤 5 的
         # 合并逻辑误判成"同名"而错误合并（见 `_normalize_title_length` 文档）。
         # 同时对 end_time 做倒挂防御（见 `_sanitize_end_time`）：segments 时间
         # 乱序/坏数据可能让某章 end_time < start_time（无论是单章内部反查

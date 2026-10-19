@@ -20,6 +20,9 @@ from . import (
 )
 from . import en
 
+_CHAPTER_TITLE_MAX_CHARS_ZH = 24
+_CHAPTER_TITLE_TRUNCATE_TO_ZH = 23
+
 
 def is_english() -> bool:
     """Return True when the global output language is English."""
@@ -124,4 +127,4 @@ def chapter_title_limits() -> tuple[int, int]:
     """Return ``(max_chars, truncate_to)`` for chapter titles in the current language."""
     if is_english():
         return en.CHAPTER_TITLE_MAX_CHARS, en.CHAPTER_TITLE_TRUNCATE_TO
-    return 24, 23
+    return _CHAPTER_TITLE_MAX_CHARS_ZH, _CHAPTER_TITLE_TRUNCATE_TO_ZH
