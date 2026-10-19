@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import jinja2
+from video_transcript_api.utils.rendering.i18n_jinja import install_i18n
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -198,6 +199,7 @@ def test_transcript_template_banner_only_for_interrupted():
         loader=jinja2.FileSystemLoader(str(templates_dir)),
         autoescape=True,
     )
+    install_i18n(env)
     ctx = {
         "title": "Sample",
         "author": "Author",

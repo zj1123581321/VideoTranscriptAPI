@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
+import { installI18n } from './install-i18n.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const templatePath = path.resolve(__dirname, '../templates/transcript.html');
@@ -88,6 +89,7 @@ function createFixture({
     callback();
     return 1;
   };
+  installI18n(dom.window);
   dom.window.eval(adapterSource());
   return {
     dom,

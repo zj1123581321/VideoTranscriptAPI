@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}{{ title or "视频转录" }} - 视频转录查看器{% endblock %}
-{% block meta_description %}{{ title or "视频转录" }} - {{ platform or "" }} 视频转录校对结果{% endblock %}
-{% block og_title %}{{ title or "视频转录" }} - 视频转录查看器{% endblock %}
-{% block og_description %}{% if share_card %}{{ share_card.points[0] }}{% else %}{{ title or "视频转录" }} 的转录校对结果{% endif %}{% endblock %}
+{% block title %}{{ title or t('web.viewer.transcript_title') }} - {{ t('web.viewer.default_title') }}{% endblock %}
+{% block meta_description %}{{ t('web.viewer.meta_result_desc', title=(title or t('web.viewer.transcript_title')), platform=(platform or '')) }}{% endblock %}
+{% block og_title %}{{ title or t('web.viewer.transcript_title') }} - {{ t('web.viewer.default_title') }}{% endblock %}
+{% block og_description %}{% if share_card %}{{ share_card.points[0] }}{% else %}{{ t('web.viewer.og_result_desc', title=(title or t('web.viewer.transcript_title'))) }}{% endif %}{% endblock %}
 {% block og_image_meta %}{% if share_card %}
     <meta name="twitter:card" content="summary_large_image">
     <meta property="og:image" content="{{ og_image_url }}">
@@ -15,19 +15,19 @@
 {% block site_nav %}
 {# Transcript page: fold owner actions into a gear menu; theme toggle stays outside. #}
 <details class="owner-menu" id="ownerMenu">
-    <summary class="owner-menu-summary" aria-label="所有者操作菜单">
+    <summary class="owner-menu-summary" aria-label="{{ t('web.transcript.auth_owner_menu') }}">
         <span class="owner-menu-icon" aria-hidden="true">⚙</span>
     </summary>
     <div class="owner-menu-panel">
         <nav class="site-nav">
-            <a href="/add_task_by_web" class="site-nav-link">📝 提交任务</a>
-            <a href="/static/history.html?v={{ asset_v }}" class="site-nav-link">📋 任务历史</a>
+            <a href="/add_task_by_web" class="site-nav-link">{{ t('web.nav.submit') }}</a>
+            <a href="/static/history.html?v={{ asset_v }}" class="site-nav-link">{{ t('web.nav.history') }}</a>
         </nav>
         {% if view_token %}
         <div class="owner-menu-divider" role="separator"></div>
         <div class="protected-action-auth-tools" aria-live="polite">
-            <button class="recalibrate-btn" id="protectedActionAuthChange" type="button">设置/更换访问令牌</button>
-            <button class="recalibrate-btn owner-menu-danger" id="protectedActionAuthClear" type="button">清除访问令牌</button>
+            <button class="recalibrate-btn" id="protectedActionAuthChange" type="button">{{ t('web.transcript.auth_change') }}</button>
+            <button class="recalibrate-btn owner-menu-danger" id="protectedActionAuthClear" type="button">{{ t('web.transcript.auth_clear') }}</button>
             <span id="protectedActionAuthStatus" class="dialog-status"></span>
         </div>
         {% endif %}
@@ -382,13 +382,13 @@
     {% if status == 'interrupted' %}
     <div class="section" id="interrupted-banner">
         <div class="status-interrupted" role="status">
-            <h2>任务被中断判定</h2>
-            <p>以下是中断前已生成的部分，不是一次正常完成。</p>
+            <h2>{{ t('web.transcript.interrupted_heading') }}</h2>
+            <p>{{ t('web.transcript.interrupted_body') }}</p>
             {% if interrupted_reason %}
-            <p class="interrupted-reason">中断原因：{{ interrupted_reason }}</p>
+            <p class="interrupted-reason">{{ t('web.transcript.interrupted_reason', reason=interrupted_reason) }}</p>
             {% endif %}
             {% if interrupted_at %}
-            <p class="interrupted-at">中断时间：{{ interrupted_at }}</p>
+            <p class="interrupted-at">{{ t('web.transcript.interrupted_at', time=interrupted_at) }}</p>
             {% endif %}
         </div>
     </div>
@@ -405,16 +405,16 @@
     {% if original_length > 0 %}
     <div class="stats-line">
         <span class="stats-icon">📊</span>
-        <span class="stats-label">转录统计</span>
+        <span class="stats-label">{{ t('web.transcript.stats_label') }}</span>
         <span class="stats-content">
-            原始转录 {{ "{:,}".format(original_length) }} 字
-            {% if calibrated_length > 0 %} | 校对文本 {{ "{:,}".format(calibrated_length) }} 字{% endif %}{% if summary_state == 'skipped_short' and summary_length > 0 %} | 原文过短未生成总结（以下为校对后全文）{% elif show_summary_stats %} | 内容总结 {{ "{:,}".format(summary_length) }} 字（占原文 {{ "%.1f"|format(summary_percentage) }}%）{% endif %}
-            {% if notes_length > 0 %} | 详细笔记 {{ "{:,}".format(notes_length) }} 字{% endif %}
+            {{ t('web.transcript.stats_original', n="{:,}".format(original_length)) }}
+            {% if calibrated_length > 0 %}{{ t('web.transcript.stats_calibrated', n="{:,}".format(calibrated_length)) }}{% endif %}{% if summary_state == 'skipped_short' and summary_length > 0 %}{{ t('web.transcript.stats_skipped_short') }}{% elif show_summary_stats %}{{ t('web.transcript.stats_summary', n="{:,}".format(summary_length), pct="%.1f"|format(summary_percentage)) }}{% endif %}
+            {% if notes_length > 0 %}{{ t('web.transcript.stats_notes', n="{:,}".format(notes_length)) }}{% endif %}
         </span>
     </div>
     {% if show_summary_stats and summary_percentage <= 20 and summary_state == 'generated' %}
     <div class="summary-condensation-hint" role="note">
-        内容高度浓缩，可能省略较多细节。{% if has_readable_notes %}建议阅读详细笔记或原文。{% else %}建议生成详细笔记或阅读原文。{% endif %}
+        {{ t('web.transcript.condensed') }}{% if has_readable_notes %}{{ t('web.transcript.condensed_suggest_notes') }}{% else %}{{ t('web.transcript.condensed_suggest_generate') }}{% endif %}
     </div>
     {% endif %}
     {% endif %}
@@ -428,18 +428,18 @@
     {% if stats.calibration_status == 'none' %}
     <div class="calibration-warning" style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:0.9em;color:#991b1b;display:flex;align-items:center;gap:8px;">
         <span>&#x26A0;&#xFE0F;</span>
-        <span><strong>校准失败</strong>：LLM 校对异常或多次降级，当前显示为未校准的原始语音识别文本，可能包含较多错别字。建议点击上方「重新校对」按钮。</span>
+        <span><strong>{{ t('web.transcript.cal_failed') }}</strong>{{ t('web.punct.colon') }}{{ t('web.transcript.cal_failed_body') }}</span>
     </div>
     {% elif stats.calibration_status == 'partial' %}
     <div class="calibration-warning" style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:0.9em;color:#92400e;display:flex;align-items:center;gap:8px;">
         <span>&#x26A0;&#xFE0F;</span>
-        <span><strong>校准部分异常</strong>：
+        <span><strong>{{ t('web.transcript.cal_partial') }}</strong>{{ t('web.punct.colon') }}
         {%- if cal and cal.total_chunks is defined %}
-            {{ cal.success_count }}/{{ cal.total_chunks }} 段校准成功，{{ cal.fallback_count }} 段降级，{{ cal.failed_count }} 段失败。
+            {{ t('web.transcript.cal_partial_chunks', success=cal.success_count, total=cal.total_chunks, fallback=cal.fallback_count, failed=cal.failed_count) }}
         {%- elif cal and cal.total_segments is defined %}
-            {{ cal.calibrated_segments }}/{{ cal.total_segments }} 段校准成功，{{ cal.fallback_segments }} 段降级为原文{% if cal.low_quality_segments %}，其中 {{ cal.low_quality_segments }} 段质量存疑{% endif %}。
+            {{ t('web.transcript.cal_partial_segments', success=cal.calibrated_segments, total=cal.total_segments, fallback=cal.fallback_segments) }}{% if cal.low_quality_segments %}{{ t('web.transcript.cal_partial_low_quality', n=cal.low_quality_segments) }}{% endif %}{{ t('web.punct.period') }}
         {%- endif %}
-        部分内容可能包含错别字。</span>
+        {{ t('web.transcript.cal_partial_typos') }}</span>
     </div>
     {% endif %}
     {% endif %}
@@ -449,19 +449,19 @@
     <details class="llm-config-details">
         <summary>
             <span class="config-icon">⚙️</span>
-            <span class="config-label">处理信息</span>
-            {% if llm_config.has_risk %}<span class="risk-badge">风险降级</span>{% endif %}
+            <span class="config-label">{{ t('web.transcript.config_label') }}</span>
+            {% if llm_config.has_risk %}<span class="risk-badge">{{ t('web.transcript.risk_badge') }}</span>{% endif %}
         </summary>
         <div class="llm-config-grid">
             {% if llm_config.calibrate_model %}
             <div class="config-item">
-                <span class="config-key">校对模型</span>
+                <span class="config-key">{{ t('web.transcript.model_calibrate') }}</span>
                 <span class="config-value">{{ llm_config.calibrate_model }}{% if llm_config.calibrate_reasoning_effort %} <span class="reasoning-tag">reasoning: {{ llm_config.calibrate_reasoning_effort }}</span>{% endif %}</span>
             </div>
             {% endif %}
             {% if llm_config.summary_model %}
             <div class="config-item">
-                <span class="config-key">总结模型</span>
+                <span class="config-key">{{ t('web.transcript.model_summary') }}</span>
                 <span class="config-value">{{ llm_config.summary_model }}{% if llm_config.summary_reasoning_effort %} <span class="reasoning-tag">reasoning: {{ llm_config.summary_reasoning_effort }}</span>{% endif %}</span>
             </div>
             {% endif %}
@@ -472,21 +472,21 @@
     <!-- 一键复制常用链接 -->
     {% if view_token %}
     <div class="quick-copy-bar">
-        <button class="quick-copy-btn" data-path="/view/{{ view_token }}?raw=calibrated" title="复制 Raw 校对文本 URL">
-            <span class="quick-copy-label">Raw 校对文本</span>
-            <span class="quick-copy-action">复制 URL</span>
-            <span class="quick-copy-desc">纯文本，粘贴到 ChatGPT / Claude 直接读取</span>
+        <button class="quick-copy-btn" data-path="/view/{{ view_token }}?raw=calibrated" title="{{ t('web.transcript.copy_raw_title') }}">
+            <span class="quick-copy-label">{{ t('web.transcript.copy_raw_label') }}</span>
+            <span class="quick-copy-action">{{ t('web.transcript.copy_url') }}</span>
+            <span class="quick-copy-desc">{{ t('web.transcript.copy_raw_desc') }}</span>
         </button>
-        <button class="quick-copy-btn" data-path="/view/{{ view_token }}?page=calibrated" title="复制 HTML 校对页面 URL">
-            <span class="quick-copy-label">HTML 校对页面</span>
-            <span class="quick-copy-action">复制 URL</span>
-            <span class="quick-copy-desc">带标题的 HTML，供 NotebookLM 等工具爬取</span>
+        <button class="quick-copy-btn" data-path="/view/{{ view_token }}?page=calibrated" title="{{ t('web.transcript.copy_html_title') }}">
+            <span class="quick-copy-label">{{ t('web.transcript.copy_html_label') }}</span>
+            <span class="quick-copy-action">{{ t('web.transcript.copy_url') }}</span>
+            <span class="quick-copy-desc">{{ t('web.transcript.copy_html_desc') }}</span>
         </button>
         {% if summary_html %}
-        <button class="quick-copy-btn share-summary-btn" type="button" title="复制分享摘要">
-            <span class="quick-copy-label">分享摘要</span>
-            <span class="quick-copy-action">复制摘要</span>
-            <span class="quick-copy-desc">标题、原始地址与总结首段</span>
+        <button class="quick-copy-btn share-summary-btn" type="button" title="{{ t('web.transcript.share_title') }}">
+            <span class="quick-copy-label">{{ t('web.transcript.share_label') }}</span>
+            <span class="quick-copy-action">{{ t('web.transcript.share_action') }}</span>
+            <span class="quick-copy-desc">{{ t('web.transcript.share_desc') }}</span>
         </button>
         {% endif %}
         {% if calibrated_html %}
@@ -496,8 +496,8 @@
                 data-template='{{ preset.template|tojson|forceescape }}'
                 title="{{ preset.label|forceescape }}">
             <span class="quick-copy-label">{{ preset.label|forceescape }}</span>
-            <span class="quick-copy-action">复制 Prompt</span>
-            <span class="quick-copy-desc">复制带校对稿 URL 的深度阅读指令</span>
+            <span class="quick-copy-action">{{ t('web.transcript.copy_prompt') }}</span>
+            <span class="quick-copy-desc">{{ t('web.transcript.copy_prompt_desc') }}</span>
         </button>
         {% endfor %}
         {% endif %}
@@ -509,49 +509,49 @@
     <details class="export-links-details">
         <summary class="export-links-summary">
             <span class="export-icon">📤</span>
-            <span class="export-summary-label">更多导出选项</span>
+            <span class="export-summary-label">{{ t('web.transcript.export_more') }}</span>
         </summary>
         <div class="export-links-content">
             <div class="export-group">
-                <span class="export-group-label">Raw 纯文本</span>
+                <span class="export-group-label">{{ t('web.transcript.export_raw_group') }}</span>
                 <span class="export-group-items">
-                    <a href="/view/{{ view_token }}?raw=calibrated" title="导出校对文本（纯文本）">校对文本</a>
+                    <a href="/view/{{ view_token }}?raw=calibrated" title="{{ t('web.transcript.export_raw_calibrated_title') }}">{{ t('web.transcript.export_calibrated') }}</a>
                     <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?raw=summary" title="导出内容总结（纯文本）">总结</a>
+                    <a href="/view/{{ view_token }}?raw=summary" title="{{ t('web.transcript.export_raw_summary_title') }}">{{ t('web.transcript.export_summary') }}</a>
                     {% if notes_html is defined and notes_html %}
                     <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?raw=notes" title="导出详细笔记（纯文本）">详细笔记</a>
+                    <a href="/view/{{ view_token }}?raw=notes" title="{{ t('web.transcript.export_raw_notes_title') }}">{{ t('web.transcript.export_notes') }}</a>
                     {% endif %}
                     <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?raw=transcript" title="导出原始转录（纯文本）">原始转录</a>
+                    <a href="/view/{{ view_token }}?raw=transcript" title="{{ t('web.transcript.export_raw_transcript_title') }}">{{ t('web.transcript.export_transcript') }}</a>
                 </span>
-                <span class="export-hint">下载 TXT / 粘贴 URL 到 ChatGPT、Claude 等 LLM 直接读取</span>
+                <span class="export-hint">{{ t('web.transcript.export_raw_hint') }}</span>
             </div>
             <div class="export-group">
-                <span class="export-group-label">HTML 页面</span>
+                <span class="export-group-label">{{ t('web.transcript.export_html_group') }}</span>
                 <span class="export-group-items">
-                    <a href="/view/{{ view_token }}?page=calibrated" title="导出校对文本（HTML 页面）">校对文本</a>
+                    <a href="/view/{{ view_token }}?page=calibrated" title="{{ t('web.transcript.export_page_calibrated_title') }}">{{ t('web.transcript.export_calibrated') }}</a>
                     <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?page=summary" title="导出内容总结（HTML 页面）">总结</a>
+                    <a href="/view/{{ view_token }}?page=summary" title="{{ t('web.transcript.export_page_summary_title') }}">{{ t('web.transcript.export_summary') }}</a>
                     {% if notes_html is defined and notes_html %}
                     <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?page=notes" title="导出详细笔记（HTML 页面）">详细笔记</a>
+                    <a href="/view/{{ view_token }}?page=notes" title="{{ t('web.transcript.export_page_notes_title') }}">{{ t('web.transcript.export_notes') }}</a>
                     {% endif %}
                     <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?page=transcript" title="导出原始转录（HTML 页面）">原始转录</a>
+                    <a href="/view/{{ view_token }}?page=transcript" title="{{ t('web.transcript.export_page_transcript_title') }}">{{ t('web.transcript.export_transcript') }}</a>
                 </span>
-                <span class="export-hint">带标题与 Meta 标签，适合 NotebookLM 等工具爬取</span>
+                <span class="export-hint">{{ t('web.transcript.export_html_hint') }}</span>
             </div>
         </div>
     </details>
     {% endif %}
 
-    <div class="section" id="summary-section">
+    <div class="section" id="summary-section" data-section="summary">
         <div class="section-header">
-            <h2>📝 内容总结</h2>
+            <h2>{{ t('web.transcript.section_summary') }}</h2>
             {% if summary_html %}
             <div class="section-header-actions">
-                <button class="recalibrate-btn copy-content-btn" type="button" data-copy-target="summary-content-block" title="复制内容总结正文">📋 复制内容</button>
+                <button class="recalibrate-btn copy-content-btn" type="button" data-copy-target="summary-content-block" title="{{ t('web.transcript.copy_summary_title') }}">{{ t('web.transcript.copy_content') }}</button>
             </div>
             {% endif %}
         </div>
@@ -559,30 +559,30 @@
             {% if summary_html %}
                 {{ summary_html|safe }}
             {% elif summary_state == 'failed' %}
-                <p style="color: #991b1b; font-style: italic;">⚠️ 总结生成失败。</p>
+                <p style="color: #991b1b; font-style: italic;">{{ t('web.transcript.summary_failed') }}</p>
                 {% if view_token %}
                 <span id="resummarizeArea">
-                    <button class="recalibrate-btn" id="resummarizeBtn" type="button" data-protected-action="resummarize">🔄 重新生成总结</button>
+                    <button class="recalibrate-btn" id="resummarizeBtn" type="button" data-protected-action="resummarize">{{ t('web.transcript.resummarize') }}</button>
                 </span>
                 {% endif %}
             {% elif summary_state == 'skipped_short' %}
-                <p style="color: var(--text-secondary); font-style: italic;">原文过短未生成总结（以下为校对后全文）。</p>
+                <p style="color: var(--text-secondary); font-style: italic;">{{ t('web.transcript.skipped_short') }}</p>
             {% elif summary_state == 'disabled' %}
-                <p style="color: var(--text-secondary); font-style: italic;">该任务未启用内容总结。</p>
+                <p style="color: var(--text-secondary); font-style: italic;">{{ t('web.transcript.summary_disabled') }}</p>
             {% else %}
                 {# summary_state == 'pending'，或旧数据缺失该字段时的兜底 #}
-                <p style="color: var(--text-secondary); font-style: italic;">总结处理中...</p>
+                <p style="color: var(--text-secondary); font-style: italic;">{{ t('web.transcript.summary_pending') }}</p>
             {% endif %}
         </div>
 
     </div>
 
     {% if notes_html is defined and notes_html %}
-    <details class="section notes-section" id="notes-section" open>
+    <details class="section notes-section" id="notes-section" data-section="notes" open>
         <summary class="section-header">
-            <h2>📚 详细笔记</h2>
+            <h2>{{ t('web.transcript.section_notes') }}</h2>
             <span class="section-header-actions">
-                <button class="recalibrate-btn copy-content-btn" type="button" data-copy-target="notes-content-block" title="复制详细笔记正文">📋 复制内容</button>
+                <button class="recalibrate-btn copy-content-btn" type="button" data-copy-target="notes-content-block" title="{{ t('web.transcript.copy_notes_title') }}">{{ t('web.transcript.copy_content') }}</button>
             </span>
         </summary>
         <div class="content" id="notes-content-block">
@@ -590,24 +590,24 @@
         </div>
     </details>
     {% elif stats and stats.get('chapters_status') == 'generated' %}
-    <div class="section" id="notes-generation-section">
+    <div class="section" id="notes-generation-section" data-section="notes">
         <div class="section-header">
-            <h2>📚 详细笔记</h2>
+            <h2>{{ t('web.transcript.section_notes') }}</h2>
             <span id="notesGenerationCount" role="status" aria-live="polite"></span>
             <span id="notesGenerationProgress" role="status" aria-live="polite"></span>
             {% if view_token %}
             <span id="generateNotesArea">
                 <button class="recalibrate-btn" id="generateNotesBtn" type="button" data-protected-action="generate_notes">
-                    {% if notes_state|default(None) == 'failed' %}🔄 详细笔记生成失败，可重试{% else %}🧭 生成详细笔记{% endif %}
+                    {% if notes_state|default(None) == 'failed' %}{{ t('web.transcript.notes_failed_retry') }}{% else %}{{ t('web.transcript.notes_generate') }}{% endif %}
                 </button>
             </span>
             {% endif %}
         </div>
         <div class="content" id="notes-generation-content">
             {% if notes_state|default(None) == 'failed' %}
-            <p style="color: #991b1b; font-style: italic;">详细笔记生成失败，可重新提交生成。</p>
+            <p style="color: #991b1b; font-style: italic;">{{ t('web.transcript.notes_failed') }}</p>
             {% else %}
-            <p style="color: var(--text-secondary); font-style: italic;">按现有章节逐章生成更完整的阅读笔记。</p>
+            <p style="color: var(--text-secondary); font-style: italic;">{{ t('web.transcript.notes_hint') }}</p>
             {% endif %}
         </div>
 
@@ -619,14 +619,14 @@
     {% endif %}
 
     {% if calibrated_html %}
-    <div class="section" id="calibrated-section">
+    <div class="section" id="calibrated-section" data-section="calibrated">
         <div class="section-header">
-            <h2>✨ 校对文本</h2>
+            <h2>{{ t('web.transcript.section_calibrated') }}</h2>
             <div class="section-header-actions">
-                <button class="recalibrate-btn copy-content-btn" type="button" data-copy-target="calibrated-content-block" title="复制校对文本正文">📋 复制内容</button>
+                <button class="recalibrate-btn copy-content-btn" type="button" data-copy-target="calibrated-content-block" title="{{ t('web.transcript.copy_calibrated_title') }}">{{ t('web.transcript.copy_content') }}</button>
                 {% if view_token %}
                 <span id="recalibrateArea">
-                    <button class="recalibrate-btn" id="recalibrateBtn" type="button" data-protected-action="recalibrate">🔄 重新校对</button>
+                    <button class="recalibrate-btn" id="recalibrateBtn" type="button" data-protected-action="recalibrate">{{ t('web.transcript.recalibrate') }}</button>
                 </span>
                 {% endif %}
             </div>
@@ -634,12 +634,12 @@
         {% if stats and stats.calibration_status == 'disabled' %}
         <div class="calibration-warning" style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:0.9em;color:#1e40af;display:flex;align-items:center;gap:8px;">
             <span>&#x2139;&#xFE0F;</span>
-            <span>本任务未启用 AI 校对，以下为原始转录{% if use_speaker_recognition %}（含说话人标注）{% endif %}。</span>
+            <span>{{ t('web.transcript.calibration_disabled') }}{% if use_speaker_recognition %}{{ t('web.transcript.calibration_disabled_speakers') }}{% endif %}{{ t('web.punct.period') }}</span>
         </div>
         {% endif %}
         {% if use_speaker_recognition %}
             <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">
-                说话人姓名为 AI 推断，可能有误；关键引用请核对原音频
+                {{ t('web.transcript.speaker_ai_hint') }}
             </p>
         {% endif %}
         <div class="content" id="calibrated-content-block">
@@ -654,13 +654,13 @@
             aria-labelledby="protectedActionAuthTitle"
             aria-describedby="protectedActionAuthDescription">
         <form id="protectedActionAuthForm">
-            <h3 id="protectedActionAuthTitle">输入访问令牌</h3>
-            <p id="protectedActionAuthDescription" class="dialog-desc">受保护操作需要统一的访问令牌；访问令牌只保存到浏览器统一鉴权存储。</p>
-            <label for="protectedActionTokenInput">访问令牌</label>
-            <input type="password" id="protectedActionTokenInput" placeholder="输入访问令牌" autocomplete="off">
+            <h3 id="protectedActionAuthTitle">{{ t('web.transcript.auth_title') }}</h3>
+            <p id="protectedActionAuthDescription" class="dialog-desc">{{ t('web.transcript.auth_desc') }}</p>
+            <label for="protectedActionTokenInput">{{ t('web.transcript.auth_label') }}</label>
+            <input type="password" id="protectedActionTokenInput" placeholder="{{ t('web.transcript.auth_placeholder') }}" autocomplete="off">
             <div class="dialog-actions">
-                <button type="button" class="dialog-btn dialog-btn-cancel" id="protectedActionAuthCancel">取消</button>
-                <button type="submit" class="dialog-btn dialog-btn-confirm" id="protectedActionAuthSubmit">确认</button>
+                <button type="button" class="dialog-btn dialog-btn-cancel" id="protectedActionAuthCancel">{{ t('web.transcript.auth_cancel') }}</button>
+                <button type="submit" class="dialog-btn dialog-btn-confirm" id="protectedActionAuthSubmit">{{ t('web.transcript.auth_confirm') }}</button>
             </div>
             <p id="protectedActionAuthDialogStatus" class="dialog-status dialog-status-error" role="alert"></p>
         </form>
@@ -691,9 +691,9 @@
     var activePrompt = null;
     var promptTrigger = null;
     var actionDefinitions = {
-        'recalibrate': { buttonId: 'recalibrateBtn', areaId: 'recalibrateArea', running: '校对提交中...' },
-        'resummarize': { buttonId: 'resummarizeBtn', areaId: 'resummarizeArea', running: '总结提交中...' },
-        'generate_notes': { buttonId: 'generateNotesBtn', areaId: 'generateNotesArea', running: '详细笔记提交中...' }
+        'recalibrate': { buttonId: 'recalibrateBtn', areaId: 'recalibrateArea', running: window.t('web.transcript.running_recalibrate') },
+        'resummarize': { buttonId: 'resummarizeBtn', areaId: 'resummarizeArea', running: window.t('web.transcript.running_resummarize') },
+        'generate_notes': { buttonId: 'generateNotesBtn', areaId: 'generateNotesArea', running: window.t('web.transcript.running_notes') }
     };
     var notesGenerationStartedAt = null;
     var notesGenerationState = null;
@@ -781,11 +781,11 @@
         if (!progressElement) return;
         var progress = readNotesProgress(body);
         var message = progress
-            ? '详细笔记生成中 ' + progress.done + '/' + progress.total + ' 章 · 已用 ' + formatNotesElapsed(notesGenerationStartedAt)
-            : '详细笔记生成中 · 已用 ' + formatNotesElapsed(notesGenerationStartedAt);
+            ? window.t('web.transcript.notes_progress', {done: progress.done, total: progress.total, elapsed: formatNotesElapsed(notesGenerationStartedAt)})
+            : window.t('web.transcript.notes_progress_no_total', {elapsed: formatNotesElapsed(notesGenerationStartedAt)});
         progressElement.textContent = message;
         if (progress && notesGenerationState) {
-            notesGenerationState.counter.textContent = '已生成 ' + progress.done + '/' + progress.total + ' 章';
+            notesGenerationState.counter.textContent = window.t('web.transcript.notes_counter', {done: progress.done, total: progress.total});
         }
     }
 
@@ -866,7 +866,7 @@
                 progress: elements.progress,
                 originalContentFragment: originalContentFragment,
             };
-            elements.counter.textContent = '已生成 0/' + chapters.length + ' 章';
+            elements.counter.textContent = window.t('web.transcript.notes_counter', {done: 0, total: chapters.length});
             elements.section.setAttribute('aria-busy', 'true');
             updateNotesGenerationProgress();
             return true;
@@ -1002,7 +1002,7 @@
                 if (!token) {
                     authInput.focus();
                     var dialogStatus = document.getElementById('protectedActionAuthDialogStatus');
-                    if (dialogStatus) dialogStatus.textContent = '请输入访问令牌';
+                    if (dialogStatus) dialogStatus.textContent = window.t('web.transcript.auth_need_token');
                     return;
                 }
                 finish(null, token);
@@ -1026,12 +1026,12 @@
     function formatActionError(error) {
         var message = error && error.message ? error.message : '';
         if (message === 'Protected action token prompt cancelled') return '';
-        if (message === 'HTTP 403') return '无权限，访问令牌不会更换。';
-        if (message === 'HTTP 404') return '未找到转录数据，访问令牌不会更换。';
-        if (message === 'HTTP 409') return '当前任务状态不允许操作，访问令牌不会更换。';
-        if (message === 'POST network failure') return '提交结果不确定，请勿自动重试';
-        if (message === 'HTTP 401 after one replay') return '访问令牌重试已停止，请使用“设置/更换访问令牌”后再操作。';
-        return message || '受保护操作失败，请稍后重试。';
+        if (message === 'HTTP 403') return window.t('web.transcript.err_403');
+        if (message === 'HTTP 404') return window.t('web.transcript.err_404');
+        if (message === 'HTTP 409') return window.t('web.transcript.err_409');
+        if (message === 'POST network failure') return window.t('web.transcript.err_network');
+        if (message === 'HTTP 401 after one replay') return window.t('web.transcript.err_401_replay');
+        return message || window.t('web.transcript.err_generic');
     }
 
     function scheduleSafeReload() {
@@ -1040,7 +1040,7 @@
         Object.keys(actionDefinitions).forEach(function(actionName) {
             var elements = actionElements(actionDefinitions[actionName]);
             if (elements.area && elements.button && elements.area.getAttribute('aria-busy') === 'true') {
-                setActionStatus(elements, '处理完成，正在刷新...', 'recalibrate-status recalibrate-done');
+                setActionStatus(elements, window.t('web.transcript.done_refreshing'), 'recalibrate-status recalibrate-done');
             }
         });
         window.setTimeout(function() { window.location.reload(); }, 500);
@@ -1053,7 +1053,7 @@
         });
         if (authChange) authChange.disabled = true;
         if (authClear) authClear.disabled = true;
-        setAuthStatus('安全错误：统一鉴权模块加载失败，已禁用受保护操作', true);
+        setAuthStatus(window.t('web.transcript.auth_module_failed'), true);
     }
 
     function initialiseProtectedActions() {
@@ -1110,17 +1110,17 @@
             if (!activePrompt) promptTrigger = authChange;
             promptForToken().then(function(token) {
                 if (authStorage.writeAuthToken(token) === false) throw new Error('Protected action token save failed');
-                setAuthStatus('访问令牌已更新。', false);
+                setAuthStatus(window.t('web.transcript.auth_updated'), false);
             }).catch(function(error) {
                 if (error && error.message !== 'Protected action token prompt cancelled') setAuthStatus(formatActionError(error), true);
             });
         });
         authClear.addEventListener('click', function() {
             if (!authStorage.clearAuthToken()) {
-                setAuthStatus('访问令牌清除失败，当前令牌仍保留。', true);
+                setAuthStatus(window.t('web.transcript.auth_clear_failed'), true);
                 return;
             }
-            setAuthStatus('访问令牌已清除。', false);
+            setAuthStatus(window.t('web.transcript.auth_cleared'), false);
         });
     }
 
@@ -1159,7 +1159,7 @@
 (function installSummaryShareButton() {
     'use strict';
 
-    var summaryShareTitle = {{ (title or "视频转录")|tojson }};
+    var summaryShareTitle = {{ (title or t('web.viewer.transcript_title'))|tojson }};
     var summaryShareOriginalUrl = {{ (url|default(""))|tojson }};
     var summaryShareViewToken = {{ view_token|tojson }};
 
@@ -1173,11 +1173,11 @@
     }
 
     function buildSummaryShareText() {
-        var shareLines = [summaryShareTitle || '视频转录'];
+        var shareLines = [summaryShareTitle || window.t('web.viewer.transcript_title')];
         if (summaryShareOriginalUrl) {
-            shareLines.push('原始地址：' + summaryShareOriginalUrl);
+            shareLines.push(window.t('web.transcript.share_original', {url: summaryShareOriginalUrl}));
         }
-        shareLines.push('', '总结和校对：' + window.location.origin + '/view/' + encodeURIComponent(summaryShareViewToken));
+        shareLines.push('', window.t('web.transcript.share_view', {url: window.location.origin + '/view/' + encodeURIComponent(summaryShareViewToken)}));
         var summaryParagraph = readSummaryFirstParagraph();
         if (summaryParagraph) shareLines.push('', summaryParagraph);
         return shareLines.join('\n');
@@ -1192,7 +1192,7 @@
             var originalText = actionEl ? actionEl.textContent : '';
             copyTextToClipboard(buildSummaryShareText(), function() {
                 shareButton.classList.add('copied');
-                if (actionEl) actionEl.textContent = '已复制';
+                if (actionEl) actionEl.textContent = window.t('web.copy.copied');
                 window.setTimeout(function() {
                     shareButton.classList.remove('copied');
                     if (actionEl) actionEl.textContent = originalText;

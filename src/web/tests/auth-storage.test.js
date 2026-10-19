@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { JSDOM } from 'jsdom';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { installI18n } from './install-i18n.js';
 
 const require = createRequire(import.meta.url);
 const authStoragePath = require.resolve('../static/js/auth-storage.js');
@@ -37,6 +38,7 @@ function installDom() {
   globalThis.sessionStorage = dom.window.sessionStorage;
   globalThis.StorageEvent = dom.window.StorageEvent;
   authStorage = loadAuthStorage();
+  installI18n(dom.window);
 }
 
 function uninstallDom() {
@@ -441,6 +443,7 @@ describe('homepage auth integration contract', () => {
     globalThis.StorageEvent = dom.window.StorageEvent;
     dom.window.HTMLElement.prototype.scrollIntoView = vi.fn();
     authStorage = loadAuthStorage();
+    installI18n(dom.window);
     authStorage.writeAuthToken('persisted-homepage-token', { remember: true });
     const app = loadApp();
     document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
@@ -468,6 +471,7 @@ describe('homepage auth integration contract', () => {
     globalThis.StorageEvent = dom.window.StorageEvent;
     dom.window.HTMLElement.prototype.scrollIntoView = vi.fn();
     authStorage = loadAuthStorage();
+    installI18n(dom.window);
     authStorage.writeAuthToken('event-token-a', { remember: true });
     loadApp();
     document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
@@ -525,8 +529,8 @@ describe('homepage auth integration contract', () => {
     expect(authIndex).toBeGreaterThanOrEqual(0);
     expect(authIndex).toBeLessThan(appIndex);
     expect(appSource).toContain('VideoTranscriptAuthStorage');
-    expect(appSource).toContain('安全错误：统一鉴权模块加载失败，已禁用受保护操作');
-    expect(appSource).toContain('禁用受保护操作');
+    expect(appSource).toContain('web.transcript.auth_module_failed');
+    expect(appSource).toContain('disableProtectedActions');
   });
 
   it('fails closed when the shared auth script is unavailable', async () => {
