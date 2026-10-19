@@ -10,7 +10,7 @@ const historySource = readFileSync(
 describe('history page unified auth contract', () => {
   it('loads shared auth before history inline code and removes remember dual-track UI', () => {
     const authIndex = historySource.indexOf('/static/js/auth-storage.js');
-    const inlineIndex = historySource.indexOf('<script>\n// ===================== 状态 =====================');
+    const inlineIndex = historySource.indexOf('// ===================== 状态 =====================');
     expect(authIndex).toBeGreaterThanOrEqual(0);
     expect(authIndex).toBeLessThan(inlineIndex);
     expect(historySource).not.toContain('rememberKey');
@@ -44,7 +44,7 @@ describe('history page unified auth contract', () => {
   });
 
   it('fails closed when shared auth is missing and retains HTML escaping', () => {
-    expect(historySource).toContain('安全错误：统一鉴权模块加载失败，已禁用历史私有操作');
+    expect(historySource).toContain('web.history.auth_module_failed');
     expect(historySource).toContain('historyAuthUnavailable');
     expect(historySource).toContain('esc(item.title)');
     expect(historySource).toContain('esc(item.view_token)');

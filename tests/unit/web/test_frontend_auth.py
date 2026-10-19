@@ -34,7 +34,7 @@ def test_homepage_syncs_shared_auth_storage_events_and_save_failures():
     source = APP_JS.read_text(encoding="utf-8")
     assert "window.addEventListener('storage', handleHomepageAuthStorageEvent)" in source
     assert "AUTH_STORAGE_KEYS" in source
-    assert "仍使用当前访问令牌" in source
+    assert "web.js.token_save_failed_hint" in source
     assert "e.target.value = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN) || ''" in source
 
 
@@ -47,8 +47,8 @@ def test_api_requests_use_shared_header_builder():
 def test_missing_auth_script_fails_closed_with_visible_safety_error():
     source = APP_JS.read_text(encoding="utf-8")
     assert "VideoTranscriptAuthStorage" in source
-    assert "安全错误：统一鉴权模块加载失败，已禁用受保护操作" in source
-    assert "禁用受保护操作" in source
+    assert "web.transcript.auth_module_failed" in source
+    assert "disableProtectedActions" in source
 
 
 def test_url_preview_keeps_escape_html_at_all_external_interpolation_points():
@@ -67,7 +67,8 @@ def test_auth_module_keeps_canonical_storage_contract_literal():
 
 def test_history_uses_shared_auth_without_remember_dual_track():
     source = HISTORY_HTML.read_text(encoding="utf-8")
-    assert source.index('/static/js/auth-storage.js') < source.index('<script>\n// ===================== 状态 =====================')
+    assert source.index('/static/js/i18n.js') < source.index('/static/js/auth-storage.js')
+    assert source.index('/static/js/auth-storage.js') < source.index('// ===================== 状态 =====================')
     assert "rememberKey" not in source
     assert "vta_api_key_persist" not in source
     assert "sessionStorage.setItem('vta_api_key'" not in source
@@ -80,7 +81,7 @@ def test_history_reset_and_401_contracts_are_explicit():
     assert "abortPrivateHistoryRequests" in source
     assert "const requestSnapshot = authStorage.snapshotAuthToken()" in source
     assert "authStorage.clearAuthTokenIfMatch(requestSnapshot)" in source
-    assert "安全错误：统一鉴权模块加载失败，已禁用历史私有操作" in source
+    assert "web.history.auth_module_failed" in source
     assert "esc(item.title)" in source
     assert "esc(item.view_token)" in source
 
@@ -89,9 +90,9 @@ def test_history_and_transcript_clear_failures_are_visible():
     history = HISTORY_HTML.read_text(encoding="utf-8")
     transcript = TRANSCRIPT_HTML.read_text(encoding="utf-8")
     assert "if (!storage.clearAuthToken())" in history
-    assert "鉴权清除失败" in history
+    assert "web.history.clear_failed" in history
     assert "if (!authStorage.clearAuthToken())" in transcript
-    assert "访问令牌清除失败，当前令牌仍保留。" in transcript
+    assert "web.transcript.auth_clear_failed" in transcript
 
 
 def test_base_loads_versioned_auth_before_page_extra_scripts():
@@ -186,8 +187,10 @@ def test_auth_user_facing_terms_use_access_token_across_pages():
     assert "请先设置API访问令牌" not in app
     assert "请先设置 API 令牌" not in app
     assert "API 访问令牌（Bearer Token）" not in app
-    for source in (index, history, transcript, app):
-        assert "访问令牌" in source
+    assert "访问令牌" in index
+    assert "访问令牌" in history.split("<script", 1)[0] or "web.history.token_label" in history
+    assert "web.transcript.auth_label" in transcript or "访问令牌" in transcript
+    assert "web.js.need_token" in app or "访问令牌" in app
 
 
 def test_transcript_removes_private_credential_and_handwritten_polling_paths():
@@ -208,7 +211,7 @@ def test_transcript_removes_private_credential_and_handwritten_polling_paths():
 
 def test_transcript_missing_shared_scripts_fails_closed_and_uses_safe_status_updates():
     source = TRANSCRIPT_HTML.read_text(encoding="utf-8")
-    assert "安全错误：统一鉴权模块加载失败，已禁用受保护操作" in source
+    assert "web.transcript.auth_module_failed" in source
     assert "button.disabled = true" in source
     assert "textContent" in source
     assert "createElement('span')" in source
