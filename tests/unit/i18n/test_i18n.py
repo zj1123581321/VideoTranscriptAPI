@@ -255,3 +255,70 @@ def test_check_config_rejects_unsupported_language(tmp_path):
     assert "Configuration OK" not in result.stdout
     combined = result.stdout + result.stderr
     assert "zh-CN, en" in combined, combined
+
+
+def _run_i18n_probe(tmp_path, config):
+    """Read ``t()``/``get_language()`` in a fresh subprocess reading ``config``.
+
+    Separate from ``--check-config`` on purpose: that preflight only proves the
+    value is accepted, not that a ``"en"`` config actually makes ``t()`` return
+    English. This is the consumer-side half of the contract, in its own process,
+    so a module-level cache left over from another test cannot mask it.
+    """
+    config_path = tmp_path / "probe-config.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(Path(os.environ.get("HOME", "/tmp"))),
+        "LANG": "C.UTF-8",
+        "VTAPI_CONFIG": str(config_path),
+        # main.py inserts <repo>/src itself; a bare -c probe has to do the same.
+        "PYTHONPATH": str(PROJECT_ROOT / "src"),
+    }
+    code = (
+        "import json\n"
+        "from video_transcript_api.i18n import get_language, t\n"
+        "print(json.dumps({\n"
+        "    'language': get_language(),\n"
+        "    'name': t('common.language_name'),\n"
+        "    'selected': t('common.language_selected', language='X'),\n"
+        "}))\n"
+    )
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=str(PROJECT_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_en_config_file_makes_t_return_english(tmp_path):
+    """The behavioural acceptance clause: ``"en"`` in the config file is enough.
+
+    Reads through ``VTAPI_CONFIG`` (the real env var main.py sets for
+    ``--start``) rather than mutating the cached dict, so this covers the
+    file -> load_config -> get_language -> catalog path end to end.
+    """
+    config = _minimal_config(tmp_path)
+    config["language"] = "en"
+
+    result = _run_i18n_probe(tmp_path, config)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+    assert payload["language"] == "en", payload
+    assert payload["name"] == "English", payload
+    assert payload["selected"] == "UI language: X", payload
+
+
+def test_missing_language_key_keeps_chinese_end_to_end(tmp_path):
+    """Default stays zh-CN through the real env-var path, not just the fixture."""
+    result = _run_i18n_probe(tmp_path, _minimal_config(tmp_path))
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+    assert payload["language"] == "zh-CN", payload
+    assert payload["name"] == "中文", payload
+    assert payload["selected"] == "界面语言：X", payload
