@@ -39,6 +39,14 @@ class _InterceptHandler(logging.Handler):
 def load_config(config_path=None, *, use_cache=True):
     """
     加载配置文件
+
+    顶层 ``language``（``zh-CN`` / ``en``，缺省 ``zh-CN``）在这里校验：本函数是
+    所有配置消费方唯一的读入口，校验放在这里等于「任何读取配置的路径都拿到已
+    校验的语言」，而不是等到第一次调用 ``t()`` 才在渲染路径上炸。非法取值直接
+    抛 ValueError（fail fast，不回落默认语言），消息里列出合法取值。
+
+    Raises:
+        ValueError: 顶层 ``language`` 存在但不是受支持的取值。
     """
     global _config_cache
 
@@ -57,6 +65,19 @@ def load_config(config_path=None, *, use_cache=True):
 
     with config_path.open("r", encoding="utf-8") as f:
         parsed = json.load(f)
+
+    # 缺省语言不写进 dict：``get_language()`` 自己按 DEFAULT_LANGUAGE 兜底，
+    # 这样「配置里没有 language」与「显式写了 zh-CN」在语义上仍然可区分，
+    # 也不会把默认值混进用户配置的其它消费方。
+    #
+    # 函数内 import（而非模块顶层）：i18n 包的 ``get_language()`` 反向 import
+    # 本模块的 load_config，顶层互相 import 会成环；而且 tests/conftest.py 会
+    # 把本模块作为独立模块预热进 sys.modules（不带父包），顶层相对 import 会
+    # 在那一刻拉进整个包初始化链，破坏预热的目的。
+    if "language" in parsed:
+        from ...i18n import validate_language
+
+        validate_language(parsed["language"])
 
     if use_cache:
         _config_cache = parsed
