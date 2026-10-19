@@ -42,6 +42,12 @@
 - 关键决策与已否决方案：保留原生 422 校验异常；不对未知文案作错误码推断，不引入默认/回退翻译。
 - 下一步唯一动作：提交并推送本段 A；提交后执行一次 AST 断言红验，随后进入 C 任务失败原因保真。
 
+### 里程碑 9：修订 C——task_status 失败原因保真
+- 当前阶段：implementing
+- 本段结论：删除 `localize_task_error`；`transcription.py`、`context.py` 与获批的 `llm_ops.py` 每处失败写入改用具体 `error.task_failure.*` key，异常值作为 `{error}` 原样保留。通过真实写入模拟和 `GET /api/task` 验证英文原因包含 `provider unavailable`，中文输出按 Base 原文锁定；全量与窄测通过。
+- 关键决策与已否决方案：通知的 `notify_error`、日志变量保留原字符串，只有 task_status.error_message 本地化；不把失败原因折叠为通用英文提示。
+- 下一步唯一动作：提交并推送 C；随后修订 B 的 Starlette 原始 detail 与 D 的 task status message 本地化。
+
 ### 里程碑 8：A 红验与 scope 批准续作
 - 当前阶段：implementing
 - 本段结论：A 已提交并推送；将 `tasks.py` 一处 `ApiError` 暂时改回 `HTTPException(detail=...)` 后，AST 测试按预期 AssertionError 转红并定位该行，随后只还原该行。修订 dispatch 已批准 seq 1 对 `llm_ops.py` 的 scope 扩展，可继续完成 C。

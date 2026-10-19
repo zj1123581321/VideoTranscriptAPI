@@ -10,12 +10,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from video_transcript_api.api.context import (
-    ApiError,
-    install_api_error_handlers,
-    localize_task_error,
-)
-from video_transcript_api.i18n import SUPPORTED_LANGUAGES
+from video_transcript_api.api.context import ApiError, install_api_error_handlers
+from video_transcript_api.i18n import SUPPORTED_LANGUAGES, t
 from video_transcript_api.utils.logging.logger import load_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -348,18 +344,86 @@ def test_create_app_registers_the_json_error_handler(language_config):
     assert app.exception_handlers[StarletteHTTPException].__name__ == "handle_http_error"
 
 
-def test_task_failure_reason_is_localized_before_terminal_write(language_config, monkeypatch):
+_TASK_FAILURE_BASE_DETAILS = [
+    ("local_upload_mapping_missing", "Local upload durable admission or media mapping is missing", {}),
+    ("transcription_failed", "转录任务失败: probe-error", {"failure_label": "", "error": "probe-error"}),
+    ("transcription_submit_failed", "提交任务失败: probe-error", {"error": "probe-error"}),
+    ("calibrating_status_write_failed", "任务状态写入异常: probe-error", {"error": "probe-error"}),
+    ("llm_handoff_queue_failed", "LLM任务加入队列失败: probe-error", {"error": "probe-error"}),
+    ("youtube_subtitles_empty", "[youtube-api] subtitles are empty", {}),
+    ("youtube_transcript_cache_save_failed", "[youtube-api] 转录结果保存到缓存失败", {}),
+    ("media_admission_failed", "probe-error", {"error": "probe-error"}),
+    ("youtube_api_failed", "YouTube API Server error: [404] probe-error", {"code": 404, "error": "probe-error"}),
+    ("youtube_api_unexpected", "YouTube API Server unexpected error: probe-error", {"error": "probe-error"}),
+    ("platform_subtitle_cache_save_failed", "保存平台字幕到缓存失败", {}),
+    ("download_info_unavailable", "无法获取下载信息: probe-url", {"url": "probe-url"}),
+    ("download_file_failed", "下载文件失败: probe-url", {"url": "probe-url"}),
+    ("upload_media_duration_unknown", "上传媒体时长未知，拒绝进入转录（media_duration_unknown）", {}),
+    ("upload_media_duration_limit", "上传媒体超过允许时长，拒绝进入转录（media_duration_limit）", {}),
+    ("funasr_transcript_cache_save_failed", "保存FunASR转录结果到缓存失败", {}),
+    ("capswriter_transcript_cache_save_failed", "保存CapsWriter转录结果到缓存失败", {}),
+    ("upload_temp_budget_exceeded", "上传转录产生的临时文件超过预算（upload_temp_budget）", {}),
+    ("worker_unhandled_error", "UPLOAD_PROCESSING_FAILED: 转录任务异常: probe-error", {"failure_label": "UPLOAD_PROCESSING_FAILED: ", "error": "probe-error"}),
+    ("upload_processing_prefix", "UPLOAD_PROCESSING_FAILED: probe reason", {"reason": "probe reason"}),
+    ("llm_submit_status_recovered", "LLM 任务提交失败，终态写入曾经失败，已由运行期维护补偿写入", {}),
+    ("llm_executor_submit_failed", "提交LLM任务失败: probe-error", {"error": "probe-error"}),
+    ("recalibration_failed", "重新校对失败: probe-error", {"error": "probe-error"}),
+    ("llm_processing_failed", "LLM处理失败: probe-error", {"error": "probe-error"}),
+]
+
+
+@pytest.mark.parametrize(("error_code", "expected_zh", "values"), _TASK_FAILURE_BASE_DETAILS)
+def test_task_failure_catalog_preserves_base_reason(language_config, error_code, expected_zh, values):
+    language_config("zh-CN")
+    chinese = t(f"error.task_failure.{error_code}", **values)
+    assert chinese == expected_zh
+
     language_config("en")
+    english = t(f"error.task_failure.{error_code}", **values)
+    assert isinstance(english, str)
+    assert all(str(value) in english for value in values.values() if value)
+    assert _CJK.search(english) is None
+
+
+def test_upload_failure_prefix_preserves_the_localized_reason(language_config):
+    language_config("zh-CN")
+    chinese_reason = t("error.task_failure.upload_media_duration_unknown")
+    chinese = t("error.task_failure.upload_processing_prefix", reason=chinese_reason)
+    assert chinese == (
+        "UPLOAD_PROCESSING_FAILED: 上传媒体时长未知，拒绝进入转录（media_duration_unknown）"
+    )
+
+    language_config("en")
+    english_reason = t("error.task_failure.upload_media_duration_unknown")
+    english = t("error.task_failure.upload_processing_prefix", reason=english_reason)
+    assert english == (
+        "UPLOAD_PROCESSING_FAILED: Upload media duration is unknown; refusing transcription "
+        "(media_duration_unknown)"
+    )
+    assert _CJK.search(english) is None
+
+
+@pytest.mark.parametrize(
+    ("language", "expected_error"),
+    [
+        ("zh-CN", "LLM任务加入队列失败: provider unavailable"),
+        ("en", "Failed to enqueue the LLM task: provider unavailable"),
+    ],
+)
+def test_specific_task_failure_survives_write_and_get_task(language_config, monkeypatch, language, expected_error):
+    language_config(language)
+    from video_transcript_api.api.routes import tasks
     from video_transcript_api.api.services import transcription
+    from video_transcript_api.api.services.transcription import verify_token
 
     cache_manager = MagicMock()
     cache_manager.update_task_status.return_value = True
     queue = MagicMock()
     queue.put.side_effect = RuntimeError("provider unavailable")
-    written = {}
+    terminal_write = {}
 
     def capture_terminal_write(*args, **kwargs):
-        written.update(kwargs)
+        terminal_write.update(kwargs)
         return True
 
     monkeypatch.setattr(transcription, "cache_manager", cache_manager)
@@ -377,26 +441,16 @@ def test_task_failure_reason_is_localized_before_terminal_write(language_config,
     )
 
     assert result["status"] == "failed"
-    assert written["error_message"] == "Task processing failed"
-    assert _CJK.search(written["error_message"]) is None
-
-
-def test_get_task_returns_the_language_localized_failure_reason(language_config, monkeypatch):
-    language_config("en")
-    from video_transcript_api.api.routes import tasks
-    from video_transcript_api.api.services.transcription import verify_token
-
-    source_reason = "LLM处理失败: provider timeout"
-    cache_manager = MagicMock()
+    assert terminal_write["error_message"] == expected_error
+    assert terminal_write["notify_error"] == "【LLM任务加入队列失败】provider unavailable"
     cache_manager.get_task_by_id.return_value = {
         "task_id": "task-1",
         "status": "failed",
-        "error_message": localize_task_error(source_reason),
+        "error_message": terminal_write["error_message"],
         "view_token": "view-1",
     }
-    audit_logger = MagicMock()
     monkeypatch.setattr(tasks, "cache_manager", cache_manager)
-    monkeypatch.setattr(tasks, "audit_logger", audit_logger)
+    monkeypatch.setattr(tasks, "audit_logger", MagicMock())
     monkeypatch.setattr(tasks, "logger", MagicMock())
 
     app = FastAPI()
@@ -409,10 +463,11 @@ def test_get_task_returns_the_language_localized_failure_reason(language_config,
     response = TestClient(app).get("/api/task/task-1")
 
     assert response.status_code == 200
-    assert response.json()["data"]["error"] == "Task processing failed"
-    assert _CJK.search(response.json()["data"]["error"]) is None
-
-
+    returned_error = response.json()["data"]["error"]
+    assert returned_error == expected_error
+    assert "provider unavailable" in returned_error
+    if language == "en":
+        assert _CJK.search("Failed to enqueue the LLM task: ") is None
 def test_error_catalog_keys_exist_for_each_language():
     catalogs = {
         language: json.loads(
@@ -446,11 +501,16 @@ def test_error_catalog_keys_exist_for_each_language():
     )
     error_keys.update(
         {
+            f"error.task_failure.{code}"
+            for code, _detail, _values in _TASK_FAILURE_BASE_DETAILS
+        }
+    )
+    error_keys.update(
+        {
             "error.api_error",
             "error.method_not_allowed",
             "error.resource_not_found",
             "error.task_failed",
-            "error.task_failure_reason",
             "error.terminal_write_note",
         }
     )

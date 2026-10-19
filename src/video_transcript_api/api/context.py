@@ -43,11 +43,6 @@ class ApiError(HTTPException):
         super().__init__(status_code=status_code, detail=detail)
 
 
-def localize_task_error(reason: str) -> str:
-    """Preserve Chinese task diagnostics and emit a language-safe English reason."""
-    return t("error.task_failure_reason", reason=reason)
-
-
 def install_api_error_handlers(app) -> None:
     """Add stable error codes to JSON API HTTP errors; leave validation 422 intact."""
 
@@ -1811,9 +1806,8 @@ def _retry_terminal_write_pending(cache_manager, task_ids: set[str], logger) -> 
             finalize_terminal_status_and_notify(
                 task_id,
                 TaskStatus.FAILED,
-                error_message=localize_task_error(
-                    "LLM 任务提交失败，终态写入曾经失败，已由运行期维护补偿写入"
-                ),
+                error_message=t("error.task_failure.llm_submit_status_recovered"),
+                notify_error="LLM 任务提交失败，终态写入曾经失败，已由运行期维护补偿写入",
                 cache_manager=cache_manager,
             )
         except Exception:
