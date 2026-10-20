@@ -69,3 +69,10 @@
 - 本段结论：逐行核对 `get_task_status` 后，将生成文档与 skill 说明细化为「失败文案文本，通常在失败写入时按服务端语言本地化；无存储文案时使用当前语言的通用失败文案」，并明确非 locale key、不稳定、不可分支；最终窄测 9 项通过。最终再次运行 `make test` 时，唯一失败为 `test_local_capacity_probe_exercises_real_http_payload_and_loopback_overlap`，错误为 `controlled_url_download_did_not_overlap_upload_receiving`。
 - 关键决策与已否决方案：不把 fallback 描述成持久化文案，因为 `tasks.py:547` 在缺失 `error_message` 时调用当前语言的 `error.task_failed`；全量探针红与进度里程碑 5 记录的同一失败标识一致，但派发基线不可用，继承红仍标为未能判定。
 - 下一步唯一动作：提交这次准确性补充，完成最终 scope、远端 tip 与工作区核验并写报告。
+
+### 里程碑 11：当前基线红绿复核
+
+- 当前阶段：completed
+- 本段结论：用基线 `55286932` 中的旧生成器临时覆盖并立即恢复后，表格断裂、关键字抽取、非字面量 fail-closed 三项新判据全部以 `AssertionError` 变红；恢复后的最终窄测再次通过。最终 `make test` 的单项失败及与里程碑 5 一致的探针错误已记录，未重试。
+- 关键决策与已否决方案：红验只替换生成器单文件，修复已在此前提交；原文件通过预存副本原样恢复并复跑窄测，不用 stash 或整仓回滚。
+- 下一步唯一动作：写完整报告并按最终提交、远端 tip、干净状态输出收尾。
