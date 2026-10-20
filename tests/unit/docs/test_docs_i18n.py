@@ -25,6 +25,19 @@ def generated_error_code_doc(*, root: Path = ROOT) -> str:
     return result.stdout
 
 
+def _generator_source_root(tmp_path: Path, source_text: str) -> Path:
+    source_root = tmp_path / "repo"
+    locale_source = ROOT / "src/video_transcript_api/i18n/locales"
+    locale_target = source_root / "src/video_transcript_api/i18n/locales"
+    locale_target.mkdir(parents=True)
+    for locale_name in ("zh-CN.json", "en.json"):
+        shutil.copyfile(locale_source / locale_name, locale_target / locale_name)
+    fake_source = source_root / "src/video_transcript_api/api/error_example.py"
+    fake_source.parent.mkdir(parents=True)
+    fake_source.write_text(source_text, encoding="utf-8")
+    return source_root
+
+
 def test_error_code_reference_matches_generator_output() -> None:
     current = ERROR_CODE_DOC.read_text(encoding="utf-8")
     expected = generated_error_code_doc()
@@ -71,16 +84,10 @@ def test_generated_tables_have_adjacent_rows_with_matching_column_counts() -> No
 
 
 def test_locale_pipes_and_newlines_are_escaped_in_generated_tables(tmp_path: Path) -> None:
-    source_root = tmp_path / "repo"
-    locale_source = ROOT / "src/video_transcript_api/i18n/locales"
+    source_root = _generator_source_root(
+        tmp_path, 'raise ApiError(400, "invalid_url")\n'
+    )
     locale_target = source_root / "src/video_transcript_api/i18n/locales"
-    locale_target.mkdir(parents=True)
-    for locale_name in ("zh-CN.json", "en.json"):
-        shutil.copyfile(locale_source / locale_name, locale_target / locale_name)
-
-    fake_source = source_root / "src/video_transcript_api/api/error_example.py"
-    fake_source.parent.mkdir(parents=True)
-    fake_source.write_text('raise ApiError(400, "invalid_url")\n', encoding="utf-8")
     en_path = locale_target / "en.json"
     en_catalog = json.loads(en_path.read_text(encoding="utf-8"))
     en_catalog["error.invalid_url"] = "before | after\ncontinued"
@@ -136,6 +143,36 @@ def test_both_readmes_link_language_config_and_error_code_reference() -> None:
             raise AssertionError(f"{readme_name} is missing a language config example.")
         if "docs/guides/api/error-codes.md" not in content:
             raise AssertionError(f"{readme_name} is missing the error-code reference link.")
+
+
+def test_generator_extracts_keyword_error_code_calls(tmp_path: Path) -> None:
+    source_root = _generator_source_root(
+        tmp_path, 'raise ApiError(status_code=400, error_code="invalid_url")\n'
+    )
+
+    generated = generated_error_code_doc(root=source_root)
+    if "| `invalid_url` | 400 |" not in generated:
+        raise AssertionError("Generator did not extract keyword-form ApiError arguments.")
+
+
+def test_generator_rejects_nonliteral_error_codes_with_source_location(tmp_path: Path) -> None:
+    source_root = _generator_source_root(
+        tmp_path, "raise ApiError(status_code=400, error_code=ERROR_CODE)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, str(GENERATOR), "--root", str(source_root)],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if result.returncode == 0:
+        raise AssertionError("Generator silently accepted a non-literal error_code.")
+    if "error_example.py:1" not in result.stderr:
+        raise AssertionError("Generator errors must identify the source file and line.")
+    if "error_code must be a string literal" not in result.stderr:
+        raise AssertionError("Generator error must explain the non-literal error_code.")
 
 
 def test_generator_output_changes_when_locale_text_changes(tmp_path: Path) -> None:

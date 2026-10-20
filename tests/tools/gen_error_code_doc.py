@@ -53,11 +53,27 @@ def extract_api_errors(source_root: Path) -> dict[str, set[str]]:
     for path in sorted(source_dir.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not _error_call(node) or len(node.args) < 2:
+            if not isinstance(node, ast.Call) or not _error_call(node):
                 continue
-            code = node.args[1]
-            if isinstance(code, ast.Constant) and isinstance(code.value, str):
-                codes.setdefault(code.value, set()).add(_status_label(node.args[0]))
+            keyword_arguments = {
+                keyword.arg: keyword.value
+                for keyword in node.keywords
+                if keyword.arg is not None
+            }
+            code = keyword_arguments.get("error_code")
+            if code is None and len(node.args) > 1:
+                code = node.args[1]
+            if not isinstance(code, ast.Constant) or not isinstance(code.value, str):
+                raise ValueError(
+                    f"{path}:{node.lineno}: ApiError error_code must be a string literal"
+                )
+
+            status = node.args[0] if node.args else keyword_arguments.get("status_code")
+            if status is None:
+                raise ValueError(
+                    f"{path}:{node.lineno}: ApiError status_code argument is required"
+                )
+            codes.setdefault(code.value, set()).add(_status_label(status))
     return codes
 
 

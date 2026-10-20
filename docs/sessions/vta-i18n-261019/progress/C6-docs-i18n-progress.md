@@ -48,3 +48,10 @@
 - 本段结论：错误码参考明确说明 `data.error` 是失败时写入的本地化文本，不是 locale key；其内容可变、不稳定且不能用于客户端分支，表中 key 仅作文案查找。skill API 参考同步澄清，新增生成文案断言并重生成文档，文档窄测通过。
 - 关键决策与已否决方案：不扩改 README 中只描述 task failure reasons 的概括句，因为没有把 key 误作响应值；只修正明确讨论 `data.error` 的表述。
 - 下一步唯一动作：令生成器对扫描到的非字面量 `ApiError.error_code` 调用 fail-closed 并覆盖关键字调用形态。
+
+### 里程碑 8：ApiError AST 抽取 fail-closed
+
+- 当前阶段：implementing
+- 本段结论：AST 抽取新增关键字参数支持，并对扫描到的缺失或非字符串字面量 `error_code` 抛出带文件名和行号的错误；fixture 测试锁定关键字调用抽取及变量调用报错。修复前两项测试均以 `AssertionError` 变红，修复后文档窄测与 Python 编译检查通过。
+- 关键决策与已否决方案：保留状态码表达式的既有展示方式，位置形式继续使用第二个参数，并兼容 `status_code` / `error_code` 关键字形式；不对无法确定错误码的调用静默忽略。
+- 下一步唯一动作：检查最终差异与范围，运行要求的窄测和 `make test` 并按顺序提交推送。
