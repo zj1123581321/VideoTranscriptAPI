@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from video_transcript_api.api.context import ApiError, install_api_error_handlers
@@ -197,32 +197,19 @@ def test_dynamic_api_details_match_base_and_have_stable_codes(
     assert error.error_code == expected_code
 
 
+@pytest.mark.parametrize("language", ["zh-CN", "en"])
 @pytest.mark.parametrize(
-    ("source_detail", "expected_code"),
-    [
-        (
-            "任务队列已满，请稍后重试；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛",
-            "transcription_queue_full",
-        ),
-        (
-            "LLM 队列已满，请稍后重试；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛",
-            "llm_queue_full",
-        ),
-    ],
+    "error_code", ["transcription_queue_full", "llm_queue_full"]
 )
-def test_queue_cleanup_warning_keeps_original_chinese_detail(
-    language_config, source_detail, expected_code
-):
-    language_config("zh-CN")
+def test_queue_cleanup_warning_uses_the_localized_catalog(language_config, language, error_code):
+    language_config(language)
+    note = t("error.terminal_write_note")
+    expected_detail = t(f"error.{error_code}", note=note)
 
-    error = ApiError(
-        status_code=503,
-        error_code=expected_code,
-        note="；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛",
-    )
+    error = ApiError(status_code=503, error_code=error_code, note=note)
 
-    assert error.detail == source_detail
-    assert error.error_code == expected_code
+    assert error.detail == expected_detail, "queue cleanup warning must match the selected locale"
+    assert error.error_code == error_code
 
 
 @pytest.mark.parametrize(("source_detail", "expected_code"), _STATIC_BASE_DETAILS + _DYNAMIC_BASE_DETAILS)
@@ -296,6 +283,44 @@ def test_framework_http_errors_preserve_starlette_detail(language_config):
         "detail": "Method Not Allowed",
         "error_code": "method_not_allowed",
     }
+
+
+def test_task_route_preserves_plain_http_exception_status(language_config, monkeypatch):
+    language_config("en")
+    from video_transcript_api.api.routes import tasks
+    from video_transcript_api.api.services.transcription import verify_token
+
+    cache_manager = MagicMock()
+    cache_manager.get_task_by_id.side_effect = HTTPException(418, detail="teapot")
+    monkeypatch.setattr(tasks, "cache_manager", cache_manager)
+    app = FastAPI()
+    install_api_error_handlers(app)
+    app.include_router(tasks.router)
+    app.dependency_overrides[verify_token] = lambda: {"user_id": "test-user", "api_key": "test-key"}
+
+    response = TestClient(app).get("/api/task/probe")
+
+    assert response.status_code == 418
+    assert response.json() == {"detail": "teapot", "error_code": "api_error"}
+
+
+def test_audit_route_preserves_plain_http_exception_status(language_config, monkeypatch):
+    language_config("en")
+    from video_transcript_api.api.routes import audit
+    from video_transcript_api.api.services.transcription import verify_token
+
+    audit_logger = MagicMock()
+    audit_logger.get_recent_calls.side_effect = HTTPException(418, detail="teapot")
+    monkeypatch.setattr(audit, "audit_logger", audit_logger)
+    app = FastAPI()
+    install_api_error_handlers(app)
+    app.include_router(audit.router)
+    app.dependency_overrides[verify_token] = lambda: {"user_id": "test-user", "api_key": "test-key"}
+
+    response = TestClient(app).get("/api/audit/calls")
+
+    assert response.status_code == 418
+    assert response.json() == {"detail": "teapot", "error_code": "api_error"}
 
 
 def test_error_handler_serializes_error_code_and_preserves_fastapi_422(language_config):

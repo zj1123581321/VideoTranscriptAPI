@@ -9,7 +9,7 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..context import (
     ApiError,
@@ -232,7 +232,7 @@ async def get_audit_calls(
             message="获取调用记录成功",
             data={"calls": recent_calls, "user_id": user_id, "limit": limit},
         )
-    except ApiError:
+    except HTTPException:
         raise
     except Exception as exc:
         logger.exception("获取审计调用记录异常: {}", exc)
