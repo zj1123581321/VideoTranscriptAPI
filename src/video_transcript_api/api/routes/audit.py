@@ -9,7 +9,7 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException as FastAPIHTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
 from ..context import (
     ApiError,
@@ -118,10 +118,7 @@ def _normalize_history_status(status: Optional[str]) -> str:
     """Limit history filters to statuses represented by terminal snapshots."""
     effective_status = status or "success"
     if effective_status not in {"success", "failed", "all"}:
-        raise FastAPIHTTPException(
-            status_code=422,
-            detail="status must be one of: success, failed, all",
-        )
+        raise ApiError(422, "invalid_history_status")
     return effective_status
 
 
@@ -235,7 +232,7 @@ async def get_audit_calls(
             message="获取调用记录成功",
             data={"calls": recent_calls, "user_id": user_id, "limit": limit},
         )
-    except FastAPIHTTPException:
+    except ApiError:
         raise
     except Exception as exc:
         logger.exception("获取审计调用记录异常: {}", exc)

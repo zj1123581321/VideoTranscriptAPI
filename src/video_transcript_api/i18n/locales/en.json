@@ -15,6 +15,7 @@
   "error.authorization_token_missing": "The authorization token is missing",
   "error.caller_identity_missing": "The caller identity could not be determined",
   "error.invalid_history_source": "Source must be upload or url",
+  "error.invalid_history_status": "status must be one of: success, failed, all",
   "error.invalid_url": "The video URL is required",
   "error.llm_queue_full": "The task processing capacity has been reached. Please try again later.{note}",
   "error.notes_already_exists": "Detailed notes already exist",

@@ -5,7 +5,7 @@ import os
 import queue
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
 from ..context import (
     ApiError,
@@ -438,7 +438,7 @@ async def transcribe_video(
                     logger.info(f"已发送任务创建通知: {task_id}，使用URL: {display_url}")
                 except Exception as exc:
                     logger.exception("发送任务创建通知失败: {}, 错误: {}", task_id, exc)
-            except HTTPException:
+            except ApiError:
                 # 上面 QueueFull 分支显式抛出的 503 是最终答案，不能被下面
                 # 这条兜底的 except Exception 重新包装成 500（HTTPException 本身
                 # 也是 Exception 的子类，不加这条会被无条件吞掉——M2a 的一部分）。
@@ -484,7 +484,7 @@ async def transcribe_video(
                 message="任务已提交",
                 data={"task_id": task_id, "view_token": view_token},
             )
-        except HTTPException:
+        except ApiError:
             raise
         except Exception as exc:
             processing_time_ms = int(
@@ -582,7 +582,7 @@ async def get_task_status(
         )
 
         return TranscribeResponse(code=code, message=message, data=data)
-    except HTTPException:
+    except ApiError:
         raise
     except Exception as exc:
         processing_time_ms = int(
@@ -772,7 +772,7 @@ async def recalibrate(
                     user_id,
                 ))
             logger.info(f"重新校对任务创建成功: {task_id}, view_token: {view_token}")
-        except HTTPException:
+        except ApiError:
             raise
         except Exception as e:
             logger.error(f"创建重新校对任务失败: {e}")
@@ -1076,7 +1076,7 @@ async def resummarize(
                     user_id,
                 ))
             logger.info(f"重新生成总结任务创建成功: {task_id}, view_token: {view_token}")
-        except HTTPException:
+        except ApiError:
             raise
         except Exception as e:
             logger.error(f"创建重新生成总结任务失败: {e}")
@@ -1404,7 +1404,7 @@ async def generate_notes(
                 logger.warning(f"详细笔记已在准入期间生成，拒绝重复生成: {view_token}")
                 raise ApiError(400, "notes_already_exists")
             logger.info(f"详细笔记任务创建成功: {task_id}, view_token: {view_token}")
-        except HTTPException:
+        except ApiError:
             raise
         except Exception as exc:
             logger.error(f"创建详细笔记任务失败: {exc}")

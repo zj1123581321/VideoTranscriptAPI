@@ -15,6 +15,7 @@
   "error.authorization_token_missing": "未提供授权令牌",
   "error.caller_identity_missing": "无法确定调用方身份",
   "error.invalid_history_source": "source 仅支持 upload 或 url",
+  "error.invalid_history_status": "status must be one of: success, failed, all",
   "error.invalid_url": "视频URL不能为空",
   "error.llm_queue_full": "LLM 队列已满，请稍后重试{note}",
   "error.notes_already_exists": "详细笔记已存在，无需重复生成",

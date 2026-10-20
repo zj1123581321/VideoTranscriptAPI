@@ -83,3 +83,9 @@
 - 本段结论：`tasks.py` 的 10 个 `_fail_task_after_creation()` 调用均改为按具体 `error.task_failure.*` key 写入；测试以 Base 中文字面值锁定目录文本，并以 AST 检查所有调用点均使用对应目录 key。
 - 关键决策与已否决方案：异常内容仍通过 `{error}` 原样插入；不在 `GET /api/task` 读取时二次翻译，避免覆盖写入时已确定的语言。
 - 下一步唯一动作：修复审计路由手工 422 的稳定错误码，并加严 AST 导入扫描。
+
+### 里程碑 14：审计手工 422 错误码
+- 当前阶段：implementing
+- 本段结论：`_normalize_history_status()` 改为抛带 `invalid_history_status` 的 ApiError，两份 locale 都逐字保留 Base 文案；AST 判据现同时拒绝 HTTPException 调用和从 FastAPI/Starlette 导入（含别名）。
+- 关键决策与已否决方案：自动请求校验 422 仍使用 FastAPI 默认形状；仅应用手工过滤错误附加 error_code。
+- 下一步唯一动作：用真实 CacheManager outbox 验证即时通知与重试的失败原因一致。

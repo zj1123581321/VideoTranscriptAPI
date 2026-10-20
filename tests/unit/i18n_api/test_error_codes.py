@@ -67,6 +67,7 @@ _STATIC_BASE_DETAILS = [
     ("无权访问全局总结比例统计", "summary_ratio_permission_denied"),
     ("无法确定调用方身份", "caller_identity_missing"),
     ("source 仅支持 upload 或 url", "invalid_history_source"),
+    ("status must be one of: success, failed, all", "invalid_history_status"),
     ("上传历史查询失败", "upload_history_unavailable"),
     ("服务暂时不可用，请稍后重试", "service_unavailable"),
     ("任务不存在或分享已关闭", "task_not_found_or_share_closed"),
@@ -131,10 +132,14 @@ def test_json_api_sources_do_not_call_http_exception():
     route_files.append(
         PROJECT_ROOT / "src" / "video_transcript_api" / "api" / "services" / "transcription.py"
     )
+    offending_imports = []
     offending_calls = []
     for path in route_files:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module in {"fastapi", "starlette"}:
+                if any(alias.name == "HTTPException" for alias in node.names):
+                    offending_imports.append(f"{path}:{node.lineno}")
             if not isinstance(node, ast.Call):
                 continue
             function = node.func
@@ -144,6 +149,7 @@ def test_json_api_sources_do_not_call_http_exception():
             ):
                 offending_calls.append(f"{path}:{node.lineno}")
 
+    assert not offending_imports, f"Replace HTTPException imports with ApiError: {offending_imports}"
     assert not offending_calls, f"Replace HTTPException calls with ApiError: {offending_calls}"
 
 
@@ -500,6 +506,27 @@ def test_task_route_failure_writes_use_localized_catalog_keys():
         observed_codes.add(key.removeprefix("error.task_failure."))
 
     assert observed_codes == expected_codes
+
+
+@pytest.mark.parametrize("language", ["zh-CN", "en"])
+def test_manual_history_status_422_has_error_code(language_config, monkeypatch, language):
+    language_config(language)
+    from video_transcript_api.api.routes import audit
+    from video_transcript_api.api.services.transcription import verify_token
+
+    monkeypatch.setattr(audit, "audit_logger", MagicMock())
+    app = FastAPI()
+    install_api_error_handlers(app)
+    app.include_router(audit.router)
+    app.dependency_overrides[verify_token] = lambda: {"user_id": "test-user", "api_key": "test-key"}
+
+    response = TestClient(app).get("/api/audit/history?source=upload&status=bogus")
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "status must be one of: success, failed, all",
+        "error_code": "invalid_history_status",
+    }
 
 
 def test_upload_failure_prefix_preserves_the_localized_reason(language_config):
