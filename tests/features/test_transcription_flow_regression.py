@@ -1870,6 +1870,7 @@ class TestFailTaskAndNotifyCasConsistency:
         result = self._run(monkeypatch, patch_runtime, cache_manager, router)
 
         assert result["status"] == "failed"
+        assert result["message"] == cache_manager.tasks["task_dl_fail"]["error_message"]
         assert router.statuses.count("【任务失败】") == 1
 
 
@@ -2034,4 +2035,5 @@ class TestOuterExceptHandlerCasConsistency:
         result = self._run(monkeypatch, patch_runtime, cache_manager, router)
 
         assert result["status"] == "failed"
+        assert result["message"] == cache_manager.tasks["task_outer_exc"]["error_message"]
         assert router.statuses.count("【任务失败】") == 1
