@@ -13,3 +13,10 @@
 - 本段结论：窄测 `uv run --frozen pytest -q tests/unit/docs` 通过；在隔离临时仓复制同一生产源码和测试，仅修改英文 locale 的一条错误文案而保留旧生成文档，执行生成文档一致性测试得到预期 `AssertionError`，确认测试能抓住 locale 漂移。
 - 关键决策与已否决方案：红验只改隔离临时仓中的 locale，不改本仓 locale 文件；生成文档逐字对比是有效判据，差异具体落在 `error.invalid_url` 的文案。
 - 下一步唯一动作：运行 `make test`，完成生产代码位置对照与最终 scope / 提交核查。
+
+### 里程碑 3：验收与推送
+
+- 当前阶段：completed
+- 本段结论：`make test` 与文档窄测通过；scope 检查覆盖的 10 个文件全部匹配卡面，分支提交已推送并通过 `git ls-remote` 确认远端 tip 与本地一致。新增 Python 文件通过 `py_compile`。
+- 关键决策与已否决方案：仓库没有配置或依赖静态类型检查工具；因此执行当前可用的 Python 编译检查，不额外引入工具链或依赖。
+- 下一步唯一动作：将完整报告写入 `$DELEGATE_REPORT_PATH` 并按收尾流程交接。
