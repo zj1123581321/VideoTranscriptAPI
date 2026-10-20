@@ -336,9 +336,19 @@ def test_error_handler_serializes_error_code_and_preserves_fastapi_422(language_
     async def validated(value: int):
         return {"value": value}
 
+    @app.get("/api/explicit-422")
+    async def explicit_422():
+        raise HTTPException(status_code=422, detail="explicit rejection")
+
+    @app.get("/api/no-content")
+    async def no_content():
+        raise HTTPException(status_code=204, detail="discarded response body")
+
     client = TestClient(app)
     error_response = client.get("/api/rejected")
     validation_response = client.get("/api/validated?value=invalid")
+    explicit_422_response = client.get("/api/explicit-422")
+    no_content_response = client.get("/api/no-content")
 
     assert error_response.status_code == 401
     assert error_response.json() == {
@@ -347,6 +357,14 @@ def test_error_handler_serializes_error_code_and_preserves_fastapi_422(language_
     }
     assert validation_response.status_code == 422
     assert set(validation_response.json()) == {"detail"}
+    assert explicit_422_response.status_code == 422
+    assert explicit_422_response.json() == {
+        "detail": "explicit rejection",
+        "error_code": "api_error",
+    }
+    assert no_content_response.status_code == 204
+    assert no_content_response.content == b""
+    assert "content-type" not in no_content_response.headers
 
 
 @pytest.mark.parametrize(
