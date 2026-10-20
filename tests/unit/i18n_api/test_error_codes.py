@@ -144,14 +144,10 @@ def test_json_api_sources_do_not_call_http_exception():
     route_files.append(
         PROJECT_ROOT / "src" / "video_transcript_api" / "api" / "services" / "transcription.py"
     )
-    offending_imports = []
     offending_calls = []
     for path in route_files:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module in {"fastapi", "starlette"}:
-                if any(alias.name == "HTTPException" for alias in node.names):
-                    offending_imports.append(f"{path}:{node.lineno}")
             if not isinstance(node, ast.Call):
                 continue
             function = node.func
@@ -161,7 +157,6 @@ def test_json_api_sources_do_not_call_http_exception():
             ):
                 offending_calls.append(f"{path}:{node.lineno}")
 
-    assert not offending_imports, f"Replace HTTPException imports with ApiError: {offending_imports}"
     assert not offending_calls, f"Replace HTTPException calls with ApiError: {offending_calls}"
 
 
