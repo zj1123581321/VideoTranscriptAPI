@@ -1807,7 +1807,6 @@ def _retry_terminal_write_pending(cache_manager, task_ids: set[str], logger) -> 
                 task_id,
                 TaskStatus.FAILED,
                 error_message=t("error.task_failure.llm_submit_status_recovered"),
-                notify_error="LLM 任务提交失败，终态写入曾经失败，已由运行期维护补偿写入",
                 cache_manager=cache_manager,
             )
         except Exception:

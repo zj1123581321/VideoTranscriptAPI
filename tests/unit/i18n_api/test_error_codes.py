@@ -4,7 +4,7 @@ import ast
 import json
 import re
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -612,6 +612,120 @@ def test_specific_task_failure_survives_write_and_get_task(language_config, monk
     assert "provider unavailable" in returned_error
     if language == "en":
         assert _CJK.search("Failed to enqueue the LLM task: ") is None
+@pytest.mark.parametrize(
+    ("language", "expected_error"),
+    [
+        ("zh-CN", "提交LLM任务失败: provider unavailable"),
+        ("en", "Failed to submit the LLM task: provider unavailable"),
+    ],
+)
+def test_task_status_error_matches_inline_and_outbox_notification(
+    language_config, tmp_path, request, language, expected_error
+):
+    language_config(language)
+    from video_transcript_api.api.services.terminal_status import (
+        deliver_pending_terminal_notifications,
+        finalize_terminal_status_and_notify,
+    )
+    from video_transcript_api.cache.cache_manager import CacheManager
+    from video_transcript_api.utils.task_status import TaskStatus
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    request.addfinalizer(cache_manager.close)
+    task_id = cache_manager.create_task(url="https://example.com/probe")["task_id"]
+    assert cache_manager.update_task_status(task_id, TaskStatus.PROCESSING)
+    error_message = t(
+        "error.task_failure.llm_executor_submit_failed",
+        error="provider unavailable",
+    )
+    assert error_message == expected_error
+
+    router = MagicMock()
+    router.notify_task_status.side_effect = [{"wechat": False}, {"wechat": True}]
+    with patch(
+        "video_transcript_api.api.services.terminal_status._resolve_view_url",
+        return_value=None,
+    ):
+        assert finalize_terminal_status_and_notify(
+            task_id,
+            TaskStatus.FAILED,
+            error_message=error_message,
+            cache_manager=cache_manager,
+            router=router,
+        )
+        inline_error = router.notify_task_status.call_args_list[0].kwargs["error"]
+        with cache_manager._get_cursor() as cursor:
+            cursor.execute(
+                "SELECT error_message FROM task_terminal_notifications WHERE task_id = ?",
+                (task_id,),
+            )
+            persisted_error = cursor.fetchone()["error_message"]
+        assert deliver_pending_terminal_notifications(cache_manager, router=router) == 1
+
+    retry_error = router.notify_task_status.call_args_list[1].kwargs["error"]
+    retry_reason = retry_error.split("\n", 1)[0]
+    assert persisted_error == expected_error
+    assert inline_error == expected_error
+    assert retry_reason == expected_error
+    if language == "en":
+        assert inline_error == retry_reason
+        assert _CJK.search(inline_error) is None
+    else:
+        assert inline_error == retry_reason == "提交LLM任务失败: provider unavailable"
+
+
+def test_localized_task_status_failure_calls_do_not_override_notification_error():
+    production_files = {
+        "llm_ops.py": "llm_executor_submit_failed",
+        "context.py": "llm_submit_status_recovered",
+    }
+    services_dir = PROJECT_ROOT / "src" / "video_transcript_api" / "api" / "services"
+    for filename, error_code in production_files.items():
+        path = (
+            PROJECT_ROOT / "src" / "video_transcript_api" / "api" / filename
+            if filename == "context.py"
+            else services_dir / filename
+        )
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        matching_calls = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if not isinstance(node.func, ast.Name) or node.func.id != "finalize_terminal_status_and_notify":
+                continue
+            error_message = next(
+                (keyword.value for keyword in node.keywords if keyword.arg == "error_message"),
+                None,
+            )
+            error_keys = {
+                value.value
+                for value in ast.walk(error_message) if isinstance(value, ast.Constant)
+                and isinstance(value.value, str)
+            } if error_message is not None else set()
+            if f"error.task_failure.{error_code}" in error_keys:
+                assert "notify_error" not in {keyword.arg for keyword in node.keywords}
+                matching_calls.append(node)
+        assert len(matching_calls) == 1
+
+    transcription_path = services_dir / "transcription.py"
+    transcription_tree = ast.parse(
+        transcription_path.read_text(encoding="utf-8"), filename=str(transcription_path)
+    )
+    fail_task = next(
+        node for node in ast.walk(transcription_tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "_fail_task_and_notify"
+    )
+    matching_calls = [
+        node for node in ast.walk(fail_task)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "finalize_terminal_status_and_notify"
+    ]
+    assert len(matching_calls) == 1
+    assert "notify_error" not in {keyword.arg for keyword in matching_calls[0].keywords}
+
+
 def test_error_catalog_keys_exist_for_each_language():
     catalogs = {
         language: json.loads(

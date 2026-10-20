@@ -301,7 +301,6 @@ def process_llm_queue():
                             "error.task_failure.llm_executor_submit_failed",
                             error=str(exc),
                         ),
-                        notify_error=f"提交LLM任务失败: {exc}",
                         url=llm_task.get("display_url") or llm_task.get("url"),
                         title=llm_task.get("video_title"),
                         channel_name=llm_task.get("notification_channel"),

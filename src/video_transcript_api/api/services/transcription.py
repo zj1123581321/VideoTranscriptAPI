@@ -1200,7 +1200,6 @@ def process_transcription(
                     TaskStatus.FAILED,
                     download_url=download_url,
                     error_message=task_status_error,
-                    notify_error=error_msg,
                     url=display_url,
                     title=title,
                     author=author_name,

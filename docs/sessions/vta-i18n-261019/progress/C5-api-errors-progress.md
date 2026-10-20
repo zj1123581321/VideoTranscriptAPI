@@ -89,3 +89,9 @@
 - 本段结论：`_normalize_history_status()` 改为抛带 `invalid_history_status` 的 ApiError，两份 locale 都逐字保留 Base 文案；AST 判据现同时拒绝 HTTPException 调用和从 FastAPI/Starlette 导入（含别名）。
 - 关键决策与已否决方案：自动请求校验 422 仍使用 FastAPI 默认形状；仅应用手工过滤错误附加 error_code。
 - 下一步唯一动作：用真实 CacheManager outbox 验证即时通知与重试的失败原因一致。
+
+### 里程碑 15：通知与 task_status 原因一致
+- 当前阶段：implementing
+- 本段结论：删除仅为固定中文通知而新增的 `notify_error` 参数；真实 SQLite outbox 测试断言即时与重试通知都带同一 task_status 原因，英文及默认中文均锁定。
+- 关键决策与已否决方案：Base 已存在且通知文案本来不同的 `notify_error` 保留；不改通知层、outbox schema 或历史记录。
+- 下一步唯一动作：移除上传路由死 helper 并清理终态失败注释常量。
