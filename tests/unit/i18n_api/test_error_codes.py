@@ -124,6 +124,18 @@ _DYNAMIC_BASE_DETAILS = [
 ]
 
 
+def test_english_queue_errors_describe_distinct_capacity_limits(language_config):
+    language_config("en")
+
+    llm_queue_full = t("error.llm_queue_full", note="")
+    transcription_queue_full = t("error.transcription_queue_full", note="")
+    task_capacity_reached = t("error.task_capacity_reached")
+
+    assert llm_queue_full != transcription_queue_full
+    assert llm_queue_full != task_capacity_reached
+    assert transcription_queue_full != task_capacity_reached
+
+
 def test_json_api_sources_do_not_call_http_exception():
     route_files = [
         path for path in (PROJECT_ROOT / "src" / "video_transcript_api" / "api" / "routes").glob("*.py")
@@ -425,14 +437,14 @@ def test_create_app_registers_the_json_error_handler(language_config):
 
 
 _TASK_FAILURE_BASE_DETAILS = [
-    ("local_upload_mapping_missing", "Local upload durable admission or media mapping is missing", {}),
+    ("local_upload_mapping_missing", "本地上传的持久化准入记录或媒体映射缺失", {}),
     ("transcription_failed", "转录任务失败: probe-error", {"failure_label": "", "error": "probe-error"}),
     ("transcription_submit_failed", "提交任务失败: probe-error", {"error": "probe-error"}),
     ("calibrating_status_write_failed", "任务状态写入异常: probe-error", {"error": "probe-error"}),
     ("llm_handoff_queue_failed", "LLM任务加入队列失败: probe-error", {"error": "probe-error"}),
     ("youtube_subtitles_empty", "[youtube-api] subtitles are empty", {}),
     ("youtube_transcript_cache_save_failed", "[youtube-api] 转录结果保存到缓存失败", {}),
-    ("media_admission_failed", "probe-error", {"error": "probe-error"}),
+    ("media_admission_failed", "媒体准入失败：probe-error", {"error": "probe-error"}),
     ("youtube_api_failed", "YouTube API Server error: [404] probe-error", {"code": 404, "error": "probe-error"}),
     ("youtube_api_unexpected", "YouTube API Server unexpected error: probe-error", {"error": "probe-error"}),
     ("platform_subtitle_cache_save_failed", "保存平台字幕到缓存失败", {}),
@@ -527,6 +539,28 @@ def test_manual_history_status_422_has_error_code(language_config, monkeypatch, 
         "detail": "status must be one of: success, failed, all",
         "error_code": "invalid_history_status",
     }
+
+
+@pytest.mark.parametrize(
+    ("error_code", "values", "expected_zh"),
+    [
+        ("upload_metadata", {"detail": "invalid field"}, "上传元数据无效：invalid field"),
+        ("upload_idempotency", {"detail": "key conflict"}, "上传幂等请求无法受理：key conflict"),
+        (
+            "task_failure.media_admission_failed",
+            {"error": "audio track missing"},
+            "媒体准入失败：audio track missing",
+        ),
+    ],
+)
+def test_upload_failures_have_localized_prefixes(language_config, error_code, values, expected_zh):
+    language_config("zh-CN")
+    assert t(f"error.{error_code}", **values) == expected_zh
+
+    language_config("en")
+    english = t(f"error.{error_code}", **values)
+    assert all(value in english for value in values.values())
+    assert _CJK.search(english) is None
 
 
 def test_upload_failure_prefix_preserves_the_localized_reason(language_config):
