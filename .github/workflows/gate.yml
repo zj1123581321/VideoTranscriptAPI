@@ -1,31 +1,31 @@
-name: CI
+# Dropped into each repo as .github/workflows/gate.yml by scripts/onboard-repo.sh.
+name: gate
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
-    # 纯文档改动跳过门禁——不为 docs/markdown 烧 codex 订阅用量 + 影子 token。
-    # 混合(文档 + 代码)PR 仍会触发门禁(paths-ignore 只在「全部改动都命中」时跳过)。
-    #
-    # PRECONDITION: 任何分支保护规则都不能把本 workflow 的 `gate` job 设为
-    # REQUIRED status check。若未来给本仓加上该必需检查,必须先移除这条
-    # paths-ignore——否则纯文档 PR 永远不会产生该 check run,会永久卡在一个
-    # 不可能变绿的必需 context 上。
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
+
+# gate-v2.yml needs read access to prior review artifacts and write access for
+# PR-size and gate receipt comments. FEISHU_CI_WEBHOOK is forwarded below so
+# the existing failure-notification path remains unchanged.
 permissions:
   actions: read
   contents: read
   pull-requests: write
+
 jobs:
   gate:
     uses: zlxlabs/gate/.github/workflows/gate-v2.yml@v2
     with:
-      tier: personal
-      runner: self
+      tier: personal        # personal | internal | saas
+      runner: self          # self (self-hosted) | hosted (GitHub free minutes)
       has_ui: true
-      design_doc: ""
+      design_doc: ""        # e.g. docs/DESIGN.md
     secrets:
+      # Public repos use a repo SECRET; private repos may use the same-name
+      # repo VARIABLE fallback inside gate-v2.yml's notify job.
       FEISHU_CI_WEBHOOK: ${{ secrets.FEISHU_CI_WEBHOOK }}
-      # Pass through zlxlabs org-level SILO credentials for gate Silo migration.
+      # 配合 gate 仓 Silo 迁移：透传 zlxlabs org 级 Silo 凭据（gate-v2.yml 的 workflow_call.secrets 声明 required: false，不传则 S3 步骤报凭据未传入）。
+      # 使用边界说明：本模板面向 v2 前移后的 callee（post-Silo 已声明这两个 secret，required: false）；
+      # 若某仓的 callee 仍钉 pre-Silo 的 @v2，具名透传会被启动前校验拒掉，那种窗口内改用 secrets: inherit（先例：本仓 .github/workflows/gate.yml）。
       SILO_ACCESS_KEY: ${{ secrets.SILO_ACCESS_KEY }}
       SILO_SECRET_KEY: ${{ secrets.SILO_SECRET_KEY }}
