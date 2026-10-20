@@ -89,7 +89,7 @@ token 可能是 `config.jsonc` 中 `api.auth_token`（单用户），或 `config
 |------|--------------|------|
 | 202 | `queued` \| `processing` | 还在队列里或处理中 |
 | 200 | `success` | 完成，`data` 含结果字段 |
-| 500 | `failed` | 失败，`data.error` 含原因 |
+| 500 | `failed` | 失败，`data.error` 是失败时写入的本地化文本，不是 locale key；内容不稳定，不可用于分支 |
 | 404 | — | task_id 不存在 |
 
 **`status=success` 时的响应**

@@ -32,6 +32,17 @@ def test_error_code_reference_matches_generator_output() -> None:
         raise AssertionError("Generated API error-code reference is stale.")
 
 
+def test_task_failure_section_describes_data_error_as_unstable_text() -> None:
+    document = generated_error_code_doc()
+    expected_phrases = (
+        "`GET /api/task/{task_id}` 响应的 `data.error` 是任务失败时写入的本地化文本，不是 locale key；它可能随服务端语言和失败内容变化，因此不稳定、不可用于客户端分支。表中 key 仅供对照文案，不是 API 返回值。",
+        "In `GET /api/task/{task_id}`, `data.error` is the localized text stored when the task fails, not a locale key. It can vary with the server language and failure details, so it is unstable and must not be used for client branching. The keys in this table are for looking up the corresponding text only; they are not API response values.",
+    )
+    for phrase in expected_phrases:
+        if phrase not in document:
+            raise AssertionError("Task failure documentation must identify data.error as unstable text.")
+
+
 def _table_cells(line: str) -> list[str]:
     if not line.startswith("|") or not line.endswith("|"):
         raise AssertionError("Markdown table rows must start and end with a pipe.")
