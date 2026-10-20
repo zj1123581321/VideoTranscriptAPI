@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+import json
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[3]
+GENERATOR = ROOT / "tests/tools/gen_error_code_doc.py"
+ERROR_CODE_DOC = ROOT / "docs/guides/api/error-codes.md"
+
+
+def generated_error_code_doc(*, root: Path = ROOT) -> str:
+    result = subprocess.run(
+        [sys.executable, str(GENERATOR), "--root", str(root)],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return result.stdout
+
+
+def test_error_code_reference_matches_generator_output() -> None:
+    assert ERROR_CODE_DOC.read_text(encoding="utf-8") == generated_error_code_doc()
+
+
+def _readme_heading_counts(path: Path) -> tuple[int, int]:
+    level_two = 0
+    level_three = 0
+    in_fence = False
+    fence_marker = re.compile(r"^\s*(`{3,}|~{3,})")
+    heading = re.compile(r"^(##|###)\s+")
+    for line in path.read_text(encoding="utf-8").splitlines():
+        fence = fence_marker.match(line)
+        if fence:
+            marker = fence.group(1)
+            if not in_fence:
+                in_fence = True
+                fence_character = marker[0]
+            elif marker[0] == fence_character:
+                in_fence = False
+            continue
+        if in_fence:
+            continue
+        match = heading.match(line)
+        if match and match.group(1) == "##":
+            level_two += 1
+        elif match:
+            level_three += 1
+    return level_two, level_three
+
+
+def test_readme_heading_counts_match_outside_code_fences() -> None:
+    assert _readme_heading_counts(ROOT / "README.md") == _readme_heading_counts(
+        ROOT / "README.en.md"
+    )
+
+
+def test_both_readmes_link_language_config_and_error_code_reference() -> None:
+    for readme_name in ("README.md", "README.en.md"):
+        content = (ROOT / readme_name).read_text(encoding="utf-8")
+        assert '"language"' in content
+        assert "docs/guides/api/error-codes.md" in content
+
+
+def test_generator_output_changes_when_locale_text_changes(tmp_path: Path) -> None:
+    source_root = tmp_path / "repo"
+    locale_source = ROOT / "src/video_transcript_api/i18n/locales"
+    locale_target = source_root / "src/video_transcript_api/i18n/locales"
+    locale_target.mkdir(parents=True)
+    for locale_name in ("zh-CN.json", "en.json"):
+        shutil.copyfile(locale_source / locale_name, locale_target / locale_name)
+
+    fake_source = source_root / "src/video_transcript_api/api/error_example.py"
+    fake_source.parent.mkdir(parents=True)
+    fake_source.write_text(
+        'raise ApiError(400, "invalid_url")\n', encoding="utf-8"
+    )
+    en_path = locale_target / "en.json"
+    en_catalog = json.loads(en_path.read_text(encoding="utf-8"))
+    en_catalog["error.invalid_url"] += " (changed)"
+    en_path.write_text(
+        json.dumps(en_catalog, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    regenerated = generated_error_code_doc(root=source_root)
+    current_doc = ERROR_CODE_DOC.read_text(encoding="utf-8")
+    assert "(changed)" in regenerated
+    assert regenerated != current_doc

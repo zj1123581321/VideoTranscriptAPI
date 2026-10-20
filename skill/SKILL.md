@@ -80,6 +80,10 @@ metadata:
 
 **查看链接必须从脚本输出中原样复制，严禁自己拼接 URL。** 脚本输出的「查看链接」已经是正确的 `[url](url)` markdown 格式，直接复制发给用户即可。不要凭记忆重写域名或路径——LLM 重构 URL 极易拼错字母（如把 `zlxlabs` 写成 `zxlabs`），导致链接失效。
 
+## API 错误响应
+
+应用生成的 API 错误响应形如 `{"detail": "<localized string>", "error_code": "<snake_case>"}`。客户端应按稳定的 `error_code` 分支处理，`detail` 只用于展示，且会随服务端 `language` 配置变化；FastAPI 请求校验的 422 保持默认形状，不含 `error_code`。完整清单见 [`references/api.md`](references/api.md)。
+
 ## 环境变量
 
 skill 在调用时从环境读取，**不要**在对话里要求用户粘贴 token。

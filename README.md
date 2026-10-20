@@ -99,6 +99,47 @@ docker compose up -d --build
 
 ---
 
+## 最小配置
+
+复制 `config/config.example.jsonc` 为 `config/config.jsonc`，并至少调整以下配置。示例文件对每个字段都有中英双语注释，可作为其他配置项的完整参考。
+
+```jsonc
+{
+    // "zh-CN"（默认）或 "en"，控制 Web 界面与生成内容（总结、详细笔记、章节）的语言。
+    // 企业微信和飞书通知不随此设置切换。
+    "language": "zh-CN",
+
+    "api": {
+        "port": 8000,
+        "host": "0.0.0.0",
+        "auth_token": "your-auth-token-here"
+    },
+    "tikhub": {
+        "api_key": "your-tikhub-api-key-here"
+    },
+    "llm": {
+        "api_key": "your-llm-api-key-here",
+        "base_url": "https://your-api.com/v1"
+    },
+    "capswriter": {
+        "server_url": "ws://localhost:6016"
+    },
+    "funasr_spk_server": {
+        "server_url": "ws://localhost:8767"
+    }
+}
+```
+
+将 `language` 设为 `"en"` 可使用英文面向用户体验；合法值为 `"zh-CN"` 和 `"en"`，缺省为 `"zh-CN"`，其他值会导致启动失败。启动前可运行 `uv run python main.py --check-config --config config/config.jsonc` 验证配置。
+
+### 语言
+
+在配置文件顶层设置 `"language": "zh-CN"` 或 `"language": "en"`；缺省为 `"zh-CN"`，非法值会导致服务启动失败。该设置切换 Web 界面、总结/详细笔记/章节、API 错误响应的 `detail`、任务失败原因，以及任务状态响应的 `message`。
+
+该设置不会切换企业微信/飞书通知自身的固定文案，也不会翻译用户内容（如标题和转录正文）。失败原因中插入的异常原文保持原样；已存储的历史失败原因不会迁移或重新翻译。
+
+切换语言后，已有缓存中的旧语言产物仍照常显示；再次处理时，总结、详细笔记和章节会按新语言重新生成，校对稿不会因此重跑。
+
 ## 基本用法
 
 ### 提交转录任务
@@ -182,6 +223,12 @@ Service Worker 激活。若已安装的 PWA 仍显示旧页面，请在浏览器
 面板执行“更新/重新加载”后再重试；不要用清除站点数据代替刷新（那会同时删除本地
 访问令牌和其他页面偏好）。
 
+### API 错误响应
+
+应用生成的 API 错误响应形如 `{"detail": "<本地化字符串>", "error_code": "<snake_case>"}`。客户端应按稳定的 `error_code` 分支处理，并仅将 `detail` 用于展示；`detail` 会随服务端 `language` 设置变化。FastAPI 请求校验产生的 422 响应保持默认形状，不含 `error_code`。
+
+完整错误码、HTTP 状态及中英文文案见[API 错误码参考](docs/guides/api/error-codes.md)。
+
 ### API 端点一览
 
 | 端点 | 方法 | 说明 |
@@ -234,7 +281,8 @@ video-transcript-api/
 
 - **架构设计**：[系统架构与模块详解](docs/architecture.md)
 - **使用指南**：[多渠道通知（企微+飞书）](docs/guides/notification.md) · [多用户系统](docs/guides/multi_user_setup.md) · [MediaResolverAPI 集成（抖音/小红书/视频号/X）](docs/guides/media_resolver.md)
-- **API 指南**：[FunASR](docs/guides/api/funasr_spk_server_client_api.md) · [YouTube](docs/guides/api/youtube_client_guide.md) · [BBDown](docs/guides/api/bbdown_guide.md)
+- **API 指南**：[错误码参考](docs/guides/api/error-codes.md) · [FunASR](docs/guides/api/funasr_spk_server_client_api.md) · [YouTube](docs/guides/api/youtube_client_guide.md) · [BBDown](docs/guides/api/bbdown_guide.md)
+- **语言配置**：[语言切换与缓存行为](README.md#语言)
 - **开发文档**：[LLM 工程指南](docs/development/llm/engineering_guide.md) · [并发处理](docs/development/concurrency.md) · [日志系统](docs/development/logging.md)
 - **功能特性**：[处理深度开关（processing_options）](docs/features/processing_options.md) · [Raw/Page 导出](docs/features/raw_export.md) · [Download URL 与元数据覆盖](docs/features/source_url_and_metadata_override.md)
 

@@ -40,6 +40,7 @@ docs/
 
 ### API 指南
 
+- [API 错误码参考](guides/api/error-codes.md)：错误响应的中英文文案、HTTP 状态与 task failure reason keys；language 配置和缓存行为见[项目 README 的语言小节](../README.md#语言)
 - [API Quick Start](guides/api/quickstart.md)
   - 下游客户端接入指南：认证、提交任务、轮询状态、获取结果
   - 包含 curl 和 Python 完整示例
