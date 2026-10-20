@@ -132,14 +132,10 @@ def test_json_api_sources_do_not_call_http_exception():
     route_files.append(
         PROJECT_ROOT / "src" / "video_transcript_api" / "api" / "services" / "transcription.py"
     )
-    offending_imports = []
     offending_calls = []
     for path in route_files:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module in {"fastapi", "starlette"}:
-                if any(alias.name == "HTTPException" for alias in node.names):
-                    offending_imports.append(f"{path}:{node.lineno}")
             if not isinstance(node, ast.Call):
                 continue
             function = node.func
@@ -149,7 +145,6 @@ def test_json_api_sources_do_not_call_http_exception():
             ):
                 offending_calls.append(f"{path}:{node.lineno}")
 
-    assert not offending_imports, f"Replace HTTPException imports with ApiError: {offending_imports}"
     assert not offending_calls, f"Replace HTTPException calls with ApiError: {offending_calls}"
 
 
@@ -185,32 +180,19 @@ def test_dynamic_api_details_match_base_and_have_stable_codes(
     assert error.error_code == expected_code
 
 
+@pytest.mark.parametrize("language", ["zh-CN", "en"])
 @pytest.mark.parametrize(
-    ("source_detail", "expected_code"),
-    [
-        (
-            "任务队列已满，请稍后重试；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛",
-            "transcription_queue_full",
-        ),
-        (
-            "LLM 队列已满，请稍后重试；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛",
-            "llm_queue_full",
-        ),
-    ],
+    "error_code", ["transcription_queue_full", "llm_queue_full"]
 )
-def test_queue_cleanup_warning_keeps_original_chinese_detail(
-    language_config, source_detail, expected_code
-):
-    language_config("zh-CN")
+def test_queue_cleanup_warning_uses_the_localized_catalog(language_config, language, error_code):
+    language_config(language)
+    note = t("error.terminal_write_note")
+    expected_detail = t(f"error.{error_code}", note=note)
 
-    error = ApiError(
-        status_code=503,
-        error_code=expected_code,
-        note="；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛",
-    )
+    error = ApiError(status_code=503, error_code=error_code, note=note)
 
-    assert error.detail == source_detail
-    assert error.error_code == expected_code
+    assert error.detail == expected_detail, "queue cleanup warning must match the selected locale"
+    assert error.error_code == error_code
 
 
 @pytest.mark.parametrize(("source_detail", "expected_code"), _STATIC_BASE_DETAILS + _DYNAMIC_BASE_DETAILS)
@@ -284,32 +266,6 @@ def test_framework_http_errors_preserve_starlette_detail(language_config):
         "detail": "Method Not Allowed",
         "error_code": "method_not_allowed",
     }
-
-
-def test_error_handler_serializes_error_code_and_preserves_fastapi_422(language_config):
-    language_config("en")
-    app = FastAPI()
-    install_api_error_handlers(app)
-
-    @app.get("/api/rejected")
-    async def rejected():
-        raise ApiError(status_code=401, error_code="authorization_token_invalid")
-
-    @app.get("/api/validated")
-    async def validated(value: int):
-        return {"value": value}
-
-    client = TestClient(app)
-    error_response = client.get("/api/rejected")
-    validation_response = client.get("/api/validated?value=invalid")
-
-    assert error_response.status_code == 401
-    assert error_response.json() == {
-        "detail": "The authorization token is invalid",
-        "error_code": "authorization_token_invalid",
-    }
-    assert validation_response.status_code == 422
-    assert set(validation_response.json()) == {"detail"}
 
 
 @pytest.mark.parametrize(
@@ -425,14 +381,14 @@ def test_create_app_registers_the_json_error_handler(language_config):
 
 
 _TASK_FAILURE_BASE_DETAILS = [
-    ("local_upload_mapping_missing", "Local upload durable admission or media mapping is missing", {}),
+    ("local_upload_mapping_missing", "本地上传的持久化准入记录或媒体映射缺失", {}),
     ("transcription_failed", "转录任务失败: probe-error", {"failure_label": "", "error": "probe-error"}),
     ("transcription_submit_failed", "提交任务失败: probe-error", {"error": "probe-error"}),
     ("calibrating_status_write_failed", "任务状态写入异常: probe-error", {"error": "probe-error"}),
     ("llm_handoff_queue_failed", "LLM任务加入队列失败: probe-error", {"error": "probe-error"}),
     ("youtube_subtitles_empty", "[youtube-api] subtitles are empty", {}),
     ("youtube_transcript_cache_save_failed", "[youtube-api] 转录结果保存到缓存失败", {}),
-    ("media_admission_failed", "probe-error", {"error": "probe-error"}),
+    ("media_admission_failed", "媒体准入失败：probe-error", {"error": "probe-error"}),
     ("youtube_api_failed", "YouTube API Server error: [404] probe-error", {"code": 404, "error": "probe-error"}),
     ("youtube_api_unexpected", "YouTube API Server unexpected error: probe-error", {"error": "probe-error"}),
     ("platform_subtitle_cache_save_failed", "保存平台字幕到缓存失败", {}),

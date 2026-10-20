@@ -26,7 +26,7 @@ HTTP 状态来自生产代码中的 `ApiError(status, error_code)` 调用。`dyn
 | `invalid_history_source` | 400 | source 仅支持 upload 或 url | Source must be upload or url |
 | `invalid_history_status` | 422 | status must be one of: success, failed, all | status must be one of: success, failed, all |
 | `invalid_url` | 400 | 视频URL不能为空 | The video URL is required |
-| `llm_queue_full` | 503 | LLM 队列已满，请稍后重试{note} | The task processing capacity has been reached. Please try again later.{note} |
+| `llm_queue_full` | 503 | LLM 队列已满，请稍后重试{note} | The LLM queue is full. Please try again later.{note} |
 | `notes_already_exists` | 400 | 详细笔记已存在，无需重复生成 | Detailed notes already exist |
 | `notes_already_in_progress` | 409 | 详细笔记正在生成中，请等待当前任务完成 | Detailed notes are already being generated |
 | `notes_chapters_required` | 409 | 详细笔记依赖已生成的章节层，请先生成章节后再重试 | Generate chapters before requesting detailed notes |
@@ -61,7 +61,7 @@ HTTP 状态来自生产代码中的 `ApiError(status, error_code)` 调用。`dyn
 | `task_queue_failed` | 500 | 任务加入队列失败: {error}{note} | Failed to queue the task: {error}{note} |
 | `task_status_failed` | 500 | 获取任务状态失败: {error} | Failed to retrieve the task status: {error} |
 | `transcript_not_found` | 404 | 未找到对应的转录数据 | The corresponding transcript was not found |
-| `transcription_queue_full` | 503 | 任务队列已满，请稍后重试{note} | The task processing capacity has been reached. Please try again later.{note} |
+| `transcription_queue_full` | 503 | 任务队列已满，请稍后重试{note} | The task queue is full. Please try again later.{note} |
 | `transcription_submission_failed` | 500 | 提交转录任务失败: {error} | Failed to submit the transcription task: {error} |
 | `upload_acceptance_window_expired` | 410 | 上传幂等key已超过24小时受理截止时间 | The upload idempotency key expired after the 24-hour acceptance window |
 | `upload_content_type` | 415 | Content-Type必须为application/octet-stream | Content-Type must be application/octet-stream |
@@ -70,10 +70,10 @@ HTTP 状态来自生产代码中的 `ApiError(status, error_code)` 调用。`dyn
 | `upload_disabled_or_not_ready` | 503 | 上传接收未启用或worker尚未就绪 | Upload receiving is disabled or the worker is not ready |
 | `upload_history_failed` | 500 | 上传历史查询失败: {error} | Failed to retrieve upload history: {error} |
 | `upload_history_unavailable` | 503 | 上传历史查询失败 | Upload history is temporarily unavailable |
-| `upload_idempotency` | dynamic: status | {detail} | The upload idempotency request could not be accepted: {detail} |
+| `upload_idempotency` | dynamic: status | 上传幂等请求无法受理：{detail} | The upload idempotency request could not be accepted: {detail} |
 | `upload_idempotency_key` | 400 | 缺少Idempotency-Key | The Idempotency-Key header is required |
 | `upload_inflight_limit` | 503 | 转录队列已满 | The transcription queue is full |
-| `upload_metadata` | 400 | {detail} | Invalid upload metadata: {detail} |
+| `upload_metadata` | 400 | 上传元数据无效：{detail} | Invalid upload metadata: {detail} |
 | `upload_not_accepted` | 409 | 尚未正式受理的上传没有分享可关闭 | Sharing cannot be disabled before the upload is accepted |
 | `upload_observed_size_limit` | 413 | 实际上传字节超过声明或允许大小 | The received upload exceeds the declared or allowed size |
 | `upload_queue_full` | 503 | 转录队列已满，上传未正式受理 | The transcription queue is full; the upload was not accepted |
@@ -102,8 +102,8 @@ In `GET /api/task/{task_id}`, `data.error` contains failure text (normally local
 | `error.task_failure.llm_handoff_queue_failed` | LLM任务加入队列失败: {error} | Failed to enqueue the LLM task: {error} |
 | `error.task_failure.llm_processing_failed` | LLM处理失败: {error} | LLM processing failed: {error} |
 | `error.task_failure.llm_submit_status_recovered` | LLM 任务提交失败，终态写入曾经失败，已由运行期维护补偿写入 | An earlier LLM task submission failure was recovered by runtime maintenance |
-| `error.task_failure.local_upload_mapping_missing` | Local upload durable admission or media mapping is missing | Local upload durable admission or media mapping is missing |
-| `error.task_failure.media_admission_failed` | {error} | {error} |
+| `error.task_failure.local_upload_mapping_missing` | 本地上传的持久化准入记录或媒体映射缺失 | Local upload durable admission or media mapping is missing |
+| `error.task_failure.media_admission_failed` | 媒体准入失败：{error} | Media admission failed: {error} |
 | `error.task_failure.notes_queue_failed` | 详细笔记任务加入队列失败: {error} | Detailed notes task queue submission failed: {error} |
 | `error.task_failure.notes_queue_rejected` | LLM 队列已满，详细笔记提交被拒绝 | The LLM queue is full; detailed notes submission was rejected |
 | `error.task_failure.platform_subtitle_cache_save_failed` | 保存平台字幕到缓存失败 | Failed to save the platform subtitles to cache |

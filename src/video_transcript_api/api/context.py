@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, TypeVar
 
 from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -48,16 +48,15 @@ def install_api_error_handlers(app) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     async def handle_http_error(request: Request, exc: StarletteHTTPException):
+        if exc.status_code < 200 or exc.status_code in (204, 304):
+            return Response(status_code=exc.status_code, headers=exc.headers)
         if isinstance(exc, ApiError):
             return JSONResponse(
                 {"detail": exc.detail, "error_code": exc.error_code},
                 status_code=exc.status_code,
                 headers=exc.headers,
             )
-        if (
-            request.url.path == "/api"
-            or request.url.path.startswith("/api/")
-        ) and exc.status_code != 422:
+        if request.url.path == "/api" or request.url.path.startswith("/api/"):
             error_code = {
                 404: "resource_not_found",
                 405: "method_not_allowed",

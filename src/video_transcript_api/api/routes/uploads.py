@@ -146,6 +146,11 @@ def _uploads_enabled(request: Request, config: dict, limits: dict) -> bool:
     )
 
 
+def _reject(reason: str, error: ApiError) -> ApiError:
+    logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", reason, error.status_code)
+    return error
+
+
 def _receipt(upload: dict) -> dict:
     accepted = upload.get("state") == "accepted" and not upload.get("error_code")
     state = upload.get("state") if not upload.get("error_code") else "failed"
@@ -224,24 +229,19 @@ async def receive_upload(
     config = get_config()
     limits = _upload_limits(config)
     if not _uploads_enabled(request, config, limits):
-        logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", "disabled_or_not_ready", 503)
-        raise ApiError(503, "upload_disabled_or_not_ready")
+        raise _reject("disabled_or_not_ready", ApiError(503, "upload_disabled_or_not_ready"))
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     if content_type != "application/octet-stream":
-        logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", "content_type", 415)
-        raise ApiError(415, "upload_content_type")
+        raise _reject("content_type", ApiError(415, "upload_content_type"))
     if not idempotency_key:
-        logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", "idempotency_key", 400)
-        raise ApiError(400, "upload_idempotency_key")
+        raise _reject("idempotency_key", ApiError(400, "upload_idempotency_key"))
     try:
         metadata = decode_upload_metadata(metadata_header or "")
     except ValueError as exc:
-        logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", "metadata", 400)
-        raise ApiError(400, "upload_metadata", detail=str(exc)) from exc
+        raise _reject("metadata", ApiError(400, "upload_metadata", detail=str(exc))) from exc
     max_bytes = int(limits["max_file_mib"] * _MIB)
     if metadata["byte_size"] > max_bytes:
-        logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", "declared_size", 413)
-        raise ApiError(413, "upload_declared_size")
+        raise _reject("declared_size", ApiError(413, "upload_declared_size"))
 
     cache_manager = get_cache_manager()
     try:
@@ -254,8 +254,7 @@ async def receive_upload(
     except ValueError as exc:
         message = str(exc)
         status = 409 if "metadata conflicts" in message else 410 if "24-hour" in message else 400
-        logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", "idempotency", status)
-        raise ApiError(status, "upload_idempotency", detail=message) from exc
+        raise _reject("idempotency", ApiError(status, "upload_idempotency", detail=message)) from exc
     if not intent["_created"]:
         return JSONResponse(_receipt(cache_manager.get_local_upload_by_id(intent["upload_id"])), status_code=200)
 
@@ -275,14 +274,12 @@ async def receive_upload(
     if not receiver_acquired:
         failure_code = "receiver_limit"
         cache_manager.set_local_upload_error(upload_id, failure_code)
-        logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", failure_code, 503)
-        raise ApiError(503, "upload_receiver_limit")
+        raise _reject(failure_code, ApiError(503, "upload_receiver_limit"))
     try:
         if not inflight.try_register("transcription", task_id):
             failure_code = "inflight_limit"
             cache_manager.set_local_upload_error(upload_id, failure_code)
-            logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", failure_code, 503)
-            raise ApiError(503, "upload_inflight_limit")
+            raise _reject(failure_code, ApiError(503, "upload_inflight_limit"))
         inflight_acquired = True
         declared_bytes = metadata["byte_size"]
         # Reserve only the durable source before receiving it. ASR output and
@@ -295,8 +292,7 @@ async def receive_upload(
         ):
             failure_code = "upload_temp_budget"
             cache_manager.set_local_upload_error(upload_id, failure_code)
-            logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", failure_code, 507)
-            raise ApiError(507, "upload_temp_budget")
+            raise _reject(failure_code, ApiError(507, "upload_temp_budget"))
         budget_acquired = True
         task_dir = temp_manager.create_task_dir(task_id)
         temp_manager.mark_active(task_id)
@@ -306,8 +302,7 @@ async def receive_upload(
         if task_queue.full():
             failure_code = "queue_full"
             cache_manager.set_local_upload_error(upload_id, failure_code)
-            logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", failure_code, 503)
-            raise ApiError(503, "upload_queue_full")
+            raise _reject(failure_code, ApiError(503, "upload_queue_full"))
         body_started = True
         observed_bytes = 0
         digest = hashlib.sha256()
@@ -320,15 +315,13 @@ async def receive_upload(
                 next_size = observed_bytes + len(chunk)
                 if next_size > max_bytes or next_size > declared_bytes:
                     failure_code = "observed_size_limit"
-                    logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", failure_code, 413)
-                    raise ApiError(413, "upload_observed_size_limit")
+                    raise _reject(failure_code, ApiError(413, "upload_observed_size_limit"))
                 digest.update(chunk)
                 media_file.write(chunk)
                 observed_bytes = next_size
             if observed_bytes != declared_bytes:
                 failure_code = "declared_size_mismatch"
-                logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", failure_code, 400)
-                raise ApiError(400, "upload_declared_size_mismatch")
+                raise _reject(failure_code, ApiError(400, "upload_declared_size_mismatch"))
             media_file.flush()
             os.fsync(media_file.fileno())
 
@@ -337,14 +330,12 @@ async def receive_upload(
         ):
             failure_code = "upload_temp_budget"
             cache_manager.set_local_upload_error(upload_id, failure_code)
-            logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", failure_code, 507)
-            raise ApiError(507, "upload_temp_budget")
+            raise _reject(failure_code, ApiError(507, "upload_temp_budget"))
 
         if task_queue.full():
             failure_code = "queue_full"
             cache_manager.set_local_upload_error(upload_id, failure_code)
-            logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", failure_code, 503)
-            raise ApiError(503, "upload_queue_full")
+            raise _reject(failure_code, ApiError(503, "upload_queue_full"))
         media_id = f"upload_{uuid.uuid4().hex}"
         try:
             accepted = cache_manager.accept_local_upload(
@@ -364,8 +355,7 @@ async def receive_upload(
         except ValueError as exc:
             if "24-hour" in str(exc):
                 failure_code = "acceptance_window_expired"
-                logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", failure_code, 410)
-                raise ApiError(410, "upload_acceptance_window_expired") from exc
+                raise _reject(failure_code, ApiError(410, "upload_acceptance_window_expired")) from exc
             raise
         transferred = True
         from ...utils.notifications.task_formatter import local_upload_notification_fields
@@ -399,8 +389,7 @@ async def receive_upload(
         return JSONResponse(_receipt(accepted_record), status_code=202)
     except asyncio.QueueFull as exc:
         failure_code = "queue_full"
-        logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", failure_code, 503)
-        raise ApiError(503, "upload_queue_full") from exc
+        raise _reject(failure_code, ApiError(503, "upload_queue_full")) from exc
     finally:
         # Ownership: a failure in one cleanup step must not short-circuit the
         # remaining releases. The receiver slot is released by the outermost
@@ -413,7 +402,7 @@ async def receive_upload(
                     failure_code = failure_code or "receive_incomplete"
                     cache_manager.set_local_upload_error(upload_id, failure_code)
                     logger.warning(
-                        "UPLOAD_INTAKE_REJECTED reason={} status=failed", failure_code
+                        "UPLOAD_INTAKE_FAILED reason={} status=failed", failure_code
                     )
             finally:
                 if not transferred:

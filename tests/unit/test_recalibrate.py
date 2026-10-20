@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from video_transcript_api.i18n import t
 
 
 class TestCheckPermission:
@@ -1929,7 +1930,7 @@ class TestRecalibrateQueueBackpressure:
             resp = client.post("/api/recalibrate", json={"view_token": view_token})
 
             assert resp.status_code == 503
-            assert "；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛" in resp.json()["detail"], (
+            assert t("error.terminal_write_note") in resp.json()["detail"], (
                 "the double failure must be surfaced through the response "
                 "body, not just logged server-side"
             )
@@ -2109,7 +2110,7 @@ class TestRecalibrateNonCapacityExceptions:
             resp = client.post("/api/recalibrate", json={"view_token": view_token})
 
             assert resp.status_code == 500
-            assert "；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛" in resp.json()["detail"], (
+            assert t("error.terminal_write_note") in resp.json()["detail"], (
                 "the double failure must be surfaced through the response "
                 "body, not just logged server-side"
             )
@@ -2190,7 +2191,7 @@ class TestRecalibrateNonCapacityExceptions:
             resp = client.post("/api/recalibrate", json={"view_token": view_token})
 
             assert resp.status_code == 500
-            assert "；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛" in resp.json()["detail"], (
+            assert t("error.terminal_write_note") in resp.json()["detail"], (
                 "the double failure must be surfaced through the response "
                 "body, not just logged server-side"
             )

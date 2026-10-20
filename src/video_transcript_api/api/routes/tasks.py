@@ -5,7 +5,7 @@ import os
 import queue
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from ..context import (
     ApiError,
@@ -144,6 +144,10 @@ def _read_fresh_notes_status(cache_dir: str | None) -> dict | None:
     if not isinstance(status_payload, dict):
         raise ValueError("llm_status.json must contain a JSON object")
     return status_payload
+
+
+def _terminal_write_note(terminal_write_ok: bool) -> str:
+    return "" if terminal_write_ok else t("error.terminal_write_note")
 
 
 def _fail_task_after_creation(task_id: str, error_message: str, *, log_context: str) -> bool:
@@ -385,7 +389,7 @@ async def transcribe_video(
                     raise ApiError(
                         503,
                         "transcription_queue_full",
-                        note=t("error.terminal_write_note") if not terminal_write_ok else "",
+                        note=_terminal_write_note(terminal_write_ok),
                     )
 
                 try:
@@ -427,7 +431,7 @@ async def transcribe_video(
                     logger.info(f"已发送任务创建通知: {task_id}，使用URL: {display_url}")
                 except Exception as exc:
                     logger.exception("发送任务创建通知失败: {}, 错误: {}", task_id, exc)
-            except ApiError:
+            except HTTPException:
                 # 上面 QueueFull 分支显式抛出的 503 是最终答案，不能被下面
                 # 这条兜底的 except Exception 重新包装成 500（HTTPException 本身
                 # 也是 Exception 的子类，不加这条会被无条件吞掉——M2a 的一部分）。
@@ -448,7 +452,7 @@ async def transcribe_video(
                     500,
                     "task_queue_failed",
                     error=str(queue_exc),
-                    note=t("error.terminal_write_note") if not terminal_write_ok else "",
+                    note=_terminal_write_note(terminal_write_ok),
                 )
 
             processing_time_ms = int(
@@ -472,7 +476,7 @@ async def transcribe_video(
                 message="任务已提交",
                 data={"task_id": task_id, "view_token": view_token},
             )
-        except ApiError:
+        except HTTPException:
             raise
         except Exception as exc:
             processing_time_ms = int(
@@ -570,7 +574,7 @@ async def get_task_status(
         )
 
         return TranscribeResponse(code=code, message=message, data=data)
-    except ApiError:
+    except HTTPException:
         raise
     except Exception as exc:
         processing_time_ms = int(
@@ -760,7 +764,7 @@ async def recalibrate(
                     user_id,
                 ))
             logger.info(f"重新校对任务创建成功: {task_id}, view_token: {view_token}")
-        except ApiError:
+        except HTTPException:
             raise
         except Exception as e:
             logger.error(f"创建重新校对任务失败: {e}")
@@ -801,7 +805,7 @@ async def recalibrate(
                 500,
                 "recalibration_formatting_failed",
                 error=str(format_exc),
-                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+                note=_terminal_write_note(terminal_write_ok),
             )
 
         # Build per-channel webhooks
@@ -874,7 +878,7 @@ async def recalibrate(
             raise ApiError(
                 503,
                 "llm_queue_full",
-                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+                note=_terminal_write_note(terminal_write_ok),
             )
         except Exception as e:
             logger.error(f"重新校对任务加入队列失败: {e}")
@@ -892,7 +896,7 @@ async def recalibrate(
                 500,
                 "task_queue_failed",
                 error=str(e),
-                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+                note=_terminal_write_note(terminal_write_ok),
             )
 
         processing_time_ms = int(
@@ -1061,7 +1065,7 @@ async def resummarize(
                     user_id,
                 ))
             logger.info(f"重新生成总结任务创建成功: {task_id}, view_token: {view_token}")
-        except ApiError:
+        except HTTPException:
             raise
         except Exception as e:
             logger.error(f"创建重新生成总结任务失败: {e}")
@@ -1109,7 +1113,7 @@ async def resummarize(
                 500,
                 "resummary_formatting_failed",
                 error=str(format_exc),
-                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+                note=_terminal_write_note(terminal_write_ok),
             )
 
         # Build per-channel webhooks
@@ -1172,7 +1176,7 @@ async def resummarize(
             raise ApiError(
                 503,
                 "llm_queue_full",
-                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+                note=_terminal_write_note(terminal_write_ok),
             )
         except Exception as e:
             logger.error(f"重新生成总结任务加入队列失败: {e}")
@@ -1185,7 +1189,7 @@ async def resummarize(
                 500,
                 "task_queue_failed",
                 error=str(e),
-                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+                note=_terminal_write_note(terminal_write_ok),
             )
 
         processing_time_ms = int(
@@ -1389,7 +1393,7 @@ async def generate_notes(
                 logger.warning(f"详细笔记已在准入期间生成，拒绝重复生成: {view_token}")
                 raise ApiError(400, "notes_already_exists")
             logger.info(f"详细笔记任务创建成功: {task_id}, view_token: {view_token}")
-        except ApiError:
+        except HTTPException:
             raise
         except Exception as exc:
             logger.error(f"创建详细笔记任务失败: {exc}")
@@ -1444,7 +1448,7 @@ async def generate_notes(
             raise ApiError(
                 503,
                 "llm_queue_full",
-                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+                note=_terminal_write_note(terminal_write_ok),
             )
         except Exception as exc:
             logger.error(f"详细笔记任务加入队列失败: {exc}")
@@ -1457,7 +1461,7 @@ async def generate_notes(
                 500,
                 "notes_queue_failed",
                 error=str(exc),
-                note=t("error.terminal_write_note") if not terminal_write_ok else "",
+                note=_terminal_write_note(terminal_write_ok),
             )
 
         processing_time_ms = int(

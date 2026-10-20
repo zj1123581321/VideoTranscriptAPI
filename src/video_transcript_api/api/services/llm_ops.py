@@ -990,9 +990,11 @@ def _handle_llm_task(llm_task: dict):
                 # 独立 try/except 包住通知）同一套顺序：先写 FAILED CAS 并
                 # 检查返回值，终态落定后再尝试通知；通知异常只记日志，不
                 # 影响已经写定的 failed 结果。
-                fail_message = (
-                    f"重新校对失败: {exc}" if llm_task.get("calibrate_only")
-                    else f"LLM处理失败: {exc}"
+                fail_message = t(
+                    "error.task_failure.recalibration_failed"
+                    if llm_task.get("calibrate_only")
+                    else "error.task_failure.llm_processing_failed",
+                    error=str(exc),
                 )
                 failure_snapshot = {"observability": tracker.observation()}
                 if notes_attempted:
@@ -1011,11 +1013,7 @@ def _handle_llm_task(llm_task: dict):
                     fail_status_written = finalize_terminal_status_and_notify(
                         task_id,
                         TaskStatus.FAILED,
-                        error_message=(
-                            t("error.task_failure.recalibration_failed", error=str(exc))
-                            if llm_task.get("calibrate_only")
-                            else t("error.task_failure.llm_processing_failed", error=str(exc))
-                        ),
+                        error_message=fail_message,
                         url=display_url,
                         title=video_title,
                         notify_error=f"【LLM API调用异常】{exc}",

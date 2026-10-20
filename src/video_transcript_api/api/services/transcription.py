@@ -1140,7 +1140,7 @@ def process_transcription(
         task_notifier = _TaskNotifier()
 
         def _fail_task_and_notify(
-            error_msg: str, *, task_status_error: str,
+            error_message: str, *,
             notify_status: str = "下载失败",
             title: Optional[str] = None, author_name: Optional[str] = None,
         ) -> dict:
@@ -1185,10 +1185,9 @@ def process_transcription(
                 False 且既有终态已是 success 时为 {"status": "success",
                 ...}；CAS 写入抛异常则不返回，异常向上传播。"""
             if local_media_path is not None:
-                error_msg = f"UPLOAD_PROCESSING_FAILED: {error_msg}"
-                task_status_error = t(
+                error_message = t(
                     "error.task_failure.upload_processing_prefix",
-                    reason=task_status_error,
+                    reason=error_message,
                 )
                 logger.error(
                     "UPLOAD_PROCESSING_FAILED task_id={} reason=processing_failed",
@@ -1199,7 +1198,7 @@ def process_transcription(
                     task_id,
                     TaskStatus.FAILED,
                     download_url=download_url,
-                    error_message=task_status_error,
+                    error_message=error_message,
                     url=display_url,
                     title=title,
                     author=author_name,
@@ -1208,12 +1207,12 @@ def process_transcription(
                     notify_via=task_notifier,
                 )
             except Exception:
-                logger.exception(f"收敛 failed 终态写入异常: {task_id} ({error_msg})")
+                logger.exception(f"收敛 failed 终态写入异常: {task_id} ({error_message})")
                 raise
 
             if fail_status_written:
-                logger.info(f"任务状态已更新为 failed: {task_id} ({error_msg})")
-                return {"status": "failed", "message": error_msg}
+                logger.info(f"任务状态已更新为 failed: {task_id} ({error_message})")
+                return {"status": "failed", "message": error_message}
 
             # M1 修复（PR3 review hardening 收尾轮）：CAS 返回 False 无法区分
             # "任务行已是 success/failed 终态"与"任务行根本不存在"——两种情况
@@ -1227,14 +1226,14 @@ def process_transcription(
             current_status = current_task.get("status") if current_task else "unknown"
             logger.warning(
                 f"任务状态 CAS 写入 failed 失败(任务已处于终态 {current_status}，"
-                f"未被本次异常覆盖，跳过失败通知): {task_id} ({error_msg})"
+                f"未被本次异常覆盖，跳过失败通知): {task_id} ({error_message})"
             )
             if current_status == TaskStatus.SUCCESS:
                 return {
                     "status": TaskStatus.SUCCESS,
                     "message": f"任务已被并发流程标记为 success，跳过失败通知（当前状态: {current_status}）",
                 }
-            return {"status": "failed", "message": error_msg}
+            return {"status": "failed", "message": error_message}
 
         # ==================== 阶段1: URL 解析（提取 platform 和 video_id）====================
         from ...utils.url_parser import URLParser
@@ -2013,10 +2012,7 @@ def process_transcription(
                             transcript = _rebuild_text_from_segments(yt_api_segments)
                         if not (transcript or "").strip():
                             return _fail_task_and_notify(
-                                "[youtube-api] subtitles are empty",
-                                task_status_error=t(
-                                    "error.task_failure.youtube_subtitles_empty"
-                                ),
+                                t("error.task_failure.youtube_subtitles_empty"),
                                 notify_status="转录失败",
                                 title=video_title,
                                 author_name=author,
@@ -2046,7 +2042,9 @@ def process_transcription(
                             extra_json_data=yt_api_extra_json,
                         )
                         if not cache_result:
-                            error_msg = "[youtube-api] 转录结果保存到缓存失败"
+                            error_msg = t(
+                                "error.task_failure.youtube_transcript_cache_save_failed"
+                            )
                             logger.error(error_msg)
                             # Y4 修复（PR3 review hardening 加固轮）：save_cache 失败
                             # 不能只记日志继续走 handoff/通知/success——转录产物根本
@@ -2057,9 +2055,6 @@ def process_transcription(
                             # 失败通知、不再继续下面的 LLM handoff。
                             return _fail_task_and_notify(
                                 error_msg,
-                                task_status_error=t(
-                                    "error.task_failure.youtube_transcript_cache_save_failed"
-                                ),
                                 notify_status="转录结果保存失败",
                                 title=video_title, author_name=author,
                             )
@@ -2125,8 +2120,7 @@ def process_transcription(
                             probed_media_duration = _ensure_audio_track(local_file)
                         except InvalidMediaError as admission_exc:
                             return _fail_task_and_notify(
-                                str(admission_exc),
-                                task_status_error=t(
+                                t(
                                     "error.task_failure.media_admission_failed",
                                     error=str(admission_exc),
                                 ),
@@ -2205,16 +2199,15 @@ def process_transcription(
                                 )
 
                         if not cache_result:
-                            error_msg = "[youtube-api] 转录结果保存到缓存失败"
+                            error_msg = t(
+                                "error.task_failure.youtube_transcript_cache_save_failed"
+                            )
                             logger.error(error_msg)
                             # Y4 修复（PR3 review hardening 加固轮，同 [youtube-api]
                             # 平台字幕分支的收口原则）：转录产物未真正落盘，任务却
                             # 仍会报告成功，改走既有失败收口 _fail_task_and_notify。
                             return _fail_task_and_notify(
                                 error_msg,
-                                task_status_error=t(
-                                    "error.task_failure.youtube_transcript_cache_save_failed"
-                                ),
                                 notify_status="转录结果保存失败",
                                 title=video_title, author_name=author,
                             )
@@ -2273,28 +2266,22 @@ def process_transcription(
 
                 except YouTubeApiError as api_error:
                     # API Server 失败，不降级，直接返回错误
-                    error_msg = f"YouTube API Server error: [{api_error.code}] {api_error.message}"
-                    logger.error(f"[youtube-api] {error_msg}")
-                    return _fail_task_and_notify(
-                        error_msg,
-                        task_status_error=t(
-                            "error.task_failure.youtube_api_failed",
-                            code=api_error.code,
-                            error=api_error.message,
-                        ),
+                    error_msg = t(
+                        "error.task_failure.youtube_api_failed",
+                        code=api_error.code,
+                        error=api_error.message,
                     )
+                    logger.error("[youtube-api] {}", error_msg)
+                    return _fail_task_and_notify(error_msg)
 
                 except Exception as exc:
                     # 其他异常也不降级
-                    error_msg = f"YouTube API Server unexpected error: {exc}"
-                    logger.exception(f"[youtube-api] {error_msg}")
-                    return _fail_task_and_notify(
-                        error_msg,
-                        task_status_error=t(
-                            "error.task_failure.youtube_api_unexpected",
-                            error=str(exc),
-                        ),
+                    error_msg = t(
+                        "error.task_failure.youtube_api_unexpected",
+                        error=str(exc),
                     )
+                    logger.exception("[youtube-api] {}", error_msg)
+                    return _fail_task_and_notify(error_msg)
 
             # ========== 原有逻辑（非 YouTube API Server 路径）==========
             # 已在前面完成元数据解析与下载器准备
@@ -2383,16 +2370,15 @@ def process_transcription(
                 )
 
                 if not cache_result:
-                    error_msg = "保存平台字幕到缓存失败"
+                    error_msg = t(
+                        "error.task_failure.platform_subtitle_cache_save_failed"
+                    )
                     logger.error(error_msg)
                     # Y4 修复（PR3 review hardening 加固轮，同上游 [youtube-api]
                     # 分支的收口原则）：字幕产物未真正落盘，任务却仍会报告成功，
                     # 改走既有失败收口 _fail_task_and_notify。
                     return _fail_task_and_notify(
                         error_msg,
-                        task_status_error=t(
-                            "error.task_failure.platform_subtitle_cache_save_failed"
-                        ),
                         notify_status="转录结果保存失败",
                         title=video_title, author_name=author,
                     )
@@ -2514,26 +2500,24 @@ def process_transcription(
                             with tracker.track("download"):
                                 local_file = original_downloader.download_file(download_info_url, filename)
                         else:
-                            error_msg = f"无法获取下载信息: {url}"
+                            error_msg = t(
+                                "error.task_failure.download_info_unavailable",
+                                url=url,
+                            )
                             logger.error(error_msg)
                             return _fail_task_and_notify(
                                 error_msg,
-                                task_status_error=t(
-                                    "error.task_failure.download_info_unavailable",
-                                    url=url,
-                                ),
                                 title=video_title, author_name=author,
                             )
 
                 if not local_file:
-                    error_msg = f"下载文件失败: {url}"
+                    error_msg = t(
+                        "error.task_failure.download_file_failed",
+                        url=url,
+                    )
                     logger.error(error_msg)
                     return _fail_task_and_notify(
                         error_msg,
-                        task_status_error=t(
-                            "error.task_failure.download_file_failed",
-                            url=url,
-                        ),
                         title=video_title, author_name=author,
                     )
 
@@ -2544,8 +2528,7 @@ def process_transcription(
                     probed_media_duration = _ensure_audio_track(local_file)
                 except InvalidMediaError as admission_exc:
                     return _fail_task_and_notify(
-                        str(admission_exc),
-                        task_status_error=t(
+                        t(
                             "error.task_failure.media_admission_failed",
                             error=str(admission_exc),
                         ),
@@ -2557,19 +2540,13 @@ def process_transcription(
                     )
                     if probed_media_duration is None:
                         return _fail_task_and_notify(
-                            "上传媒体时长未知，拒绝进入转录（media_duration_unknown）",
-                            task_status_error=t(
-                                "error.task_failure.upload_media_duration_unknown"
-                            ),
+                            t("error.task_failure.upload_media_duration_unknown"),
                             title=video_title,
                             author_name=author,
                         )
                     if max_hours is None or probed_media_duration > max_hours * 3600:
                         return _fail_task_and_notify(
-                            "上传媒体超过允许时长，拒绝进入转录（media_duration_limit）",
-                            task_status_error=t(
-                                "error.task_failure.upload_media_duration_limit"
-                            ),
+                            t("error.task_failure.upload_media_duration_limit"),
                             title=video_title,
                             author_name=author,
                         )
@@ -2624,10 +2601,11 @@ def process_transcription(
                                 )
 
                                 if not cache_result:
-                                    error_msg = "保存FunASR转录结果到缓存失败"
-                                    logger.error(error_msg)
-                                    cache_save_error = error_msg
-                                    raise RuntimeError(error_msg)
+                                    cache_save_error = t(
+                                        "error.task_failure.funasr_transcript_cache_save_failed"
+                                    )
+                                    logger.error(cache_save_error)
+                                    raise RuntimeError(cache_save_error)
 
                                 # 构造与普通转录器兼容的结果
                                 transcription_result = {
@@ -2683,10 +2661,11 @@ def process_transcription(
                                 )
 
                                 if not cache_result:
-                                    error_msg = "保存CapsWriter转录结果到缓存失败"
-                                    logger.error(error_msg)
-                                    cache_save_error = error_msg
-                                    raise RuntimeError(error_msg)
+                                    cache_save_error = t(
+                                        "error.task_failure.capswriter_transcript_cache_save_failed"
+                                    )
+                                    logger.error(cache_save_error)
+                                    raise RuntimeError(cache_save_error)
 
                     except RuntimeError:
                         if cache_save_error is None:
@@ -2694,11 +2673,6 @@ def process_transcription(
                     if cache_save_error:
                         return _fail_task_and_notify(
                             cache_save_error,
-                            task_status_error=t(
-                                "error.task_failure.funasr_transcript_cache_save_failed"
-                                if use_speaker_recognition
-                                else "error.task_failure.capswriter_transcript_cache_save_failed"
-                            ),
                             notify_status="转录结果保存失败",
                             title=video_title, author_name=author,
                         )
@@ -2721,10 +2695,7 @@ def process_transcription(
                             str(get_temp_manager().base_dir),
                         ):
                             return _fail_task_and_notify(
-                                "上传转录产生的临时文件超过预算（upload_temp_budget）",
-                                task_status_error=t(
-                                    "error.task_failure.upload_temp_budget_exceeded"
-                                ),
+                                t("error.task_failure.upload_temp_budget_exceeded"),
                                 title=video_title,
                                 author_name=author,
                             )
@@ -2810,9 +2781,13 @@ def process_transcription(
         # 通知，但缺少收敛日志）；现在显式 try/except 记日志后重新抛出，
         # 行为不变、可观测性补齐，且与 _handoff_to_llm_stage /
         # _fail_task_and_notify 两处站点统一。
-        failure_message = (
-            f"UPLOAD_PROCESSING_FAILED: 转录任务异常: {exc}"
-            if local_media_path is not None else f"转录任务异常: {exc}"
+        failure_message = t(
+            "error.task_failure.worker_unhandled_error",
+            failure_label=(
+                "UPLOAD_PROCESSING_FAILED: "
+                if local_media_path is not None else ""
+            ),
+            error=str(exc),
         )
         if local_media_path is not None:
             logger.error("UPLOAD_PROCESSING_FAILED task_id={} reason=unhandled_worker_error", task_id)
@@ -2821,14 +2796,7 @@ def process_transcription(
                 task_id,
                 TaskStatus.FAILED,
                 download_url=download_url,
-                error_message=t(
-                    "error.task_failure.worker_unhandled_error",
-                    failure_label=(
-                        "UPLOAD_PROCESSING_FAILED: "
-                        if local_media_path is not None else ""
-                    ),
-                    error=str(exc),
-                ),
+                error_message=failure_message,
                 url=display_url,
                 notify_error=str(exc),
                 channel_name=notification_channel,
@@ -2869,7 +2837,7 @@ def process_transcription(
             }
         return {
             "status": "failed",
-            "message": f"转录任务异常: {exc}",
+            "message": failure_message,
             "error": str(exc),
         }
     finally:
