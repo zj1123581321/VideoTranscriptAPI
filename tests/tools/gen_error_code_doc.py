@@ -86,7 +86,7 @@ def render_document(source_root: Path) -> str:
     if missing_locales:
         raise ValueError(f"ApiError codes missing locale entries: {missing_locales}")
 
-    lines = [HEADER.rstrip(), ""]
+    lines = [HEADER.rstrip()]
     for code, statuses in sorted(api_errors.items()):
         key = f"{ERROR_PREFIX}{code}"
         status = ", ".join(sorted(statuses))

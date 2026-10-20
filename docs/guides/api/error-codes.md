@@ -16,7 +16,6 @@ HTTP 状态来自生产代码中的 `ApiError(status, error_code)` 调用。`dyn
 
 | error_code | HTTP 状态 / HTTP status | zh-CN 文案 | en 文案 |
 |---|---:|---|---|
-
 | `audit_calls_failed` | 500 | 获取调用记录失败: {error} | Failed to retrieve API call records: {error} |
 | `audit_query_failed` | 500 | 查询失败: {error} | The query failed: {error} |
 | `audit_stats_failed` | 500 | 获取统计信息失败: {error} | Failed to retrieve statistics: {error} |

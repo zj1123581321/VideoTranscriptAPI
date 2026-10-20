@@ -32,6 +32,60 @@ def test_error_code_reference_matches_generator_output() -> None:
         raise AssertionError("Generated API error-code reference is stale.")
 
 
+def _table_cells(line: str) -> list[str]:
+    if not line.startswith("|") or not line.endswith("|"):
+        raise AssertionError("Markdown table rows must start and end with a pipe.")
+    return re.split(r"(?<!\\)(?:\\\\)*\|", line)[1:-1]
+
+
+def _assert_generated_tables_are_well_formed(document: str) -> None:
+    lines = document.splitlines()
+    separator = re.compile(r"^\|(?:\s*:?-{3,}:?\s*\|)+$")
+    for index, line in enumerate(lines):
+        if not separator.match(line):
+            continue
+        headers = _table_cells(lines[index - 1])
+        if index + 1 >= len(lines) or not lines[index + 1].startswith("|"):
+            raise AssertionError("Every table separator must be followed by a data row.")
+        row_index = index - 1
+        while row_index < len(lines) and lines[row_index].startswith("|"):
+            cells = _table_cells(lines[row_index])
+            if len(cells) != len(headers):
+                raise AssertionError("Every table row must match its header column count.")
+            row_index += 1
+
+
+def test_generated_tables_have_adjacent_rows_with_matching_column_counts() -> None:
+    _assert_generated_tables_are_well_formed(generated_error_code_doc())
+
+
+def test_locale_pipes_and_newlines_are_escaped_in_generated_tables(tmp_path: Path) -> None:
+    source_root = tmp_path / "repo"
+    locale_source = ROOT / "src/video_transcript_api/i18n/locales"
+    locale_target = source_root / "src/video_transcript_api/i18n/locales"
+    locale_target.mkdir(parents=True)
+    for locale_name in ("zh-CN.json", "en.json"):
+        shutil.copyfile(locale_source / locale_name, locale_target / locale_name)
+
+    fake_source = source_root / "src/video_transcript_api/api/error_example.py"
+    fake_source.parent.mkdir(parents=True)
+    fake_source.write_text('raise ApiError(400, "invalid_url")\n', encoding="utf-8")
+    en_path = locale_target / "en.json"
+    en_catalog = json.loads(en_path.read_text(encoding="utf-8"))
+    en_catalog["error.invalid_url"] = "before | after\ncontinued"
+    en_path.write_text(
+        json.dumps(en_catalog, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    generated = generated_error_code_doc(root=source_root)
+    _assert_generated_tables_are_well_formed(generated)
+    if "before \\| after<br>continued" not in generated:
+        raise AssertionError("Locale pipes and newlines must be escaped in table cells.")
+    if "| `invalid_url` | 400 |" not in generated:
+        raise AssertionError("The localized API error row was not generated.")
+
+
 def _readme_heading_counts(path: Path) -> tuple[int, int]:
     level_two = 0
     level_three = 0

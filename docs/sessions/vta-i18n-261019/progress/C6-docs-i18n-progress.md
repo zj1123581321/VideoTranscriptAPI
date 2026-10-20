@@ -34,3 +34,10 @@
 - 本段结论：窄测通过；`make test` 首轮仅在既有集成探针 `test_local_capacity_probe_exercises_real_http_payload_and_loopback_overlap` 报 `controlled_url_download_did_not_overlap_upload_receiving`，单测独立重跑通过，随后完整 `make test` 再次通过。未改该测试或生产代码。
 - 关键决策与已否决方案：将该一次性并发探针红单独记录；派发基线查询不可用，继承红无法判定，不把它归因给本卡，也不把首轮红隐去。
 - 下一步唯一动作：完成 scope / 远端 tip / 干净工作区复核并写最终报告。
+
+### 里程碑 6：错误码主表结构修复
+
+- 当前阶段：implementing
+- 本段结论：移除生成器在 Markdown 表头分隔行后插入的空行；生成结果现以数据行紧跟分隔行，新增结构断言检查分隔行后的数据行及各行列数，并验证 locale 中的竖线和换行会被转义。先在旧生成器上得到 `AssertionError` 红，再在修复后通过相关测试。
+- 关键决策与已否决方案：结构约束作用于每张生成表，不只针对当前主表；locale 特殊字符用临时源目录 fixture 验证，不修改真实 locale 文案。
+- 下一步唯一动作：修复任务失败说明中 `data.error` 的本地化文本语义并完成对应文档再生成。
