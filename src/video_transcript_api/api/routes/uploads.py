@@ -177,12 +177,6 @@ def _receipt(upload: dict) -> dict:
     }
 
 
-def _reject(status_code: int, reason: str, detail: str) -> ApiError:
-    logger.warning("UPLOAD_INTAKE_REJECTED reason={} status={}", reason, status_code)
-    error_code = reason if reason.startswith("upload_") else f"upload_{reason}"
-    return ApiError(status_code, error_code, detail=detail)
-
-
 @router.get("/capabilities")
 async def upload_capabilities(
     request: Request,

@@ -455,7 +455,6 @@ class TestTranscribeQueueBackpressure:
         detail), and the in-flight registry slot must still be released by
         the existing unconditional finally, not leaked."""
         from video_transcript_api.api.context import _InflightTaskRegistry
-        from video_transcript_api.api.routes.tasks import _TERMINAL_WRITE_FAILURE_NOTE
 
         mock_cache_manager.update_task_status.side_effect = RuntimeError("db locked")
 
@@ -477,7 +476,7 @@ class TestTranscribeQueueBackpressure:
             )
 
         assert resp.status_code == 503
-        assert _TERMINAL_WRITE_FAILURE_NOTE in resp.json()["detail"], (
+        assert "；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛" in resp.json()["detail"], (
             "the double failure must be surfaced through the response body, "
             "not just logged server-side"
         )
@@ -599,7 +598,6 @@ class TestTranscribeGenericQueueException:
         detail), and the in-flight registry slot must still be released by
         the existing unconditional finally, not leaked."""
         from video_transcript_api.api.context import _InflightTaskRegistry
-        from video_transcript_api.api.routes.tasks import _TERMINAL_WRITE_FAILURE_NOTE
 
         mock_cache_manager.update_task_status.side_effect = RuntimeError("db locked")
 
@@ -621,7 +619,7 @@ class TestTranscribeGenericQueueException:
             )
 
         assert resp.status_code == 500
-        assert _TERMINAL_WRITE_FAILURE_NOTE in resp.json()["detail"], (
+        assert "；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛" in resp.json()["detail"], (
             "the double failure must be surfaced through the response body, "
             "not just logged server-side"
         )

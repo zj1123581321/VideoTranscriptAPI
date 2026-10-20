@@ -1906,7 +1906,6 @@ class TestRecalibrateQueueBackpressure:
         the existing unconditional finally, not leaked."""
         from video_transcript_api.cache.cache_manager import CacheManager
         from video_transcript_api.api.context import _InflightTaskRegistry
-        from video_transcript_api.api.routes.tasks import _TERMINAL_WRITE_FAILURE_NOTE
         import video_transcript_api.api.context as context_module
 
         cache_manager = CacheManager(str(tmp_path / "cache"))
@@ -1930,7 +1929,7 @@ class TestRecalibrateQueueBackpressure:
             resp = client.post("/api/recalibrate", json={"view_token": view_token})
 
             assert resp.status_code == 503
-            assert _TERMINAL_WRITE_FAILURE_NOTE in resp.json()["detail"], (
+            assert "；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛" in resp.json()["detail"], (
                 "the double failure must be surfaced through the response "
                 "body, not just logged server-side"
             )
@@ -2084,7 +2083,6 @@ class TestRecalibrateNonCapacityExceptions:
         the existing unconditional finally, not leaked."""
         from video_transcript_api.cache.cache_manager import CacheManager
         from video_transcript_api.api.context import _InflightTaskRegistry
-        from video_transcript_api.api.routes.tasks import _TERMINAL_WRITE_FAILURE_NOTE
         import video_transcript_api.api.context as context_module
 
         cache_manager = CacheManager(str(tmp_path / "cache"))
@@ -2111,7 +2109,7 @@ class TestRecalibrateNonCapacityExceptions:
             resp = client.post("/api/recalibrate", json={"view_token": view_token})
 
             assert resp.status_code == 500
-            assert _TERMINAL_WRITE_FAILURE_NOTE in resp.json()["detail"], (
+            assert "；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛" in resp.json()["detail"], (
                 "the double failure must be surfaced through the response "
                 "body, not just logged server-side"
             )
@@ -2169,7 +2167,6 @@ class TestRecalibrateNonCapacityExceptions:
         the existing unconditional finally, not leaked."""
         from video_transcript_api.cache.cache_manager import CacheManager
         from video_transcript_api.api.context import _InflightTaskRegistry
-        from video_transcript_api.api.routes.tasks import _TERMINAL_WRITE_FAILURE_NOTE
         import video_transcript_api.api.context as context_module
 
         cache_manager = CacheManager(str(tmp_path / "cache"))
@@ -2193,7 +2190,7 @@ class TestRecalibrateNonCapacityExceptions:
             resp = client.post("/api/recalibrate", json={"view_token": view_token})
 
             assert resp.status_code == 500
-            assert _TERMINAL_WRITE_FAILURE_NOTE in resp.json()["detail"], (
+            assert "；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛" in resp.json()["detail"], (
                 "the double failure must be surfaced through the response "
                 "body, not just logged server-side"
             )

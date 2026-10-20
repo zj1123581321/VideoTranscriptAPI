@@ -146,17 +146,6 @@ def _read_fresh_notes_status(cache_dir: str | None) -> dict | None:
     return status_payload
 
 
-# K1 路由站点观察面（CI review 第 3 轮 major）：_fail_task_after_creation
-# 的终态清理写入自身失败时，追加到原始 500/503 响应 detail 末尾的明确
-# 标记——终态写失败不再是"只记日志、请求方毫无感知"，而是通过响应体这个
-# 请求边界暴露出来。这里只是文案标记，不是新的失败通道：既有的 500/503
-# 状态码、既有的 finally 名额释放都不变，只是让调用方（客户端/上游告警）
-# 能从这次响应本身分辨出"任务状态清理是否确认成功"。
-_TERMINAL_WRITE_FAILURE_NOTE = (
-    "；任务状态清理失败，task 可能短暂显示为处理中，系统将自动收敛"
-)
-
-
 def _fail_task_after_creation(task_id: str, error_message: str, *, log_context: str) -> bool:
     """任务行已落库、尚未成功交接给队列消费者的窗口内，把任务 CAS 成 failed 终态。
 
@@ -181,7 +170,7 @@ def _fail_task_after_creation(task_id: str, error_message: str, *, log_context: 
     后应继续 raise 原始的 HTTPException。
 
     返回值（K1，CI review 第 3 轮 major）：调用方应据此判断是否需要在
-    HTTPException 的 detail 里追加 _TERMINAL_WRITE_FAILURE_NOTE——终态写入
+    ApiError 的 detail 里追加本地化终态清理提示——终态写入
     这一步本身失败（不是"已处于终态"这种 CAS 语义下的正常情况，而是
     update_task_status 调用本身抛出异常）时，任务行的真实状态无法确认，
     必须通过响应体这个请求边界让调用方知晓，不能只留一条只有服务端能看到
@@ -386,8 +375,8 @@ async def transcribe_video(
                     # 出错不能掩盖"队列已满"这个真正原因——_fail_task_after_creation
                     # 内部已吞掉自身异常，这里继续走到下面的 503；K1（CI review
                     # 第 3 轮 major）：清理写入若失败，返回值为 False，追加
-                    # _TERMINAL_WRITE_FAILURE_NOTE 到 detail，把这个不确定性
-                    # 通过响应体这个请求边界暴露给调用方。
+                    # 追加本地化终态清理提示到 detail，把这个不确定性通过
+                    # 响应体这个请求边界暴露给调用方。
                     terminal_write_ok = _fail_task_after_creation(
                         task_id,
                         t("error.task_failure.transcription_queue_rejected"),
@@ -449,8 +438,7 @@ async def transcribe_video(
                 # 已经落库为 queued，与上面 QueueFull 分支同样必须收口成 failed，
                 # 否则客户端会永久轮询一个永远不会被消费的任务。终态写入自身出错
                 # 不能掩盖这里真正的原因，仍然继续走到下面的 500（不吞掉原始异常）；
-                # K1（CI review 第 3 轮 major）：清理写入若失败，追加
-                # _TERMINAL_WRITE_FAILURE_NOTE 到 detail。
+                # K1（CI review 第 3 轮 major）：清理写入若失败，追加本地化提示。
                 terminal_write_ok = _fail_task_after_creation(
                     task_id,
                     t("error.task_failure.transcription_queue_failed", error=str(queue_exc)),
@@ -803,8 +791,7 @@ async def recalibrate(
             logger.exception(
                 f"重新校对任务转录数据格式化失败: {task_id}, 错误: {format_exc}"
             )
-            # K1（CI review 第 3 轮 major）：清理写入若失败，追加
-            # _TERMINAL_WRITE_FAILURE_NOTE 到 detail。
+            # K1（CI review 第 3 轮 major）：清理写入若失败，追加本地化提示到 detail。
             terminal_write_ok = _fail_task_after_creation(
                 task_id,
                 t("error.task_failure.recalibration_input_formatting_failed", error=str(format_exc)),
@@ -878,8 +865,7 @@ async def recalibrate(
             # 是 compare-and-set，返回 False 只说明任务已先一步进入终态。清理
             # 写入自身出错不能掩盖"队列已满"这个真正原因——
             # _fail_task_after_creation 内部已吞掉自身异常，这里继续走到下面
-            # 的 503；K1（CI review 第 3 轮 major）：清理写入若失败，追加
-            # _TERMINAL_WRITE_FAILURE_NOTE 到 detail。
+            # 的 503；K1（CI review 第 3 轮 major）：清理写入若失败，追加本地化提示。
             terminal_write_ok = _fail_task_after_creation(
                 task_id,
                 t("error.task_failure.recalibration_queue_rejected"),
@@ -896,8 +882,7 @@ async def recalibrate(
             # 已经落库为 processing，与上面 queue.Full 分支同样必须收口成
             # failed，否则客户端会永久轮询一个永远不会被消费的任务。终态写入
             # 自身出错不能掩盖这里真正的原因，仍然继续走到下面的 500；K1（CI
-            # review 第 3 轮 major）：清理写入若失败，追加
-            # _TERMINAL_WRITE_FAILURE_NOTE 到 detail。
+            # review 第 3 轮 major）：清理写入若失败，追加本地化提示。
             terminal_write_ok = _fail_task_after_creation(
                 task_id,
                 t("error.task_failure.recalibration_queue_failed", error=str(e)),
