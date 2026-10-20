@@ -44,3 +44,38 @@ def test_llm_failure_persists_the_precomputed_localized_message():
         and keyword.value.id == "fail_message"
     ]
     assert len(persisted_messages) == 1, "terminal write must reuse the logged localized message"
+
+
+def test_terminal_write_note_is_localized_by_one_helper():
+    from video_transcript_api.api.routes.tasks import _terminal_write_note
+    from video_transcript_api.i18n import t
+
+    assert _terminal_write_note(True) == ""
+    assert _terminal_write_note(False) == t("error.terminal_write_note")
+
+    source_path = (
+        PROJECT_ROOT
+        / "src"
+        / "video_transcript_api"
+        / "api"
+        / "routes"
+        / "tasks.py"
+    )
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    direct_note_translations = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "t"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == "error.terminal_write_note"
+    ]
+    assert len(direct_note_translations) == 1
+    helper = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "_terminal_write_note"
+    )
+    assert direct_note_translations[0] in ast.walk(helper)
