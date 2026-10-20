@@ -27,3 +27,10 @@
 - 本段结论：防漂移测试失败时改用明确的英文 `AssertionError`，避免 pytest 展开双语文档正文，符合测试 console 纯英文约束；成功路径窄测仍通过。
 - 关键决策与已否决方案：不直接 `assert` 长 Markdown 字符串相等，以免断言失败时 pytest 将整份本地化文案 diff 打到 console；仍以逐字字符串相等作为判据。
 - 下一步唯一动作：提交测试诊断收敛并在最终 HEAD 上重跑全量与窄测。
+
+### 里程碑 5：最终全量验收
+
+- 当前阶段：completed
+- 本段结论：窄测通过；`make test` 首轮仅在既有集成探针 `test_local_capacity_probe_exercises_real_http_payload_and_loopback_overlap` 报 `controlled_url_download_did_not_overlap_upload_receiving`，单测独立重跑通过，随后完整 `make test` 再次通过。未改该测试或生产代码。
+- 关键决策与已否决方案：将该一次性并发探针红单独记录；派发基线查询不可用，继承红无法判定，不把它归因给本卡，也不把首轮红隐去。
+- 下一步唯一动作：完成 scope / 远端 tip / 干净工作区复核并写最终报告。
