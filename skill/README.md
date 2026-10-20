@@ -38,7 +38,7 @@ skill/
 
 **为什么分两个地址**：API 请求追求低延迟，通常走内网；但返给用户的 `/view/<token>` 链接需要能从公网打开。配了 PUBLIC_URL 后，`submit` / `status` / `history` 打印给用户的链接会自动用公网域名拼。
 
-脚本运行时会从环境读取。必填变量缺失 → `exit 3` + stderr 明确提示。
+脚本运行时会从环境读取。必填变量缺失 → `exit 3` + stderr 明确提示。服务端顶层 `language` 会切换 Web 文案、生成总结/笔记/章节及 API `detail` 等服务端输出；skill 客户端按 HTTP 状态码分支，不解析 `detail`，因此不受错误文案语言变化影响。
 
 ## 各平台部署
 

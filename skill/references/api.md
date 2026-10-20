@@ -14,6 +14,16 @@ token 可能是 `config.jsonc` 中 `api.auth_token`（单用户），或 `config
 
 `/view/*`、`/export/*`、`/health` 无需鉴权。
 
+## API 错误响应
+
+应用生成的 API 错误响应形如：
+
+```json
+{"detail": "<localized string>", "error_code": "<snake_case>"}
+```
+
+客户端应按稳定的 `error_code` 分支处理；`detail` 仅用于展示，并会随服务端 `language` 配置变化。FastAPI 请求校验产生的 422 响应保持默认形状，不含 `error_code`。错误码与中英文文案完整清单见 [`docs/guides/api/error-codes.md`](../../docs/guides/api/error-codes.md)。
+
 ## 端点清单
 
 | 端点 | 方法 | 鉴权 | 说明 |
@@ -79,7 +89,7 @@ token 可能是 `config.jsonc` 中 `api.auth_token`（单用户），或 `config
 |------|--------------|------|
 | 202 | `queued` \| `processing` | 还在队列里或处理中 |
 | 200 | `success` | 完成，`data` 含结果字段 |
-| 500 | `failed` | 失败，`data.error` 含原因 |
+| 500 | `failed` | 失败，`data.error` 是失败文案文本（通常写入时按服务端语言本地化），不是 locale key；内容不稳定，不可用于分支 |
 | 404 | — | task_id 不存在 |
 
 **`status=success` 时的响应**

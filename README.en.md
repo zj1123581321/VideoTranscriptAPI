@@ -55,6 +55,8 @@ uv sync
 # Configure the service
 cp config/config.example.jsonc config/config.jsonc
 # Edit config.jsonc and fill in api.auth_token, tikhub.api_key and the like
+# Language: top-level language is "zh-CN" (default) or "en"; it controls Web UI text and
+#   summary/detailed-notes/chapters output. WeCom and Feishu notifications do not switch.
 # Optional: route Douyin/Xiaohongshu through MediaResolverAPI (WeChat Channels and X
 #   require this switch to be on). Set downloaders.use_media_resolver=true and
 #   configure the media_resolver section
@@ -131,7 +133,13 @@ Copy `config/config.example.jsonc` to `config/config.jsonc` and adjust at least 
 }
 ```
 
-Set `"language": "en"` for an English user-facing experience: the Web UI wording and the generated summary, detailed notes and chapter titles come out in English. The key accepts `"zh-CN"` or `"en"`; the default is `"zh-CN"`, and any other value makes startup fail. WeCom and Feishu notifications keep their own fixed templates for now.
+### Language
+
+Set the top-level `"language"` value to `"zh-CN"` or `"en"`; it defaults to `"zh-CN"`, and any other value makes startup fail. This switches the Web interface, generated summaries/detailed notes/chapters, API error response `detail`, task failure reasons, and task-status response `message`.
+
+It does not switch the fixed wording of WeCom/Feishu notifications or translate user content such as titles and transcript bodies. Exception text inserted into a failure reason remains unchanged, and previously stored failure reasons are not migrated or retranslated.
+
+After changing the language, existing cached artifacts in the old language remain visible. When processed again, summaries, detailed notes and chapters are regenerated in the new language; the proofread transcript is not rerun because of the language change.
 
 Validate the result before starting:
 
@@ -189,6 +197,12 @@ curl -X GET "http://localhost:8000/api/task/{task_id}" \
 
 The home page, the task history page and the result page share one browser access token, stored under the canonical key `vta_bearer_token` and read by a single Bearer authentication module. The result page and its `GET` export links are an unguessable public read-only capability: whoever holds the link can read that result. Submitting transcriptions, querying private tasks and history, and the write actions on the result page (re-calibrate, re-summarize, generate detailed notes) are still protected by `Authorization: Bearer <access token>`. Only ever type the access token into a browser you trust; never put it into a URL, a share link or a log.
 
+### API error responses
+
+Application-generated API errors have the shape `{"detail": "<localized string>", "error_code": "<snake_case>"}`. Clients should branch on the stable `error_code` and use `detail` only for display; `detail` changes with the server's `language` setting. FastAPI request-validation 422 responses keep their default shape and do not include `error_code`.
+
+See the [API error-code reference](docs/guides/api/error-codes.md) for the complete codes, HTTP statuses and Chinese/English text.
+
 ### API endpoints
 
 | Endpoint | Method | Description |
@@ -239,7 +253,8 @@ Detailed documentation lives under [docs/](docs/) (currently written in Chinese)
 
 - **Architecture**: [System architecture and module breakdown](docs/architecture.md)
 - **Guides**: [Multi-channel notifications (WeCom + Feishu)](docs/guides/notification.md) · [Multi-user setup](docs/guides/multi_user_setup.md) · [MediaResolverAPI integration (Douyin/Xiaohongshu/WeChat Channels/X)](docs/guides/media_resolver.md)
-- **API guides**: [FunASR](docs/guides/api/funasr_spk_server_client_api.md) · [YouTube](docs/guides/api/youtube_client_guide.md) · [BBDown](docs/guides/api/bbdown_guide.md)
+- **API guides**: [Error-code reference](docs/guides/api/error-codes.md) · [FunASR](docs/guides/api/funasr_spk_server_client_api.md) · [YouTube](docs/guides/api/youtube_client_guide.md) · [BBDown](docs/guides/api/bbdown_guide.md)
+- **Language configuration**: [Language switching and cache behavior](#language)
 - **Development**: [LLM engineering guide](docs/development/llm/engineering_guide.md) · [Concurrency](docs/development/concurrency.md) · [Logging](docs/development/logging.md)
 - **Features**: [Processing depth switches (processing_options)](docs/features/processing_options.md) · [Raw/page export](docs/features/raw_export.md) · [Download URL and metadata override](docs/features/source_url_and_metadata_override.md)
 
