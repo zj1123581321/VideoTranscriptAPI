@@ -443,6 +443,16 @@ _TASK_FAILURE_BASE_DETAILS = [
     ("llm_executor_submit_failed", "提交LLM任务失败: probe-error", {"error": "probe-error"}),
     ("recalibration_failed", "重新校对失败: probe-error", {"error": "probe-error"}),
     ("llm_processing_failed", "LLM处理失败: probe-error", {"error": "probe-error"}),
+    ("transcription_queue_rejected", "任务队列已满，提交被拒绝", {}),
+    ("transcription_queue_failed", "任务加入队列失败: probe-error", {"error": "probe-error"}),
+    ("recalibration_input_formatting_failed", "转录数据格式化失败: probe-error", {"error": "probe-error"}),
+    ("recalibration_queue_rejected", "LLM 队列已满，重新校对提交被拒绝", {}),
+    ("recalibration_queue_failed", "任务加入队列失败: probe-error", {"error": "probe-error"}),
+    ("resummary_input_formatting_failed", "转录数据格式化失败: probe-error", {"error": "probe-error"}),
+    ("resummary_queue_rejected", "LLM 队列已满，重新生成总结提交被拒绝", {}),
+    ("resummary_queue_failed", "任务加入队列失败: probe-error", {"error": "probe-error"}),
+    ("notes_queue_rejected", "LLM 队列已满，详细笔记提交被拒绝", {}),
+    ("notes_queue_failed", "详细笔记任务加入队列失败: probe-error", {"error": "probe-error"}),
 ]
 
 
@@ -457,6 +467,39 @@ def test_task_failure_catalog_preserves_base_reason(language_config, error_code,
     assert isinstance(english, str)
     assert all(str(value) in english for value in values.values() if value)
     assert _CJK.search(english) is None
+
+
+def test_task_route_failure_writes_use_localized_catalog_keys():
+    tasks_path = PROJECT_ROOT / "src" / "video_transcript_api" / "api" / "routes" / "tasks.py"
+    tree = ast.parse(tasks_path.read_text(encoding="utf-8"), filename=str(tasks_path))
+    expected_codes = {
+        "transcription_queue_rejected",
+        "transcription_queue_failed",
+        "recalibration_input_formatting_failed",
+        "recalibration_queue_rejected",
+        "recalibration_queue_failed",
+        "resummary_input_formatting_failed",
+        "resummary_queue_rejected",
+        "resummary_queue_failed",
+        "notes_queue_rejected",
+        "notes_queue_failed",
+    }
+    observed_codes = set()
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Name) or node.func.id != "_fail_task_after_creation":
+            continue
+        reason = node.args[1]
+        assert isinstance(reason, ast.Call)
+        assert isinstance(reason.func, ast.Name) and reason.func.id == "t"
+        assert isinstance(reason.args[0], ast.Constant)
+        key = reason.args[0].value
+        assert key.startswith("error.task_failure.")
+        observed_codes.add(key.removeprefix("error.task_failure."))
+
+    assert observed_codes == expected_codes
 
 
 def test_upload_failure_prefix_preserves_the_localized_reason(language_config):

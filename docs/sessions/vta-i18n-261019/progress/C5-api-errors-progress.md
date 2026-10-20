@@ -77,3 +77,9 @@
 - 本段结论：A 已提交并推送；将 `tasks.py` 一处 `ApiError` 暂时改回 `HTTPException(detail=...)` 后，AST 测试按预期 AssertionError 转红并定位该行，随后只还原该行。修订 dispatch 已批准 seq 1 对 `llm_ops.py` 的 scope 扩展，可继续完成 C。
 - 关键决策与已否决方案：不删除默认 422 校验异常；AST 只扫描 routes（排除 views）及 transcription service，检查调用形式而不是文本。
 - 下一步唯一动作：按修订要求处理 C 的各 task_status.error_message 写入点并为具体英文原因补测试。
+
+### 里程碑 13：任务路由失败原因本地化
+- 当前阶段：implementing
+- 本段结论：`tasks.py` 的 10 个 `_fail_task_after_creation()` 调用均改为按具体 `error.task_failure.*` key 写入；测试以 Base 中文字面值锁定目录文本，并以 AST 检查所有调用点均使用对应目录 key。
+- 关键决策与已否决方案：异常内容仍通过 `{error}` 原样插入；不在 `GET /api/task` 读取时二次翻译，避免覆盖写入时已确定的语言。
+- 下一步唯一动作：修复审计路由手工 422 的稳定错误码，并加严 AST 导入扫描。

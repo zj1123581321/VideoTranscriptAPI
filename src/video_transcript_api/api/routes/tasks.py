@@ -389,7 +389,8 @@ async def transcribe_video(
                     # _TERMINAL_WRITE_FAILURE_NOTE 到 detail，把这个不确定性
                     # 通过响应体这个请求边界暴露给调用方。
                     terminal_write_ok = _fail_task_after_creation(
-                        task_id, "任务队列已满，提交被拒绝",
+                        task_id,
+                        t("error.task_failure.transcription_queue_rejected"),
                         log_context="队列已满后写入 failed 终态失败",
                     )
                     raise ApiError(
@@ -451,7 +452,8 @@ async def transcribe_video(
                 # K1（CI review 第 3 轮 major）：清理写入若失败，追加
                 # _TERMINAL_WRITE_FAILURE_NOTE 到 detail。
                 terminal_write_ok = _fail_task_after_creation(
-                    task_id, f"任务加入队列失败: {queue_exc}",
+                    task_id,
+                    t("error.task_failure.transcription_queue_failed", error=str(queue_exc)),
                     log_context="任务加入队列失败后写入 failed 终态失败",
                 )
                 raise ApiError(
@@ -804,7 +806,8 @@ async def recalibrate(
             # K1（CI review 第 3 轮 major）：清理写入若失败，追加
             # _TERMINAL_WRITE_FAILURE_NOTE 到 detail。
             terminal_write_ok = _fail_task_after_creation(
-                task_id, f"转录数据格式化失败: {format_exc}",
+                task_id,
+                t("error.task_failure.recalibration_input_formatting_failed", error=str(format_exc)),
                 log_context="转录数据格式化失败后写入 failed 终态失败",
             )
             raise ApiError(
@@ -878,7 +881,8 @@ async def recalibrate(
             # 的 503；K1（CI review 第 3 轮 major）：清理写入若失败，追加
             # _TERMINAL_WRITE_FAILURE_NOTE 到 detail。
             terminal_write_ok = _fail_task_after_creation(
-                task_id, "LLM 队列已满，重新校对提交被拒绝",
+                task_id,
+                t("error.task_failure.recalibration_queue_rejected"),
                 log_context="LLM 队列已满后写入 failed 终态失败",
             )
             raise ApiError(
@@ -895,7 +899,8 @@ async def recalibrate(
             # review 第 3 轮 major）：清理写入若失败，追加
             # _TERMINAL_WRITE_FAILURE_NOTE 到 detail。
             terminal_write_ok = _fail_task_after_creation(
-                task_id, f"任务加入队列失败: {e}",
+                task_id,
+                t("error.task_failure.recalibration_queue_failed", error=str(e)),
                 log_context="任务加入队列失败后写入 failed 终态失败",
             )
             raise ApiError(
@@ -1111,7 +1116,8 @@ async def resummarize(
                 f"重新生成总结任务转录数据格式化失败: {task_id}, 错误: {format_exc}"
             )
             terminal_write_ok = _fail_task_after_creation(
-                task_id, f"转录数据格式化失败: {format_exc}",
+                task_id,
+                t("error.task_failure.resummary_input_formatting_failed", error=str(format_exc)),
                 log_context="转录数据格式化失败后写入 failed 终态失败",
             )
             raise ApiError(
@@ -1174,7 +1180,8 @@ async def resummarize(
         except queue.Full:
             logger.warning("LLM 队列已满，拒绝重新生成总结任务: {}", task_id)
             terminal_write_ok = _fail_task_after_creation(
-                task_id, "LLM 队列已满，重新生成总结提交被拒绝",
+                task_id,
+                t("error.task_failure.resummary_queue_rejected"),
                 log_context="LLM 队列已满后写入 failed 终态失败",
             )
             raise ApiError(
@@ -1185,7 +1192,8 @@ async def resummarize(
         except Exception as e:
             logger.error(f"重新生成总结任务加入队列失败: {e}")
             terminal_write_ok = _fail_task_after_creation(
-                task_id, f"任务加入队列失败: {e}",
+                task_id,
+                t("error.task_failure.resummary_queue_failed", error=str(e)),
                 log_context="任务加入队列失败后写入 failed 终态失败",
             )
             raise ApiError(
@@ -1445,7 +1453,7 @@ async def generate_notes(
             logger.warning("LLM 队列已满，拒绝详细笔记任务: {}", task_id)
             terminal_write_ok = _fail_task_after_creation(
                 task_id,
-                "LLM 队列已满，详细笔记提交被拒绝",
+                t("error.task_failure.notes_queue_rejected"),
                 log_context="LLM 队列已满后写入详细笔记 failed 终态失败",
             )
             raise ApiError(
@@ -1457,7 +1465,7 @@ async def generate_notes(
             logger.error(f"详细笔记任务加入队列失败: {exc}")
             terminal_write_ok = _fail_task_after_creation(
                 task_id,
-                f"详细笔记任务加入队列失败: {exc}",
+                t("error.task_failure.notes_queue_failed", error=str(exc)),
                 log_context="详细笔记任务加入队列失败后写入 failed 终态失败",
             )
             raise ApiError(
