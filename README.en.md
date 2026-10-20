@@ -254,7 +254,7 @@ Detailed documentation lives under [docs/](docs/) (currently written in Chinese)
 - **Architecture**: [System architecture and module breakdown](docs/architecture.md)
 - **Guides**: [Multi-channel notifications (WeCom + Feishu)](docs/guides/notification.md) · [Multi-user setup](docs/guides/multi_user_setup.md) · [MediaResolverAPI integration (Douyin/Xiaohongshu/WeChat Channels/X)](docs/guides/media_resolver.md)
 - **API guides**: [Error-code reference](docs/guides/api/error-codes.md) · [FunASR](docs/guides/api/funasr_spk_server_client_api.md) · [YouTube](docs/guides/api/youtube_client_guide.md) · [BBDown](docs/guides/api/bbdown_guide.md)
-- **Language configuration**: [Language switching and cache behavior](README.md#语言)
+- **Language configuration**: [Language switching and cache behavior](#language)
 - **Development**: [LLM engineering guide](docs/development/llm/engineering_guide.md) · [Concurrency](docs/development/concurrency.md) · [Logging](docs/development/logging.md)
 - **Features**: [Processing depth switches (processing_options)](docs/features/processing_options.md) · [Raw/page export](docs/features/raw_export.md) · [Download URL and metadata override](docs/features/source_url_and_metadata_override.md)
 

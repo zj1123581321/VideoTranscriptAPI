@@ -282,7 +282,7 @@ video-transcript-api/
 - **架构设计**：[系统架构与模块详解](docs/architecture.md)
 - **使用指南**：[多渠道通知（企微+飞书）](docs/guides/notification.md) · [多用户系统](docs/guides/multi_user_setup.md) · [MediaResolverAPI 集成（抖音/小红书/视频号/X）](docs/guides/media_resolver.md)
 - **API 指南**：[错误码参考](docs/guides/api/error-codes.md) · [FunASR](docs/guides/api/funasr_spk_server_client_api.md) · [YouTube](docs/guides/api/youtube_client_guide.md) · [BBDown](docs/guides/api/bbdown_guide.md)
-- **语言配置**：[语言切换与缓存行为](README.md#语言)
+- **语言配置**：[语言切换与缓存行为](#语言)
 - **开发文档**：[LLM 工程指南](docs/development/llm/engineering_guide.md) · [并发处理](docs/development/concurrency.md) · [日志系统](docs/development/logging.md)
 - **功能特性**：[处理深度开关（processing_options）](docs/features/processing_options.md) · [Raw/Page 导出](docs/features/raw_export.md) · [Download URL 与元数据覆盖](docs/features/source_url_and_metadata_override.md)
 
