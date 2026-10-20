@@ -20,30 +20,30 @@ git log --first-parent --merges vX.Y.Z..HEAD --format='%b'
 
 把素材人工整理成用户可见变更，写入 `CHANGELOG.md` 的新条目（Keep a Changelog 风格）。CHANGELOG 只回答「版本 → 用户可见变更」，不搬运 WORKLOG 或验收流水。
 
-### 2. 打 annotated tag
+### 2. 构建与部署
 
-CHANGELOG 条目经日常流程进主干后，在主干 HEAD（即本次发版提交）上打 annotated tag 并推送：
+CHANGELOG 条目经日常流程进主干后，先构建并部署。按现有镜像流程：`docker/push_to_ghcr.sh` 在干净工作树上构建并推送 `ghcr.io/zj1123581321/video-transcript-api:<sha12>`，随后 `docker/pull_and_deploy.sh <镜像引用>` 以不可变 digest 部署到目标机。
+
+### 3. 打 annotated tag
+
+服务确认正常、部署成功后再打 annotated tag 并推送；tag 落在部署所对应的主干提交上：
 
 ```sh
 git tag -a vA.B.C -m "vA.B.C"
 git push origin vA.B.C
 ```
 
-tag 命名固定 `v` 前缀 + 三段版本号，供下一次取材命令引用。
+tag 命名固定 `v` 前缀 + 三段版本号，供下一次取材命令引用。顺序不能反：tag 和 GitHub Release 都对外可见，先打就把一个尚未上线的版本公开了。
 
-### 3. 建 GitHub Release
+### 4. 建 GitHub Release
 
-仓库是 public，GitHub Releases 页对外可见。打完 tag 后由发版人手动建 Release：tag 名与 git tag 一致（`vA.B.C`），body 从 `CHANGELOG.md` 对应版本条目摘取（单一生成源，禁止另写一份）。把 `## [A.B.C]` 条目正文写入临时文件后执行：
+仓库是 public，GitHub Releases 页对外可见。部署成功并打完 tag 后由发版人手动建 Release：tag 名与 git tag 一致（`vA.B.C`），body 从 `CHANGELOG.md` 对应版本条目摘取（单一生成源，禁止另写一份）。把 `## [A.B.C]` 条目正文写入临时文件后执行：
 
 ```sh
 gh release create vA.B.C --title "vA.B.C" --notes-file notes.md
 ```
 
 临时文件用完即删，不要提交。
-
-### 4. 构建与部署
-
-按现有镜像流程：`docker/push_to_ghcr.sh` 在干净工作树上构建并推送 `ghcr.io/zj1123581321/video-transcript-api:<sha12>`，随后 `docker/pull_and_deploy.sh <镜像引用>` 以不可变 digest 部署到目标机。
 
 ## 两条红线
 

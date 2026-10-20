@@ -16,8 +16,13 @@ from .core.usage_context import set_context
 from .validators.unified_quality_validator import UnifiedQualityValidator
 from .processors.plain_text_processor import PlainTextProcessor
 from .processors.speaker_aware_processor import SpeakerAwareProcessor
-from .processors.summary_processor import SummaryProcessor, SummaryResult
+from .processors.summary_processor import (
+    SummaryProcessor,
+    SummaryResult,
+    effective_min_summary_threshold,
+)
 from .processors.chapters_processor import ChaptersProcessor, ChaptersResult
+from .processors.share_card_processor import ShareCardProcessor, ShareCardResult
 
 logger = setup_logger(__name__)
 
@@ -124,6 +129,13 @@ class LLMCoordinator:
             config=self.config,
         )
 
+        # 分享卡片文案处理器（og 大图卡片，卡 A；总结成功后的一次小调用，
+        # 模型复用 summary_model 配置，失败隔离不影响任务终态）
+        self.share_card_processor = ShareCardProcessor(
+            llm_client=self.llm_client,
+            config=self.config,
+        )
+
         logger.info("LLM Coordinator initialized successfully with summary support")
 
     def process(
@@ -184,6 +196,11 @@ class LLMCoordinator:
             {
                 "calibrated_text": str,        # 校对后的文本
                 "summary_text": Optional[str], # 总结文本（新增）
+                "share_card": Optional[dict],  # 分享卡片文案（仅本轮总结 GENERATED 后；
+                                               # 形如 {"version": 1, "headline": str,
+                                               # "points": [str, ...], "generated_at": str}）
+                "share_card_error": Optional[str],  # 卡片失败原因（card 为 None 时非空，
+                                               # 供 llm_ops 连同 task_id 记 error 日志）
                 "key_info": dict,              # 关键信息
                 "stats": dict,                 # 统计信息（含 chapters / chapters_status）
                 "structured_data": dict,       # 结构化数据（仅有说话人）
@@ -303,6 +320,23 @@ class LLMCoordinator:
                 "requested_model": selected_models.get("summary_model", "unknown"),
             }
 
+        # 步骤 3.5: 分享卡片文案生成（仅本轮总结 GENERATED 后；og 大图卡片，卡 A）。
+        # 失败隔离（设计不变式 2）：卡片失败不改变任务终态、不影响总结落盘，
+        # 失败原因随返回值带回，由 llm_ops 连同 task_id 记 error 日志。
+        share_card: Optional[Dict[str, Any]] = None
+        share_card_error: Optional[str] = None
+        if summary_status == SummaryStatus.GENERATED and summary_text:
+            with set_context(stage="share_card"):
+                share_card_result = self._generate_share_card_if_needed(
+                    summary_text=summary_text,
+                    title=title,
+                    author=author,
+                    platform=platform,
+                    selected_models=selected_models,
+                )
+            share_card = share_card_result.card
+            share_card_error = share_card_result.error
+
         # 步骤 4: 章节梗概生成（可跳过；与 summary 对称的诚实状态）
         # chapters_status 为 None 表示"本轮未尝试"，下游合并语义保留旧值。
         # 输入梯度（本轮 dialogs > 调用方传入的 timeline_segments）：
@@ -386,6 +420,8 @@ class LLMCoordinator:
         return {
             "calibrated_text": calibrated_text,
             "summary_text": summary_text,
+            "share_card": share_card,
+            "share_card_error": share_card_error,
             "key_info": calibration_result.get("key_info"),
             "stats": {
                 **calibration_stats_raw,
@@ -626,9 +662,10 @@ class LLMCoordinator:
             仍保留完整检查作为独立调用时的兜底，两者判定口径一致。
         """
         # 检查长度阈值（与 SummaryProcessor.process() 内部检查口径一致）
-        if len(text) < self.config.min_summary_threshold:
+        min_summary_threshold = effective_min_summary_threshold(self.config)
+        if len(text) < min_summary_threshold:
             logger.info(
-                f"Text too short for summary: {len(text)} < {self.config.min_summary_threshold}"
+                f"Text too short for summary: {len(text)} < {min_summary_threshold}"
             )
             return SummaryResult(text=None, status=SummaryStatus.SKIPPED_SHORT)
 
@@ -656,3 +693,46 @@ class LLMCoordinator:
         except Exception as e:
             logger.error(f"Summary generation failed: {e}", exc_info=True)
             return SummaryResult(text=None, status=SummaryStatus.FAILED)
+
+    def _generate_share_card_if_needed(
+        self,
+        *,
+        summary_text: str,
+        title: str,
+        author: str,
+        platform: str,
+        selected_models: Dict,
+    ) -> ShareCardResult:
+        """Generate share-card copy right after a GENERATED summary round.
+
+        Input gate (GENERATED + non-empty summary) is the caller's job;
+        this method only invokes ShareCardProcessor and, mirroring
+        _generate_chapters_if_needed, contains any unexpected exception so
+        a share-card failure can never flip the task's terminal status.
+
+        Args:
+            summary_text: This round's generated summary body.
+            title: Video title.
+            author: Author / channel.
+            platform: Platform identifier.
+            selected_models: Model selection dict (summary_model reuse).
+
+        Returns:
+            ShareCardResult with card=None + error reason on failure.
+        """
+        try:
+            result = self.share_card_processor.process(
+                summary_text=summary_text,
+                title=title,
+                author=author,
+                platform=platform,
+                selected_models=selected_models,
+            )
+            if result.error:
+                logger.warning(
+                    f"Share card generation did not produce a card: {result.error}"
+                )
+            return result
+        except Exception as e:
+            logger.error(f"Share card generation failed: {e}", exc_info=True)
+            return ShareCardResult(card=None, error=f"{type(e).__name__}: {e}")

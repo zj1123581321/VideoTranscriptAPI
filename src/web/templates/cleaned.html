@@ -1,47 +1,47 @@
 {% extends "base.html" %}
 
-{% block title %}内容已清理 - 视频转录查看器{% endblock %}
+{% block title %}{{ t('web.cleaned.title') }} - {{ t('web.viewer.default_title') }}{% endblock %}
 
 {% block content %}
     <div class="section">
         <div class="status-cleaned">
-            <h2 style="margin-top: 0;">⚠️ 内容已清理</h2>
-            <p>该转录任务的底层文件已被系统清理，无法显示详细转录内容。</p>
+            <h2 style="margin-top: 0;">{{ t('web.cleaned.heading') }}</h2>
+            <p>{{ t('web.cleaned.message') }}</p>
             
-            <h3>您可以：</h3>
+            <h3>{{ t('web.cleaned.you_can') }}</h3>
             <ul class="action-list">
                 {% if url %}
-                <li>📎 <a href="{{ url }}" target="_blank" rel="noopener">查看原始视频链接</a></li>
+                <li>📎 <a href="{{ url }}" target="_blank" rel="noopener">{{ t('web.cleaned.view_original') }}</a></li>
                 {% endif %}
-                <li>🔄 重新提交转录任务（将原始链接发送到API重新处理）</li>
+                <li>{{ t('web.cleaned.resubmit') }}</li>
             </ul>
             
             {% if created_at_display %}
             <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd;">
-                <strong>原始任务信息：</strong><br>
-                创建时间：{{ created_at_display }}
+                <strong>{{ t('web.cleaned.original_info') }}</strong><br>
+                {{ t('web.cleaned.created_at', time=created_at_display) }}
             </div>
             {% elif created_at %}
             <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd;">
-                <strong>原始任务信息：</strong><br>
-                创建时间：{{ created_at }}
+                <strong>{{ t('web.cleaned.original_info') }}</strong><br>
+                {{ t('web.cleaned.created_at', time=created_at) }}
             </div>
             {% endif %}
         </div>
     </div>
     
     <div class="section">
-        <h2>💡 如何重新获取转录</h2>
+        <h2>{{ t('web.cleaned.how_heading') }}</h2>
         <div class="content">
-            <p>如果您需要重新获取这个视频的转录内容，请：</p>
+            <p>{{ t('web.cleaned.how_intro') }}</p>
             <ol>
-                <li>复制上方的原始视频链接</li>
-                <li>使用API接口重新提交转录任务</li>
-                <li>等待处理完成后获取新的查看链接</li>
+                <li>{{ t('web.cleaned.how_step1') }}</li>
+                <li>{{ t('web.cleaned.how_step2') }}</li>
+                <li>{{ t('web.cleaned.how_step3') }}</li>
             </ol>
             
             <p style="color: #666; font-size: 0.9rem;">
-                由于存储空间限制，系统会定期清理较旧的转录文件。查看链接永久有效，但内容可能会被清理。
+                {{ t('web.cleaned.retention_note') }}
             </p>
         </div>
     </div>

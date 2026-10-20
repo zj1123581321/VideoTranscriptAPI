@@ -1,0 +1,4 @@
+{
+  "success": false,
+  "error": "All providers failed for platform 'twitter_space', video_id '1AKEmvYqbrOKL'. Errors: [ytdlp: twitter space replay unavailable: ERROR: [twitter] 1AKEmvYqbrOKL: The requested live replay is not available: replay is disabled]"
+}

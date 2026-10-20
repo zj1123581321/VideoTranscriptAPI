@@ -1,5 +1,7 @@
 # 视频转录 API (Video Transcript API)
 
+**中文** | [English](README.en.md)
+
 > 基于 Python 3.11+ 的异步视频转录服务，支持多平台下载、双引擎转录、智能文本处理和企业级功能集成。
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -55,6 +57,7 @@ uv sync
 # 配置服务
 cp config/config.example.jsonc config/config.jsonc
 # 编辑 config.jsonc，填写 api.auth_token、tikhub.api_key 等
+# 语言：顶层 language 取 "zh-CN"（默认）或 "en"，控制 Web 界面文案与总结/详细笔记/章节的输出语言；企业微信/飞书通知暂不随之切换
 # 可选：抖音/小红书改走 MediaResolverAPI 集中解析（微信视频号与 X 依赖该开关开启），设
 #   downloaders.use_media_resolver=true 并配置 media_resolver 段
 #   （使用指南：docs/guides/media_resolver.md）
@@ -84,15 +87,13 @@ docker compose up -d --build
 
 镜像内置 ffmpeg、BBDown、yt-dlp，无需额外安装。
 
-生产部署禁止使用 `latest`。构建脚本会拒绝包含已跟踪或未跟踪修改的脏工作区，只从干净提交以 12 位 Git SHA 生成唯一 tag；部署脚本拉取该 tag 后按同一镜像仓库解析并固定 registry digest。候选镜像会先运行 `--check-config`，失败时不重启当前服务，启动后健康检查失败则恢复上一个 digest：
+生产部署禁止向任何 registry 推送或使用可变 tag（含 `latest`）。构建脚本会拒绝脏工作区，只从干净提交以 12 位 Git SHA 生成唯一 tag 并推送 GHCR（公开镜像构建口，不部署）。部署机本地的 `video-transcript-api:latest` 不是 registry 可变 tag：它是 D3 部署脚本把 ACR 不可变 SHA 镜像 retag 后的本机别名，只存在于部署机，compose 与镜像对账认这个本地名，不入任何 registry。
 
 ```bash
 ./docker/push_to_ghcr.sh
-# 在 docker/deploy_targets.json 指定的 n305:/opt/media/VideoTranscriptAPI 上执行：
-./docker/pull_and_deploy.sh ghcr.io/zj1123581321/video-transcript-api:<git-sha>
 ```
 
-本仓库只提供部署能力；脚本不会自行 SSH 或自动上线。服务器首次运行会从 `docker/docker-compose.deploy.yml` 生成根目录 `docker-compose.yml`，配置文件位于 `<deploy-dir>/config/config.jsonc`，成功使用的 digest 记录在 `<deploy-dir>/.deploy-image`。同一项目目录的部署由 `.deploy.lock` 串行化；所有 Compose 操作固定使用部署根目录作为 project directory，并与候选预检加载同一份根目录 `.env`。重启前还会确认现有 Compose 文件确实把服务渲染为候选 digest。旧 Compose 不兼容时会先备份为 `docker-compose.yml.pre-digest.bak`，再迁移到仓库模板；候选失败回滚时会恢复原 Compose，并叠加仅覆盖镜像的配置把旧版本固定到记录的 digest。首次切换硬化脚本时，旧容器即使由 tag 启动也会先按原仓库解析为可回滚 digest；若旧镜像还没有 Docker `HEALTHCHECK`，回滚验证会改用容器内 `/livez` 探测。候选镜像启动失败、健康检查失败、启动后脚本被中断或成功 digest 状态文件无法原子提交时，脚本都会恢复旧 digest 并确认旧版本重新健康后才退出。
+生产部署由 D3 自动链路完成：push `main` 自动触发 `.github/workflows/deploy.yml`（构建 → ACR → n305 `/opt/media/VideoTranscriptAPI` → 健康探针 → 部署）；workflow 自身修复后用 `workflow_dispatch` 手动补发。部署细节与灾备兜底见 [docker/DEPLOY.md](docker/DEPLOY.md)；配置文件位于 `<deploy-dir>/config/config.jsonc`。
 
 > **注意**：CapsWriter ASR Server（协议 v2）与 FunASR 需单独部署，配置中的服务地址不能用 `localhost`，需改为宿主机 IP 或 `host.docker.internal`。协议说明见 [CapsWriter ASR 协议 v2](https://github.com/zlxlabs/CapsWriter-ASR-Server/blob/master/docs/reference/protocol.md)。
 

@@ -39,3 +39,51 @@ ssh n305 'docker exec -i video-transcript-api python - --cache-db /app/data/cach
 ## 边界与盲区
 
 旧 audit 快照没有 `created_at`、详细笔记状态或 tracker 汇总时，cache 里若仍有同一任务行，可补起点与终态快照字段；任务清理后无法倒推。无起点的历史行不归入任何查询窗口。CLI 不读取共享媒体 `llm_status` 来补任务历史。阶段结果只反映 PerfTracker 已接线的区间，不拆解 LLM 协调器内部子步骤；LLM 用量也不包含未写入 `llm_usage` 的调用。
+
+## 任务阶段进度（task_status.progress 契约）
+
+处理中任务（queued/processing/calibrating）的当前阶段由唯一入口发布：
+`utils/perf_tracker.py` 的 `PerfTracker.track` 阶段边界——进入阶段写入 running
+文档，退出写入 done/failed 并追加已完成区间；阶段异常退出时文档标 failed 并打
+含 `stage_progress_failed` 字面量的日志。入口经
+`CacheManager.stage_progress_sink(task_id)` 绑定落库（转录流程在
+`process_transcription` 创建 tracker 时注入，LLM worker 经交接 payload 复用同
+一个 tracker；详细笔记等独立 progress 契约的流程不注入，维持自身写入方）。
+新流程只要经 `tracker.track(...)` 新增阶段，无需任何展示层改动就会出现在
+`/view/<view_token>` 处理中页面上。
+
+进度 JSON 文档形状（发布名口径）：
+
+```json
+{
+  "stage": "download",
+  "stage_state": "running",
+  "started_at": "2026-10-19T15:30:00.123456+00:00",
+  "stages": [
+    {"stage": "url_parse", "elapsed_ms": 123.45, "state": "done"},
+    {"stage": "cache_check", "elapsed_ms": 45.6, "state": "done"}
+  ]
+}
+```
+
+- `stage`/`stage_state`/`started_at`：当前（或最近一个）阶段、其 running/done/failed
+  状态与进入时刻（UTC ISO，带时区）；阶段退出后 `started_at` 置空串。
+- `stages`：已退出阶段的有序区间，`elapsed_ms` 为该次区间耗时。
+- 主线发布名：`download`、`transcription`、`llm`（内部计时名仍是
+  `llm_processing`，经 `publish_as` 映射；被终态快照 observability 消费方锁死）、
+  `notes`。`url_parse`/`cache_check`/`metadata` 是瞬时阶段，同样经入口计时发布，
+  页面上归入「准备」，不单独成步。没有词表条目的新阶段以内部名直接上页。
+
+兼容契约：
+
+- 详细笔记（notes）：细粒度计数 `{"stage": "notes", "done": N, "total": M}` 由
+  notes worker 直接经 `CacheManager.update_task_progress` 写入（notes-only 任务
+  不经交接 tracker），`/api/task/{task_id}` 与处理中查看页在 notes 阶段运行期间
+  都能读到 `progress.done`/`progress.total`；`transcript.html` 前端轮询行为不变。
+- 终态黏性：`update_task_progress` 以 `status NOT IN ('success','failed')` 限定，
+  任务终态化后的迟到阶段写入不生效（返回 False，入口记 warning）。查看页以生命
+  周期状态为准，非终态才解析并展示 progress，终态任务不展示残留进度。
+- 展示：`ViewTokenResolver.get_view_data_by_token` 的 processing 分支把文档经
+  `build_stage_progress_display` 预渲染成 i18n 文本（`web.processing.*` 词表键，
+  中英双语），`processing.html` 的 `.stage-progress` 块只渲染最终文本；进行中
+  阶段的已进行时长由解析时刻与 `started_at` 差值计算，随 30 秒自动刷新更新。

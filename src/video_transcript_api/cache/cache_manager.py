@@ -12,6 +12,7 @@ import threading
 import time
 from ..utils.logging import setup_logger
 from ..utils.task_status import TaskStatus
+from ..llm.prompts.schemas.speaker_mapping import SPEAKER_MAPPING_SCHEMA_VERSION
 
 logger = setup_logger("cache_manager")
 
@@ -61,6 +62,71 @@ _SHUTDOWN_DRAIN_MIN_BUSY_TIMEOUT_MS = 50
 # 量级的 5 秒上限：真等满说明存在异常阻塞，跳过这一条留给下一轮周期清理重试，
 # 避免单条记录卡死整个清理任务（媒体锁不可用时的降级策略见 cleanup_old_cache）。
 _CLEANUP_MEDIA_LOCK_TIMEOUT_SECONDS = 5.0
+
+# Generation layers judged by artifact_provenance.language.
+# Calibration is intentionally absent: language mismatch must not rerun it.
+# Values are (get_cache payload key or None, on-disk filename).
+_GENERATION_LAYER_FILES = {
+    "summary": ("llm_summary", "llm_summary.txt"),
+    "notes": ("llm_notes", "llm_notes.txt"),
+    "chapters": ("llm_chapters", "llm_chapters.json"),
+}
+
+
+def generation_layer_language(layer_record: Any) -> str:
+    """Return the language stamped on a provenance layer record.
+
+    A missing or empty ``language`` field is treated as ``zh-CN`` so legacy
+    artifacts keep their original Chinese meaning without a migration.
+    """
+    if not isinstance(layer_record, dict):
+        return "zh-CN"
+    language = layer_record.get("language")
+    if not isinstance(language, str) or not language:
+        return "zh-CN"
+    return language
+
+
+def language_mismatched_generation_layers(
+    cache_data: Optional[Dict[str, Any]],
+    current_language: Optional[str] = None,
+) -> List[Tuple[str, str, str]]:
+    """Return ``(layer, old_language, new_language)`` for generation layers to redo.
+
+    A layer is a candidate when its payload is in ``cache_data``, its file
+    exists on disk, or it already has a provenance record. Missing language is
+    treated as zh-CN. Calibration is never included. Does not mutate cache_data:
+    view pages keep showing the old-language artifact until it is regenerated.
+    """
+    from ..i18n import get_language
+
+    if current_language is None:
+        current_language = get_language()
+    if not isinstance(cache_data, dict):
+        return []
+    status = cache_data.get("llm_status")
+    layers: Dict[str, Any] = {}
+    if isinstance(status, dict):
+        provenance = status.get("artifact_provenance")
+        if (
+            isinstance(provenance, dict)
+            and provenance.get("schema_version") == "artifact-provenance-v1"
+            and isinstance(provenance.get("layers"), dict)
+        ):
+            layers = provenance["layers"]
+    cache_path = Path(cache_data["file_path"]) if cache_data.get("file_path") else None
+    mismatches: List[Tuple[str, str, str]] = []
+    for layer_name, (cache_key, filename) in _GENERATION_LAYER_FILES.items():
+        in_payload = cache_key is not None and cache_key in cache_data
+        on_disk = bool(cache_path and (cache_path / filename).exists())
+        record = layers.get(layer_name)
+        if not in_payload and not on_disk and not isinstance(record, dict):
+            continue
+        old_language = generation_layer_language(record)
+        if old_language != current_language:
+            mismatches.append((layer_name, old_language, current_language))
+    return mismatches
+
 
 class CacheManager:
     """
@@ -1659,8 +1725,12 @@ class CacheManager:
             payload = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(payload, dict):
                 return None
+            # schema v1（confidence 门控产物）仍可读：指纹不匹配时自然 miss
+            # （v1 的指纹是旧算法值），不会错误复用；schema v2（证据裁决）
+            # 是当前写侧唯一版本。v1 result 的重放语义（旧 confidence 门控
+            # 重判）由 SpeakerInferencer._normalize_cached_result 按形状分叉。
             if (
-                payload.get("schema_version") != 1
+                payload.get("schema_version") not in (1, SPEAKER_MAPPING_SCHEMA_VERSION)
                 or payload.get("input_fingerprint") != input_fingerprint
                 or set(payload.get("speakers") or []) != set(speakers)
                 or payload.get("source") != "llm"
@@ -1712,7 +1782,7 @@ class CacheManager:
             path = artifact_dir / "speaker_mapping.json"
             temp_path = artifact_dir / f".{path.name}.{uuid.uuid4().hex}.tmp"
             payload = {
-                "schema_version": 1,
+                "schema_version": SPEAKER_MAPPING_SCHEMA_VERSION,
                 "input_fingerprint": input_fingerprint,
                 "speakers": list(speakers),
                 "source": source,
@@ -2021,8 +2091,9 @@ class CacheManager:
             artifact_provenance: 校对/总结来源记录；None 表示不更新，空字典表示清除
                 整个可选记录，非空字典在同一次原子状态写入中替换旧记录
             chapters_error: 章节层失败原因原文（ChaptersResult.error），None 表示
-                不更新；此外 chapters_status=generated 时无论是否传入都会强制
-                清空旧 chapters_error（见下方合并逻辑注释）
+                不更新；此外 chapters_status 为正常终态（generated/skipped_short/
+                skipped_no_timeline/disabled）时无论是否传入都会强制清空旧
+                chapters_error（见下方合并逻辑注释）
 
         Returns:
             dict: 锁内完成写入后的完整合并快照
@@ -2061,13 +2132,18 @@ class CacheManager:
                     existing['chapters_status'] = chapters_status
                 if chapters_error is not None:
                     existing['chapters_error'] = chapters_error
-                # GENERATED 蕴含本轮无失败：显式清空历史失败原因。不能只靠
-                # 「非 None 才更新」的合并语义——从 FAILED 补跑 GENERATED 时
-                # 本轮 error 为 None，旧失败原因会残留，制造「已生成却显示
-                # 旧错误」的静默错。放在 error 写入之后：即使 caller 在
-                # generated 状态下误传了 error 也会被清掉，不变式
-                # 「generated ⇒ 无 chapters_error」集中锁在这一处。
-                if chapters_status == "generated":
+                # 正常终态蕴含本轮无失败：显式清空历史失败原因。不能只靠
+                # 「非 None 才更新」的合并语义——从 FAILED 补跑正常终态时
+                # 本轮 error 为 None，旧失败原因会残留，制造「已生成/跳过/禁用却
+                # 显示旧错误」的静默错。pending、failed 及未触碰章节保留已有合并语义。
+                # 放在 error 写入之后：即使 caller 在正常终态下误传了 error 也会被清掉，
+                # 不变式「正常终态 ⇒ 无 chapters_error」集中锁在这一处。
+                if chapters_status in (
+                    "generated",
+                    "skipped_short",
+                    "skipped_no_timeline",
+                    "disabled",
+                ):
                     existing.pop('chapters_error', None)
                 if notes_status is not None:
                     existing['notes_status'] = notes_status
@@ -3143,24 +3219,22 @@ class CacheManager:
             )
 
     def update_task_progress(self, task_id: str, progress: dict) -> bool:
-        """更新任务进度；进度是从属元数据，绝不参与状态机。
-
-        该方法只更新 task_status.progress，不修改 status、completed_at 或
-        terminal_snapshot。
-        """
+        """仅更新非终态任务的 progress 元数据，不改变生命周期字段。"""
         try:
-            progress_json = json.dumps(
-                progress, ensure_ascii=False, sort_keys=True
-            )
+            progress_json = json.dumps(progress, ensure_ascii=False, sort_keys=True)
             with self._get_cursor() as cursor:
                 cursor.execute(
-                    "UPDATE task_status SET progress = ? WHERE task_id = ?",
+                    "UPDATE task_status SET progress = ? WHERE task_id = ? "
+                    "AND status NOT IN ('success', 'failed')",
                     (progress_json, task_id),
                 )
                 return cursor.rowcount == 1
         except Exception as e:
             logger.error(f"更新任务进度失败: {e}")
             raise
+
+    def stage_progress_sink(self, task_id: str) -> Callable[[dict], bool]:
+        return lambda progress: self.update_task_progress(task_id, progress)
 
     def get_non_terminal_task_ids(self) -> frozenset:
         """返回 task_status 表当前处于非终态（queued/processing/calibrating）

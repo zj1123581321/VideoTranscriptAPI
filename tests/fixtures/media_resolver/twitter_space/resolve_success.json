@@ -1,0 +1,28 @@
+{
+  "success": true,
+  "data": {
+    "platform": "twitter_space",
+    "video_id": "1AKEmvYqbrOKL",
+    "title": "Space 回放样本",
+    "description": "",
+    "translated_description": null,
+    "translation_status": null,
+    "author_name": "space-host",
+    "author_id": "1234567890",
+    "video_url": "http://resolver.local:8000/api/stream/twitter_space/1AKEmvYqbrOKL",
+    "media_type": "audio",
+    "width": 0,
+    "height": 0,
+    "duration": null,
+    "quality": null,
+    "variants": null,
+    "view_count": null,
+    "like_count": null,
+    "comment_count": null,
+    "share_count": null,
+    "collect_count": null,
+    "create_time": null,
+    "publish_time": "",
+    "provider": "ytdlp"
+  }
+}

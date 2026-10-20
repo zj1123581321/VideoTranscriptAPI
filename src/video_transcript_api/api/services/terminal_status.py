@@ -40,6 +40,7 @@ import threading
 from typing import Any, Dict, Optional
 
 from ..context import get_cache_manager, get_logger, lazy_resource
+from ...utils.busy_lock import release_for_task
 from ...utils.notifications import get_notification_router, slow_alert
 from ...utils.task_status import TaskStatus
 
@@ -83,22 +84,28 @@ def finalize_terminal_status_and_notify(
     Pass defer_delivery=True to persist the outbox row without inline delivery;
     the caller must deliver it after any content notification.
     """
-    # 先取消计时再写终态，且不论 CAS 成败都执行。到点回调持有同一把锁
-    # 完成 ⏳ 入队，因此若回调先拿锁，⏳ 必先于终态写入及终态通知入队。
-    slow_alert.cancel_all(task_id)
+    try:
+        # 先取消计时再写终态，且不论 CAS 成败都执行。到点回调持有同一把锁
+        # 完成 ⏳ 入队，因此若回调先拿锁，⏳ 必先于终态写入及终态通知入队。
+        slow_alert.cancel_all(task_id)
 
-    if cache_manager is None:
-        cache_manager = get_cache_manager()
+        if cache_manager is None:
+            cache_manager = get_cache_manager()
 
-    written = cache_manager.update_task_status(
-        task_id,
-        status,
-        error_message=error_message,
-        title=title,
-        author=author,
-        suppress_terminal_notification=suppress_terminal_notification,
-        **update_kwargs,
-    )
+        written = cache_manager.update_task_status(
+            task_id,
+            status,
+            error_message=error_message,
+            title=title,
+            author=author,
+            suppress_terminal_notification=suppress_terminal_notification,
+            **update_kwargs,
+        )
+    except BaseException:
+        # 终态未能写入的异常路径兜底：忙锁不得跨过本函数泄漏，原样上抛。
+        release_for_task(task_id)
+        raise
+
     if not written:
         current_task = cache_manager.get_task_by_id(task_id)
         current_status = current_task.get("status") if current_task else "unknown"
@@ -106,33 +113,44 @@ def finalize_terminal_status_and_notify(
             f"terminal CAS lost (task already {current_status}), "
             f"skip status notify: {task_id}"
         )
+        release_for_task(task_id)
         return False
 
-    logger.info(f"terminal CAS won: {task_id} -> {status}")
+    try:
+        logger.info(f"terminal CAS won: {task_id} -> {status}")
 
-    if suppress_terminal_notification:
-        logger.debug(
-            f"caller suppressed terminal status notification at write time: {task_id}"
-        )
+        # 终态已落库：忙锁在通知投递前释放（gate 第 9 轮）——投递及其重试队列
+        # 不该占着忙锁拉长部署侧排他锁的等待。此点之后任何路径都不再持有该锁；
+        # 投递失败由 deliver_terminal_notification 自行记录，不吞、不回滚。
+        release_for_task(task_id)
+
+        if suppress_terminal_notification:
+            logger.debug(
+                f"caller suppressed terminal status notification at write time: {task_id}"
+            )
+            return True
+
+        if not defer_delivery:
+            deliver_terminal_notification(
+                task_id,
+                status,
+                error_message=error_message,
+                url=url,
+                title=title,
+                author=author,
+                notify_status=notify_status,
+                notify_error=notify_error,
+                channel_name=channel_name,
+                webhooks=webhooks,
+                cache_manager=cache_manager,
+                router=router,
+                notify_via=notify_via,
+            )
         return True
-
-    if not defer_delivery:
-        deliver_terminal_notification(
-            task_id,
-            status,
-            error_message=error_message,
-            url=url,
-            title=title,
-            author=author,
-            notify_status=notify_status,
-            notify_error=notify_error,
-            channel_name=channel_name,
-            webhooks=webhooks,
-            cache_manager=cache_manager,
-            router=router,
-            notify_via=notify_via,
-        )
-    return True
+    finally:
+        # 终态 CAS 成功后异常路径幂等兜底（gate 第 11 轮）：
+        # 任何 post-CAS 异常都不可能永久持锁；首释放生效后此兜底为 no-op。
+        release_for_task(task_id)
 
 
 def deliver_terminal_notification(

@@ -2,10 +2,65 @@ import html
 import re
 import json
 import os
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from ..logging import setup_logger
+from ...i18n import t
 
 logger = setup_logger("dialog_renderer")
+
+# Legacy placeholder names for history data that has no applied flag.
+# New artefacts are classified by speaker_inference_meta[label].applied.
+_PLACEHOLDER_SPEAKER_RE = re.compile(r"^(?:说话人\d+|Speaker \d+)$")
+
+
+def _speaker_meta_entry(
+    speaker_meta: Any,
+    dialog: Dict,
+    display_speaker: Any,
+) -> Optional[Dict]:
+    """Return the per-label inference dict, or None for legacy/empty meta."""
+    if not isinstance(speaker_meta, dict):
+        return None
+    keys: List[Any] = []
+    for key in (dialog.get("speaker_id"), dialog.get("speaker"), display_speaker):
+        if key is None or key == "":
+            continue
+        keys.append(key)
+        key_str = str(key)
+        if key_str != key:
+            keys.append(key_str)
+    seen = set()
+    for key in keys:
+        if key in seen:
+            continue
+        seen.add(key)
+        details = speaker_meta.get(key)
+        if isinstance(details, dict) and (
+            "applied" in details or "confidence" in details
+        ):
+            return details
+    return None
+
+
+def _is_unconfirmed_speaker(display_speaker: Any, details: Optional[Dict]) -> bool:
+    """Pending badge: applied flag first, placeholder regex only for old data."""
+    if isinstance(details, dict) and "applied" in details:
+        return not bool(details.get("applied"))
+    return bool(display_speaker) and bool(
+        _PLACEHOLDER_SPEAKER_RE.match(str(display_speaker))
+    )
+
+
+def _confidence_level_label(confidence: Any, unconfirmed: bool) -> str:
+    if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
+        if confidence >= 0.8:
+            return t("render.confidence.reliable")
+        if confidence >= 0.6:
+            return t("render.confidence.ai")
+        return t("render.confidence.pending")
+    if unconfirmed:
+        return t("render.confidence.pending")
+    return t("render.confidence.ai")
 
 
 class DialogRenderer:
@@ -457,8 +512,8 @@ class DialogRenderer:
             if speaker_risk_flags:
                 html_parts.append(
                     '<div class="speaker-risk-warning" role="alert">'
-                    "本集说话人区分可能不准"
-                    "</div>"
+                    + t("render.speaker.risk_warning")
+                    + "</div>"
                 )
 
             # Enumerate over the original dialogs list so start_seg / #dlg-{i}
@@ -529,44 +584,35 @@ class DialogRenderer:
                     html_parts.append(anchor_html)
 
                 if display_speaker:
+                    details = _speaker_meta_entry(
+                        speaker_meta, dialog, display_speaker
+                    )
+                    unconfirmed = _is_unconfirmed_speaker(display_speaker, details)
                     pending_badge = ""
-                    if re.match(r"^说话人\d+$", str(display_speaker)):
+                    if unconfirmed:
                         pending_badge = (
                             '<span class="speaker-status-badge speaker-pending" '
-                            'data-speaker-status="pending">待确认</span>'
+                            'data-speaker-status="pending">'
+                            + t("render.speaker.pending")
+                            + "</span>"
                         )
                     override_badge = ""
                     if override:
                         status = str(override.get("status") or "").lower()
                         if status in {"confirmed", "suspect"}:
-                            status_text = "已确认" if status == "confirmed" else "待核实"
+                            status_text = (
+                                t("render.speaker.confirmed")
+                                if status == "confirmed"
+                                else t("render.speaker.suspect")
+                            )
                             override_badge = (
                                 f'<span class="speaker-override-status speaker-override-{status}" '
                                 f'data-override-status="{status}">{status_text}</span>'
                             )
                     confidence = None
-                    if isinstance(speaker_meta, dict):
-                        details = speaker_meta.get(dialog.get("speaker_id"))
-                        if not details:
-                            details = speaker_meta.get(speaker)
-                        if isinstance(details, dict):
-                            confidence = details.get("confidence")
-                    if isinstance(confidence, (int, float)) and not isinstance(
-                        confidence, bool
-                    ):
-                        level = (
-                            "较可靠"
-                            if confidence >= 0.8
-                            else "AI 推断"
-                            if confidence >= 0.6
-                            else "待确认"
-                        )
-                    else:
-                        level = (
-                            "待确认"
-                            if re.match(r"^说话人\d+$", str(display_speaker))
-                            else "AI 推断"
-                        )
+                    if isinstance(details, dict):
+                        confidence = details.get("confidence")
+                    level = _confidence_level_label(confidence, unconfirmed)
                     header_html = f"""
                     <div class="speaker-header">
                         <div class="speaker-tag" title="{level}" data-confidence-level="{level}" style="background-color: {color};">
@@ -702,7 +748,7 @@ class DialogRenderer:
                 else:
                     logger.warning("无缓存且无fallback文本，返回空内容")
                     return (
-                        '<p style="color: #666; font-style: italic;">无可用文本内容</p>'
+                        f'<p style="color: #666; font-style: italic;">{t("render.empty")}</p>'
                     )
 
         except Exception as e:
@@ -711,7 +757,7 @@ class DialogRenderer:
             if fallback_text:
                 return self._render_normal_text(fallback_text)
             else:
-                return '<p style="color: #666;">渲染失败，无法显示内容</p>'
+                return f'<p style="color: #666;">{t("render.failed")}</p>'
 
     def render_calibrated_content_smart(
         self,

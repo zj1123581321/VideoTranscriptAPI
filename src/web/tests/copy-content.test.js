@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
+import { installI18n } from './install-i18n.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const baseTemplateSource = fs.readFileSync(
@@ -43,6 +44,7 @@ function createCopyFixture(markup, copyHelper) {
     url: 'https://example.test/view/token',
   });
   dom.window.setTimeout = vi.fn();
+  installI18n(dom.window);
   dom.window.eval(copyScriptSource);
   dom.window.copyTextToClipboard = copyHelper;
   dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));

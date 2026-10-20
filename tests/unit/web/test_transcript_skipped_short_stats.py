@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import jinja2
+from video_transcript_api.utils.rendering.i18n_jinja import install_i18n
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 TEMPLATES_DIR = PROJECT_ROOT / "src" / "web" / "templates"
@@ -13,6 +14,7 @@ def _render(**overrides) -> str:
     loader=jinja2.FileSystemLoader(str(TEMPLATES_DIR)),
     autoescape=True,
   )
+  install_i18n(env)
   ctx = {
     "title": "Sample",
     "author": "Author",

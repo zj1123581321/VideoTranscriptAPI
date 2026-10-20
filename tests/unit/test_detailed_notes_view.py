@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import jinja2
+from video_transcript_api.utils.rendering.i18n_jinja import install_i18n
 import pytest
 
 from video_transcript_api.api.routes.views import (
@@ -440,6 +441,7 @@ def _render_notes_template(**overrides):
         loader=jinja2.FileSystemLoader(str(TEMPLATES_DIR)),
         autoescape=True,
     )
+    install_i18n(environment)
     context = {
         "title": "Demo",
         "author": "Owner",

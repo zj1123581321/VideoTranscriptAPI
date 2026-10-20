@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}处理中 - 视频转录查看器{% endblock %}
+{% block title %}{{ t('web.processing.title') }} - {{ t('web.viewer.default_title') }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -25,10 +25,26 @@
     <div class="section">
         <div class="status-processing">
             <div class="spinner"></div>
-            <h2 style="text-align: center; margin: 20px 0;">⏳ 转录处理中...</h2>
+            <h2 style="text-align: center; margin: 20px 0;">{{ t('web.processing.heading') }}</h2>
             <p style="text-align: center; color: #666;">
-                视频转录任务正在进行中，请稍后刷新页面查看结果。
+                {{ t('web.processing.message') }}
             </p>
+            {% if stage_progress %}
+            <div class="stage-progress" style="text-align: center; margin: 16px auto; max-width: 480px;">
+                <p style="font-weight: 600; margin: 8px 0;">{{ stage_progress.current_line }}</p>
+                {% if stage_progress.notes_line %}
+                <p style="color: #666; margin: 4px 0;">{{ stage_progress.notes_line }}</p>
+                {% endif %}
+                {% if stage_progress.completed_items %}
+                <p style="color: #666; margin: 12px 0 4px 0;">{{ stage_progress.completed_header }}</p>
+                <ul style="list-style: none; padding: 0; margin: 0; color: #666;">
+                    {% for item in stage_progress.completed_items %}
+                    <li style="margin: 2px 0;">{{ item }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            {% endif %}
             <p style="text-align: center; margin-top: 20px;">
                 <button onclick="window.location.reload()" style="
                     background: #2196f3;
@@ -38,17 +54,17 @@
                     border-radius: 4px;
                     cursor: pointer;
                     font-size: 1rem;
-                ">🔄 刷新页面</button>
+                ">{{ t('web.processing.refresh') }}</button>
             </p>
         </div>
         
         {% if created_at_display %}
         <p style="color: #666; text-align: center; margin-top: 20px;">
-            任务创建时间：{{ created_at_display }}
+            {{ t('web.processing.created_at', time=created_at_display) }}
         </p>
         {% elif created_at %}
         <p style="color: #666; text-align: center; margin-top: 20px;">
-            任务创建时间：{{ created_at }}
+            {{ t('web.processing.created_at', time=created_at) }}
         </p>
         {% endif %}
     </div>
@@ -56,9 +72,8 @@
 
 {% block extra_js %}
 <script>
-    // 自动刷新页面
     setTimeout(function() {
         window.location.reload();
-    }, 30000); // 30秒后自动刷新
+    }, 30000);
 </script>
 {% endblock %}

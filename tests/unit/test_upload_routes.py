@@ -5,7 +5,10 @@ import sqlite3
 import uuid
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+from video_transcript_api.api.context import install_api_error_handlers
 from video_transcript_api.api.routes import uploads
 from video_transcript_api.api.routes.uploads import decode_upload_metadata
 from video_transcript_api.cache.cache_manager import CacheManager
@@ -16,15 +19,28 @@ def encode_metadata(payload):
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
-def test_rejection_log_has_grepable_upload_intake_event(monkeypatch):
+def test_disabled_upload_route_logs_grepable_intake_rejection(monkeypatch):
     observed = []
     monkeypatch.setattr(uploads.logger, "warning", lambda *args: observed.append(args))
+    monkeypatch.setattr(uploads, "get_config", lambda: {})
+    monkeypatch.setenv("VTA_UPLOADS_ENABLED", "false")
 
-    exception = uploads._reject(413, "declared_size", "too large")
+    app = FastAPI()
+    install_api_error_handlers(app)
+    app.include_router(uploads.router)
+    app.dependency_overrides[uploads.verify_token] = lambda: {"user_id": "test-user"}
 
-    assert exception.status_code == 413
+    response = TestClient(app).post(
+        "/api/uploads",
+        headers={"content-type": "application/octet-stream"},
+        content=b"",
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error_code"] == "upload_disabled_or_not_ready"
+    assert isinstance(response.json()["detail"], str)
     assert observed == [
-        ("UPLOAD_INTAKE_REJECTED reason={} status={}", "declared_size", 413)
+        ("UPLOAD_INTAKE_REJECTED reason={} status={}", "disabled_or_not_ready", 503)
     ]
 
 

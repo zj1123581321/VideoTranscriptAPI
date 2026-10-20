@@ -1,11 +1,34 @@
 # 部署流程与入口链路
 
-镜像构建与部署由两个脚本完成：
+## D3 自动部署（主链路）
 
-- `push_to_ghcr.sh`：从干净主干构建 `ghcr.io/<owner>/video-transcript-api:<主干12位短SHA>` 并推送到 GHCR。
-- `pull_and_deploy.sh`：在部署机上按**不可变 digest** 部署——先跑配置预检（`main.py --check-config`），再替换容器并等待健康检查，失败自动回滚到上一 digest；状态记录在部署目录 `.deploy-image`。
+push `main` 后自动完成构建与部署：`.github/workflows/deploy.yml` 调用 `zlxlabs/ci-templates` 的 `build-deploy.yml@v2`（self-hosted runner）：构建镜像（`docker/Dockerfile`，构建上下文为仓根）→ 推送 ACR（不可变 12 位短 SHA tag）→ SSH 到 n305 → 健康探针通过后在部署目录 `/opt/media/VideoTranscriptAPI` 按本地 tag `video-transcript-api:latest` 切换容器，探针失败自动回滚上一健康版本。`paths-ignore` 排除 `**.md`、`docs/**`、`.github/**`——只改文档或 CI 不扇出生产部署；workflow 自身修复后用 `workflow_dispatch` 手动补发。
 
-部署目标（服务器别名与目录）记录在 `docker/deploy_targets.json`；入口地址、Tailscale 直连信息等基础设施细节维护在私有部署记忆中，不写入本公开仓。
+- 健康探针用 `http://localhost:8200/livez`（宿主 8200 → 容器 8000），不用 `/health`：`/livez` 是纯存活探针、恒 200、不依赖下游，专为部署探针设计；`/health` 的深度检查依赖转写后端等下游服务，下游抖动会把健康的新版本误判为不健康并触发无谓回滚。
+- 在飞任务保护（忙锁门禁）已在 workflow 启用（`busy_lock_file` 指向部署目录 `.deploy-state/busy.lock`，超时 600s 延期）：服务侧 BusyLock 只读打开部署侧预建的锁文件并持共享 flock（服务侧永不自建锁文件——自建文件落在容器层时与宿主部署锁不同 inode，互斥静默失效），锁基础设施异常一律 fail-closed 拒绝新任务（HTTP 503），不存在「锁文件缺失自动创建后门禁空转」的降级路径——宿主锁文件缺失时 deploy.yml 的 pre-flight 对账即失败，自动部署 fail-closed 延期、人工介入（首次人工部署步骤含 `touch busy.lock`）；事后对账失败还会自动回滚到 `.deploy-state/last_verified_good` 记录的最近验证好镜像。部署窗口仍建议确认无长转写任务（事故背景：2026-10-15 手动部署打断在飞转写任务）。
+- 部署目录的 compose 必须与本仓种子同形态（本地 tag）：ci-templates 部署脚本从 ACR 拉取不可变 SHA 镜像后在本机 retag 成 `video-transcript-api:latest`，镜像对账也认这个本地名；旧的 digest-env 形态（registry digest env 占位）与之不兼容，首次自动部署前需先确认部署目录已换成本仓种子。
+
+## 旧手动链路（已退役）
+
+接入 D3 前的手动部署脚本 `docker/pull_and_deploy.sh` 已于 2026-10-15 删除：它以同目录种子为模板做部署目录自迁移，要求 digest-env 形态，与 D3 的本地 tag 形态种子互斥，D3 上位后失去存在意义（锁旧脚本行为的测试随退）。`docker/push_to_ghcr.sh` 保留，仅作 ghcr 公开镜像构建口：从干净主干构建 `ghcr.io/<owner>/video-transcript-api:<主干12位短SHA>` 并推送，不部署。
+
+自动链路不可用时的灾备兜底（在部署目录手工执行，不再依赖仓内脚本；部署目标见 `docker/deploy_targets.json`）。灾备同样尊重忙锁、使用排他锁，超时失败属预期（等在飞任务清空而非强行恢复，避免打断转写）。
+
+日常灾备直接重建容器（compose 用宿主已有的本地 tag `video-transcript-api:latest`，该 tag 由每次 D3 部署 retag 维持；**不要用 `docker compose pull`**——本地 tag 形态下它会去 registry 找名为 `video-transcript-api` 的镜像，不存在）：
+
+```bash
+flock -w 600 -x .deploy-state/busy.lock -c "docker compose up -d"
+```
+
+需要钉定版本时，从 ACR 手动拉取指定 SHA 并 retag 到本地 tag（ACR 全路径 = ci-templates 默认 registry/namespace + `image_name`，与本卡 deploy.yml 的实际值一致），同样带忙锁：
+
+```bash
+docker pull crpi-0vsre5argteykh9m.cn-guangzhou.personal.cr.aliyuncs.com/zlx-personal/video-transcript-api:<git-sha> \
+  && docker tag crpi-0vsre5argteykh9m.cn-guangzhou.personal.cr.aliyuncs.com/zlx-personal/video-transcript-api:<git-sha> video-transcript-api:latest \
+  && flock -w 600 -x .deploy-state/busy.lock -c "docker compose up -d"
+```
+
+入口地址、Tailscale 直连信息等基础设施细节维护在私有部署记忆中，不写入本公开仓。
 
 ## 入口分层与 Cloudflare 请求体上限
 

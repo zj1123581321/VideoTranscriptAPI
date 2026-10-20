@@ -120,6 +120,11 @@ test('upload page selects local media, submits raw bytes with metadata headers, 
     },
   });
 
+  // Assert UI feedback shows accepted receipt
+  await expect(page.locator('#status-content')).toContainText('文件上传成功，任务已受理！');
+  await expect(page.locator('#status-content')).toContainText('上传ID:');
+  await expect(page.locator('#status-content a[href^="/view/"]')).toBeVisible();
+
   // Assert actual raw body bytes captured by browser server fixture
   const lastUploadRes = await request.get(`${baseURL}/__e2e__/last-upload`);
   expect(lastUploadRes.status()).toBe(200);
@@ -128,11 +133,6 @@ test('upload page selects local media, submits raw bytes with metadata headers, 
   expect(lastUpload.raw_bytes_sha256).toBe(expectedSha256);
   expect(lastUpload.filename).toBe('测试音频.mp3');
   expect(lastUpload.byte_size).toBe(fileBytes.length);
-
-  // Assert UI feedback shows accepted receipt
-  await expect(page.locator('#status-content')).toContainText('文件上传成功，任务已受理！');
-  await expect(page.locator('#status-content')).toContainText('上传ID:');
-  await expect(page.locator('#status-content a[href^="/view/"]')).toBeVisible();
 });
 
 test('upload page prevents double submission on duplicate clicks', async ({ page }) => {
@@ -204,7 +204,12 @@ test('history page filters upload tasks, displays retention and share state, and
   const stopShareBtn = row.locator('.btn-stop-share');
   await expect(stopShareBtn).toBeVisible();
   const token = await row.getAttribute('data-vt');
-  expect(token).toBeTruthy();
+  const otherRow = page.locator('.task-row').nth(1);
+  await expect(otherRow.locator('.task-title')).toContainText('浏览器本地上传样本');
+  const otherToken = await otherRow.getAttribute('data-vt');
+  const uploadId = await stopShareBtn.getAttribute('data-upload-id');
+  const uploadKey = (await (await request.get(`${baseURL}/__e2e__/last-upload`)).json()).idempotency_key;
+  expect(token && otherToken && uploadId).toBeTruthy();
 
   // Set up dialog confirmation
   page.once('dialog', async (dialog) => {
@@ -212,8 +217,39 @@ test('history page filters upload tasks, displays retention and share state, and
     await dialog.accept();
   });
 
-  // Click stop share button
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  const summaryRequests = new Map<string, number>();
+  page.on('request', (item) => {
+    const url = new URL(item.url());
+    if (item.method() === 'GET' && url.pathname === '/api/audit/summary') {
+      const viewToken = url.searchParams.get('view_token') ?? '';
+      summaryRequests.set(viewToken, (summaryRequests.get(viewToken) ?? 0) + 1);
+    }
+  });
+  let releaseDelete!: () => void, markDeleteStarted!: () => void;
+  const deleteGate = new Promise<void>((resolve) => { releaseDelete = resolve; });
+  const deleteStarted = new Promise<void>((resolve) => { markDeleteStarted = resolve; });
+  await page.route(`**/api/uploads/${uploadId}/share`, async (route) => {
+    markDeleteStarted();
+    await deleteGate;
+    await route.continue();
+  });
+  const otherSummary = page.waitForResponse((response) => response.request().method() === 'GET'
+    && new URL(response.url()).pathname === '/api/audit/summary', { timeout: 2_000 }).catch(() => null);
+  const revokeResponse = page.waitForResponse((response) =>
+    response.request().method() === 'DELETE' && new URL(response.url()).pathname === `/api/uploads/${uploadId}/share`);
   await stopShareBtn.click();
+  await deleteStarted;
+  await otherRow.hover();
+  releaseDelete();
+  expect((await revokeResponse).status()).toBe(200);
+  await page.clock.fastForward(301);
+  expect((await otherSummary)?.status()).toBe(200);
+  expect(summaryRequests.get(token ?? '') ?? 0).toBe(0);
+  expect(summaryRequests.get(otherToken ?? '') ?? 0).toBe(1);
+  await expect(page.locator('#summaryTooltip')).toBeVisible();
+  await expect(page.locator('#tooltipContent')).toHaveText('夹具摘要');
 
   // Assert status and updated UI
   await expect(page.locator('#authStatus')).toContainText('已停止公开分享');
@@ -223,6 +259,8 @@ test('history page filters upload tasks, displays retention and share state, and
   // Assert backend revoked state directly via API
   const viewRes = await request.get(`${baseURL}/view/${token}`);
   expect(viewRes.status()).toBe(404);
+  const stored = await request.get(`${baseURL}/api/uploads/by-idempotency-key/${uploadKey}`, { headers: { Authorization: 'Bearer browser-fixture-token' } });
+  expect((await stored.json()).share_active).toBe(false);
 });
 
 test('mobile viewport, keyboard selection, and DOM drop submit raw bytes and all-false options', async ({ page, request }) => {

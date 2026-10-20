@@ -15,16 +15,19 @@ All console output must be in English only (no emoji, no Chinese).
 from pathlib import Path
 
 import jinja2
+from video_transcript_api.utils.rendering.i18n_jinja import install_i18n
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 TEMPLATES_DIR = PROJECT_ROOT / "src" / "web" / "templates"
 
 
 def _jinja_env() -> jinja2.Environment:
-    return jinja2.Environment(
+    env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(TEMPLATES_DIR)),
         autoescape=True,
     )
+    install_i18n(env)
+    return env
 
 
 def _base_context(**overrides) -> dict:

@@ -29,6 +29,13 @@
 (function() {
     'use strict';
 
+    function tr(key, vars) {
+        if (typeof window !== 'undefined' && typeof window.t === 'function') {
+            return window.t(key, vars);
+        }
+        throw new Error('missing i18n helper for ' + key);
+    }
+
     // ========== Config ==========
     const CONFIG = {
         STORAGE_KEY: 'vta_toc_pinned',
@@ -199,17 +206,10 @@
 
     // ========== Data extraction ==========
 
-    function findOutlineSection(label) {
-        return Array.from(document.querySelectorAll('.section')).find(section => {
-            const h2 = section.querySelector('h2');
-            return h2 && h2.textContent.includes(label);
-        }) || null;
-    }
-
     function extractHeadings() {
         const headings = [];
 
-        const summarySection = findOutlineSection('内容总结');
+        const summarySection = document.querySelector('.section[data-section="summary"]');
 
         if (!summarySection) {
             console.warn('Summary section not found');
@@ -270,7 +270,7 @@
             if (heading.querySelector('a.notes-source-link')) return;
 
             heading.appendChild(document.createTextNode(' '));
-            const sourceLink = createEl('a', 'notes-source-link', '原文 ↗');
+            const sourceLink = createEl('a', 'notes-source-link', tr('web.toc.source'));
             sourceLink.setAttribute('href', '#' + sourceId);
             heading.appendChild(sourceLink);
         });
@@ -299,7 +299,7 @@
             const notesLink = createEl(
                 'a',
                 'calibrated-notes-link',
-                '笔记 ↗'
+                tr('web.toc.notes_link')
             );
             notesLink.setAttribute('href', '#' + notesId);
             title.appendChild(notesLink);
@@ -308,12 +308,12 @@
 
     function findNotesSection() {
         return document.getElementById('notes-content-block')
-            ? findOutlineSection('详细笔记')
+            ? document.querySelector('.section[data-section="notes"]')
             : null;
     }
 
     function findCalibratedSection() {
-        return findOutlineSection('校对文本');
+        return document.querySelector('.section[data-section="calibrated"]');
     }
 
     /**
@@ -419,7 +419,12 @@
         const toggle = createEl('button', 'toc-outline-toggle', expanded ? '▾' : '▸');
         toggle.type = 'button';
         toggle.setAttribute('aria-expanded', String(expanded));
-        toggle.setAttribute('aria-label', (expanded ? '折叠' : '展开') + label);
+        toggle.setAttribute(
+            'aria-label',
+            expanded
+                ? tr('web.toc.collapse_section', { section: label })
+                : tr('web.toc.expand_section', { section: label })
+        );
         header.appendChild(toggle);
         return toggle;
     }
@@ -435,7 +440,7 @@
         const header = createEl('div', 'toc-outline-header');
         const parent = appendTocLink(header, {
             href: '#' + sectionId,
-            text: '内容总结',
+            text: tr('web.transcript.section_summary_plain'),
             id: sectionId,
             itemTag: 'div',
             className: 'toc-link toc-outline-parent'
@@ -444,7 +449,7 @@
 
         if (tocData.headings.length > 0) {
             item.classList.add('toc-outline-collapsed');
-            appendOutlineToggle(header, '内容总结', false);
+            appendOutlineToggle(header, tr('web.transcript.section_summary_plain'), false);
         }
         item.appendChild(header);
 
@@ -516,13 +521,13 @@
         const title = createEl(
             'div',
             'toc-link toc-outline-parent',
-            '章节 (' + tocData.chapters.length + ')'
+            tr('web.toc.chapters', {n: tocData.chapters.length})
         );
         title.dataset.outlineRole = 'chapters';
         header.appendChild(title);
         appendOutlineToggle(
             header,
-            '章节 (' + tocData.chapters.length + ')',
+            tr('web.toc.chapters', {n: tocData.chapters.length}),
             true
         );
         item.appendChild(header);
@@ -560,13 +565,13 @@
 
         appendFullTextLeaf(
             listEl,
-            '详细笔记（全文）',
+            tr('web.toc.notes_full'),
             tocData.notesSection,
             'toc-notes-leaf'
         );
         appendFullTextLeaf(
             listEl,
-            '校对文本（全文）',
+            tr('web.toc.calibrated_full'),
             tocData.calibratedSection,
             'toc-calibrated-leaf'
         );
@@ -590,18 +595,18 @@
 
         const header = createEl('div', 'toc-header');
         if (hasChapters) {
-            header.appendChild(createEl('div', 'toc-title', '目录'));
+            header.appendChild(createEl('div', 'toc-title', tr('web.toc.title')));
             const collapseBtn = createEl('button', 'toc-collapse-btn');
             collapseBtn.id = 'toc-collapse-btn';
             collapseBtn.type = 'button';
-            collapseBtn.title = '收起目录';
+            collapseBtn.title = tr('web.toc.collapse');
             collapseBtn.textContent = '»';
             header.appendChild(collapseBtn);
         } else {
-            header.appendChild(createEl('div', 'toc-title', '目录'));
+            header.appendChild(createEl('div', 'toc-title', tr('web.toc.title')));
             const pinBtn = createEl('button', 'toc-pin-btn');
             pinBtn.id = 'toc-pin-btn';
-            pinBtn.title = '固定目录（点击保持展开）';
+            pinBtn.title = tr('web.toc.pin');
             pinBtn.type = 'button';
             pinBtn.textContent = '📌';
             header.appendChild(pinBtn);
@@ -620,7 +625,7 @@
     function createMobileTocParts() {
         const btn = createEl('button', 'floating-toc-mobile-btn');
         btn.id = 'toc-mobile-btn';
-        btn.title = '目录';
+        btn.title = tr('web.toc.title');
         btn.type = 'button';
         btn.textContent = '📑';
 
@@ -633,7 +638,7 @@
 
         const mobileContent = createEl('div', 'toc-mobile-content');
         const mobileHeader = createEl('div', 'toc-mobile-header');
-        mobileHeader.appendChild(createEl('div', 'toc-mobile-title', '目录'));
+        mobileHeader.appendChild(createEl('div', 'toc-mobile-title', tr('web.toc.title')));
         const closeBtn = createEl('button', 'toc-mobile-close-btn');
         closeBtn.id = 'toc-mobile-close-btn';
         closeBtn.type = 'button';
@@ -711,7 +716,7 @@
         const btn = container.querySelector('#toc-collapse-btn');
         if (btn) {
             btn.textContent = collapsed ? '«' : '»';
-            btn.title = collapsed ? '展开目录' : '收起目录';
+            btn.title = collapsed ? tr('web.toc.expand') : tr('web.toc.collapse');
         }
     }
 
@@ -905,7 +910,7 @@
             container.classList.add('pinned');
             container.classList.remove('collapsed');
             pinBtn.classList.add('pinned');
-            pinBtn.title = '取消固定目录（已固定）';
+            pinBtn.title = tr('web.toc.unpin');
         } else {
             pinBtn.classList.add('animating-unpin');
             setTimeout(() => {
@@ -915,7 +920,7 @@
             container.classList.remove('pinned');
             container.classList.add('collapsed');
             pinBtn.classList.remove('pinned');
-            pinBtn.title = '固定目录（点击保持展开）';
+            pinBtn.title = tr('web.toc.pin');
         }
 
         savePinState(isPinned);
@@ -942,9 +947,12 @@
         const label = section.querySelector('.toc-outline-parent, .toc-chapter-main');
         toggleEl.setAttribute('aria-expanded', String(!expanded));
         toggleEl.textContent = expanded ? '▸' : '▾';
+        const sectionLabel = label ? label.textContent : tr('web.toc.section');
         toggleEl.setAttribute(
             'aria-label',
-            (expanded ? '展开' : '折叠') + (label ? label.textContent : '区块')
+            expanded
+                ? tr('web.toc.expand_section', { section: sectionLabel })
+                : tr('web.toc.collapse_section', { section: sectionLabel })
         );
         section.classList.toggle('toc-outline-collapsed', expanded);
     }
@@ -1276,7 +1284,7 @@
 
         mode = computeMode();
 
-        tocData.summarySection = findOutlineSection('内容总结');
+        tocData.summarySection = document.querySelector('.section[data-section="summary"]');
         tocData.notesSection = findNotesSection();
         tocData.calibratedSection = findCalibratedSection();
         tocData.headings = extractHeadings();
@@ -1304,12 +1312,12 @@
                     container.classList.add('pinned');
                     container.classList.remove('collapsed');
                     pinBtn.classList.add('pinned');
-                    pinBtn.title = '取消固定目录（已固定）';
+                    pinBtn.title = tr('web.toc.unpin');
                 }
             } else {
                 const pinBtn = document.getElementById('toc-pin-btn');
                 if (pinBtn) {
-                    pinBtn.title = '固定目录（点击保持展开）';
+                    pinBtn.title = tr('web.toc.pin');
                 }
             }
         }

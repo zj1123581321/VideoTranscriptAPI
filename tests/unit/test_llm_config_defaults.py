@@ -55,6 +55,10 @@ DERIVED_FIELD_EXEMPTIONS = {
         "dataclass 默认 None 表示「继承 summary_model」，from_dict 缺键时直接回填 "
         "summary_model 的字面值；get_models() 用 notes_model or summary_model 做回退。"
     ),
+    "share_card_model": (
+        "dataclass 默认 None 表示「继承 summary_model」，from_dict 缺键时直接回填 "
+        "summary_model 的字面值；get_models() 用 share_card_model or summary_model 做回退。"
+    ),
 }
 
 
@@ -112,7 +116,8 @@ def test_structured_fallback_strategy_agrees_on_both_paths():
 
 
 @pytest.mark.parametrize("field_name", ["key_info_model", "speaker_model",
-                                        "validator_model", "chapters_model", "notes_model"])
+                                        "validator_model", "chapters_model",
+                                        "notes_model", "share_card_model"])
 def test_derived_model_fields_still_fall_back_through_consumers(field_name):
     """豁免字段本身也要有行为保证：None 必须真的能被消费端回退，而不是躺平。"""
     direct, from_dict = _minimal_instances()

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -51,7 +51,7 @@ function startRealServer(): Promise<RealServer> {
     const spawnEnv = {
       PATH: process.env.PATH ?? '/usr/bin:/bin',
       HOME: process.env.HOME ?? '/tmp',
-      TMPDIR: '/tmp',
+      TMPDIR: join(serverScratch, 'tmp'),
       LANG: 'C.UTF-8',
       PYTHONUTF8: '1',
       PYTHONUNBUFFERED: '1',
@@ -133,9 +133,16 @@ async function selectUploadPage(page: Page): Promise<void> {
 
 test.beforeAll(async () => {
   serverScratch = await mkdtemp(join(tmpdir(), 'vta-upload-real-chain-'));
+  const isolatedTmp = join(serverScratch, 'tmp');
+  await mkdir(isolatedTmp);
   realServer = await startRealServer();
   const ready = await fetch(`${realServer.api_url}/livez`);
   expect(ready.status).toBe(200);
+  const stateResponse = await fetch(`${realServer.api_url}/__e2e__/state`);
+  expect(stateResponse.status).toBe(200);
+  const state = (await stateResponse.json()) as { gettempdir: string };
+  expect(state.gettempdir).toBe(isolatedTmp);
+  expect(state.gettempdir).not.toBe('/tmp');
 });
 
 test.afterAll(async () => {
@@ -169,9 +176,12 @@ test('Chromium uploads raw media through production API, worker, shared ASR/LLM,
   const browserErrors: string[] = [];
   const unexpectedNetwork: string[] = [];
   let observedResponseCount = 0;
-  page.on('pageerror', (error) => browserErrors.push(error.message));
+  page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`));
   page.on('console', (message) => {
-    if (message.type() === 'error') browserErrors.push(message.text());
+    if (message.type() === 'error') {
+      const url = message.location().url || '(unknown URL)';
+      browserErrors.push(`console: ${message.text()} at ${url}`);
+    }
   });
   page.on('requestfailed', (failed) => {
     const path = new URL(failed.url()).pathname;
@@ -364,6 +374,14 @@ test('Chromium uploads raw media through production API, worker, shared ASR/LLM,
   await expect(row.locator('.task-title')).toContainText('全链路浏览器上传样本');
   const stopShare = row.locator('.btn-stop-share');
   await expect(stopShare).toBeVisible();
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  let revokedSummaryRequests = 0;
+  page.on('request', (item) => {
+    if (item.method() === 'GET' && new URL(item.url()).pathname === '/api/audit/summary') {
+      revokedSummaryRequests += 1;
+    }
+  });
   page.once('dialog', async (dialog) => dialog.accept());
   const deleteRequest = page.waitForRequest((item) =>
     item.method() === 'DELETE' && new URL(item.url()).pathname === `/api/uploads/${receipt.upload_id}/share`);
@@ -374,6 +392,8 @@ test('Chromium uploads raw media through production API, worker, shared ASR/LLM,
   expect(ownerDelete.headers().authorization).toBe(`Bearer ${OWNER_TOKEN}`);
   expect(deleteResult.status()).toBe(200);
   expect((await deleteResult.json()).share_active).toBe(false);
+  await page.clock.fastForward(301);
+  expect(revokedSummaryRequests).toBe(0);
   await expect(page.locator('#authStatus')).toContainText('已停止公开分享');
 
   const deniedFreshRead = await request.get(`${realServer.api_url}/view/${receipt.view_token}?raw=transcript`);
@@ -382,13 +402,21 @@ test('Chromium uploads raw media through production API, worker, shared ASR/LLM,
   const revoked = (await inspectRealState(request)).uploads[0];
   expect(revoked.revoked_at).toBeTruthy();
   expect(revoked.root_status).toBe('success');
-  expect(browserErrors).toEqual([]);
   const expectedPageAborts = [
     'GET /api/audit/filter-options net::ERR_ABORTED',
     'GET /api/audit/history net::ERR_ABORTED',
   ];
   expect(observedResponseCount).toBeGreaterThan(0);
+  const unexpectedNetworkErrors = unexpectedNetwork.filter((entry) => !expectedPageAborts.includes(entry));
+  const failureReport = [
+    'Browser failure diagnostics',
+    'Console errors:',
+    ...(browserErrors.length ? browserErrors.map((entry) => `  ${entry}`) : ['  none']),
+    'Unexpected network errors:',
+    ...(unexpectedNetworkErrors.length ? unexpectedNetworkErrors.map((entry) => `  ${entry}`) : ['  none']),
+  ].join('\n');
   expect(
-    unexpectedNetwork.filter((entry) => !expectedPageAborts.includes(entry)),
-  ).toEqual([]);
+    { consoleErrors: browserErrors, networkErrors: unexpectedNetworkErrors },
+    failureReport,
+  ).toEqual({ consoleErrors: [], networkErrors: [] });
 });

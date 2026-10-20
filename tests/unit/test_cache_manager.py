@@ -376,6 +376,71 @@ class TestSaveLLMResult:
         assert "llm_summary" in result
         assert result["llm_summary"] == "Summary."
 
+    def test_get_cache_keeps_generation_layers_on_language_mismatch(self, cm):
+        from video_transcript_api.cache.cache_manager import (
+            language_mismatched_generation_layers,
+        )
+        from video_transcript_api.utils.logging.logger import load_config
+
+        _save_sample_capswriter(cm)
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="calibrated",
+            content="Calibrated.",
+        )
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="summary",
+            content="Chinese summary.",
+        )
+        cm.save_llm_status(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            calibration_status="full",
+            summary_status="generated",
+            artifact_provenance={
+                "schema_version": "artifact-provenance-v1",
+                "layers": {
+                    "calibration": {"language": "zh-CN"},
+                    "summary": {"language": "zh-CN"},
+                },
+            },
+        )
+        config = load_config()
+        had_key = "language" in config
+        original = config.get("language")
+        config["language"] = "en"
+        try:
+            result = cm.get_cache(platform="youtube", media_id="vid1")
+            assert "llm_calibrated" in result
+            assert result["llm_calibrated"] == "Calibrated."
+            assert result["llm_summary"] == "Chinese summary."
+            mismatches = language_mismatched_generation_layers(result)
+            assert ("summary", "zh-CN", "en") in mismatches
+            assert all(item[0] != "calibration" for item in mismatches)
+        finally:
+            if had_key:
+                config["language"] = original
+            else:
+                config.pop("language", None)
+
+    def test_get_cache_keeps_legacy_summary_when_language_is_zh_cn(self, cm):
+        _save_sample_capswriter(cm)
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="summary",
+            content="Legacy summary.",
+        )
+        result = cm.get_cache(platform="youtube", media_id="vid1")
+        assert result["llm_summary"] == "Legacy summary."
+
     def test_notes_layer_preserves_existing_artifacts_and_status(self, cm):
         _save_sample_capswriter(cm)
         cm.save_llm_result(
@@ -1514,7 +1579,7 @@ class TestUpdateTaskProgress:
             "missing-progress-task", {"stage": "notes", "done": 1, "total": 1}
         ) is False
 
-    def test_updates_only_progress_without_touching_status_fields(self, cm):
+    def test_terminal_row_rejects_progress_overwrite(self, cm):
         task = cm.create_task(url="https://example.com/progress-terminal")
         assert cm.update_task_status(
             task["task_id"], TaskStatus.SUCCESS, skip_archive=True
@@ -1523,12 +1588,10 @@ class TestUpdateTaskProgress:
 
         assert cm.update_task_progress(
             task["task_id"], {"stage": "notes", "done": 1, "total": 1}
-        ) is True
+        ) is False
 
         after = cm.get_task_by_id(task["task_id"])
-        assert after["progress"] == {"stage": "notes", "done": 1, "total": 1}
-        assert after["status"] == before["status"] == TaskStatus.SUCCESS
-        assert after["completed_at"] == before["completed_at"]
+        assert after["progress"] == before["progress"]
         assert after["terminal_snapshot"] == before["terminal_snapshot"]
 
 

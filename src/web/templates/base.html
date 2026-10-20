@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="{{ html_lang() }}" data-theme="dark">
 <head>
     <script>
     (function() {
@@ -11,14 +11,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex">
-    <meta name="description" content="{% block meta_description %}Video Transcript API - 多平台视频转录与 AI 校对服务{% endblock %}">
+    <meta name="description" content="{% block meta_description %}{{ t('web.viewer.meta_description') }}{% endblock %}">
     <meta name="theme-color" content="#667eea">
     <meta property="og:title" content="{% block og_title %}{% endblock %}">
-    <meta property="og:description" content="{% block og_description %}多平台视频转录与 AI 校对服务{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}{{ t('web.viewer.og_description') }}{% endblock %}">
     <meta property="og:type" content="article">
-    <meta property="og:locale" content="zh_CN">
+    <meta property="og:locale" content="{{ og_locale() }}">
     <meta property="og:site_name" content="Video Transcript API">
-    <title>{% block title %}视频转录查看器{% endblock %}</title>
+    {% block og_image_meta %}{% endblock %}
+    <title>{% block title %}{{ t('web.viewer.default_title') }}{% endblock %}</title>
     <style>
         /* CSS变量定义 - 主题系统 */
         :root {
@@ -1106,40 +1107,40 @@
 </head>
 <body>
     <div class="container">
-        <div class="oss-bar" aria-label="开源项目信息">
-            <span>由开源项目 </span>
-            <a href="https://github.com/zlxlabs/VideoTranscriptAPI" class="oss-bar-link" target="_blank" rel="noopener" title="开源，可自行部署" aria-label="GitHub 开源仓库 VideoTranscriptAPI">
+        <div class="oss-bar" aria-label="{{ t('web.oss.aria') }}">
+            <span>{{ t('web.oss.by_project') }}</span>
+            <a href="https://github.com/zlxlabs/VideoTranscriptAPI" class="oss-bar-link" target="_blank" rel="noopener" title="{{ t('web.oss.github_title') }}" aria-label="{{ t('web.oss.github_aria') }}">
                 <svg class="oss-bar-icon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
                     <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
                 </svg>
                 <span>VideoTranscriptAPI</span>
             </a>
-            <span> 生成</span>
+            <span>{{ t('web.oss.generated') }}</span>
             <span class="oss-bar-sep" aria-hidden="true">·</span>
             <span>by </span>
-            <a href="https://x.com/bylixing" class="oss-bar-link" target="_blank" rel="noopener" title="在 X 上关注 @bylixing" aria-label="作者张立行的 X 账号 @bylixing">
+            <a href="https://x.com/bylixing" class="oss-bar-link" target="_blank" rel="noopener" title="{{ t('web.oss.x_title') }}" aria-label="{{ t('web.oss.x_aria') }}">
                 <svg class="oss-bar-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
                     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 24.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                 </svg>
-                <span>张立行</span>
+                <span>{{ t('web.oss.author') }}</span>
             </a>
         </div>
         <div class="header">
-            <button id="theme-toggle" class="theme-toggle" title="切换到浅色模式">
+            <button id="theme-toggle" class="theme-toggle" title="{{ t('web.theme.to_light') }}">
                 ☀️
             </button>
             {% block site_nav %}
             <nav class="site-nav">
-                <a href="/add_task_by_web" class="site-nav-link">📝 提交任务</a>
-                <a href="/static/history.html?v={{ asset_v }}" class="site-nav-link">📋 任务历史</a>
+                <a href="/add_task_by_web" class="site-nav-link">{{ t('web.nav.submit') }}</a>
+                <a href="/static/history.html?v={{ asset_v }}" class="site-nav-link">{{ t('web.nav.history') }}</a>
             </nav>
             {% endblock %}
-            <h1>{{ title or "视频转录查看器" }}</h1>
+            <h1>{{ title or t('web.viewer.default_title') }}</h1>
             {% if author or url %}
             <div class="meta">
                 {% if author %}👤 {{ author }}{% endif %}
                 {% if url %}
-                    <br>🔗 <a href="{{ url }}" target="_blank" rel="noopener">查看原视频</a>
+                    <br>🔗 <a href="{{ url }}" target="_blank" rel="noopener">{{ t('web.viewer.view_original') }}</a>
                 {% endif %}
                 {% if created_at_display %}
                     <br>⏰ {{ created_at_display }}
@@ -1157,6 +1158,8 @@
         </div>
     </div>
     
+    <script src="/i18n.js"></script>
+    <script src="/static/js/i18n.js?v={{ asset_v }}"></script>
     <script src="/static/js/auth-storage.js?v={{ asset_v }}"></script>
     {% block extra_js %}{% endblock %}
     
@@ -1200,12 +1203,12 @@
                 if (theme === 'dark') {
                     if (themeToggle) {
                         themeToggle.textContent = '☀️';
-                        themeToggle.title = '切换到浅色模式';
+                        themeToggle.title = window.t('web.theme.to_light');
                     }
                 } else {
                     if (themeToggle) {
                         themeToggle.textContent = '🌙';
-                        themeToggle.title = '切换到深色模式';
+                        themeToggle.title = window.t('web.theme.to_dark');
                     }
                 }
             }
@@ -1340,7 +1343,7 @@
 
                     copyTextToClipboard(text, function() {
                         btn.classList.add('copied');
-                        actionEl.textContent = '已复制';
+                        actionEl.textContent = window.t('web.copy.copied');
                         setTimeout(function() {
                             btn.classList.remove('copied');
                             actionEl.textContent = originalText;
@@ -1367,7 +1370,7 @@
 
                     copyTextToClipboard(text, function() {
                         btn.classList.add('copied');
-                        btn.textContent = '✅ 已复制';
+                        btn.textContent = window.t('web.copy.copied_content');
                         setTimeout(function() {
                             btn.classList.remove('copied');
                             btn.innerHTML = originalHtml;

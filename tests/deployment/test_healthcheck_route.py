@@ -60,18 +60,3 @@ def test_dockerfile_healthcheck_probes_a_real_route():
         f"container would report unhealthy and the deploy would always "
         f"roll back"
     )
-
-
-def test_pull_and_deploy_legacy_fallback_probe_matches_dockerfile_healthcheck():
-    """docker/pull_and_deploy.sh's no-HEALTHCHECK fallback probe must target
-    the same path as the Dockerfile's real HEALTHCHECK, or the two checks
-    silently diverge (one green, one red) depending on which code path a
-    given deployed image takes."""
-    script = Path(__file__).parents[2] / "docker" / "pull_and_deploy.sh"
-    script_text = script.read_text(encoding="utf-8")
-    url_match = re.search(r"urlopen\('([^']+)'", script_text)
-    assert url_match, "could not find the fallback urlopen(...) probe URL"
-    fallback_path = urlparse(url_match.group(1)).path
-
-    dockerfile_path = urlparse(_healthcheck_url()).path
-    assert fallback_path == dockerfile_path

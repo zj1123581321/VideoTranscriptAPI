@@ -18,6 +18,7 @@ project testing conventions.
 from pathlib import Path
 
 import jinja2
+from video_transcript_api.utils.rendering.i18n_jinja import install_i18n
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -27,10 +28,12 @@ STATIC_DIR = PROJECT_ROOT / "src" / "web" / "static"
 
 def _jinja_env() -> jinja2.Environment:
     """Build a standalone Jinja2 environment mirroring the app's autoescape setting."""
-    return jinja2.Environment(
+    env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(TEMPLATES_DIR)),
         autoescape=True,
     )
+    install_i18n(env)
+    return env
 
 
 def _base_context(**overrides) -> dict:

@@ -300,6 +300,11 @@ def run_experiment(duration_seconds: int) -> int:
         root = Path(temporary).resolve()
         if root == PROJECT_ROOT or PROJECT_ROOT in root.parents:
             raise ExperimentFailure("sandbox_must_be_outside_project_tree")
+        # busy lock is fail-closed and never self-provisions: the sandbox stands
+        # in for the deployment side and pre-creates the lock file (service-side
+        # admission opens it read-only via VTA_BUSY_LOCK_PATH).
+        (root / "data").mkdir(parents=True, exist_ok=True)
+        (root / "data" / "busy.lock").touch()
         wav_path = root / "bounded-synthetic.wav"
         payload = _make_wav(wav_path, duration_seconds)
         if len(payload) > 4 * 1024 * 1024:
@@ -351,6 +356,9 @@ def run_experiment(duration_seconds: int) -> int:
                 "PYTHONPATH": str(PROJECT_ROOT / "src"),
                 "VTAPI_USERS_JSON": str(users_path),
                 "VTA_UPLOADS_ENABLED": "true",
+                # fail-closed busy lock needs a writable lock path in the sandbox
+                # (no /app mount here); explicit opt-in via the env override.
+                "VTA_BUSY_LOCK_PATH": str(root / "data" / "busy.lock"),
             }
             service_log_path = root / "sandbox-api.log"
             with service_log_path.open("wb") as service_log:

@@ -131,6 +131,17 @@ test('processing view smoke: processing state is visible', async ({ page }) => {
   await expect(page.getByRole('button', { name: /刷新页面/ })).toBeVisible();
 });
 
+test('processing view shows current stage and completed stages', async ({ page }) => {
+  await page.goto('/view/processing');
+  const stageProgress = page.locator('.stage-progress');
+  await expect(stageProgress).toBeVisible();
+  await expect(stageProgress).toContainText('当前阶段');
+  await expect(stageProgress).toContainText('下载');
+  await expect(stageProgress).toContainText(/已进行 \d+ 分 \d+ 秒/);
+  await expect(stageProgress).toContainText('已完成阶段');
+  await expect(stageProgress).toContainText('转录（耗时 1 分 5 秒）');
+});
+
 test('failed view smoke: error state is visible', async ({ page }) => {
   await page.goto('/view/failed');
   await expect(page.getByRole('heading', { name: /出现错误/ })).toBeVisible();
@@ -141,4 +152,40 @@ test('cleaned view smoke: cleanup state and recovery guidance are visible', asyn
   await page.goto('/view/cleaned');
   await expect(page.getByRole('heading', { name: /内容已清理/ })).toBeVisible();
   await expect(page.getByText(/重新获取转录/)).toBeVisible();
+});
+
+test('share view with card emits twitter large image and og tags', async ({ page }) => {
+  const token = 'browser-fixture-view-og';
+  const headline = 'Fixture "headline" & alt';
+  await page.goto(`/view/${token}`);
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
+    'content',
+    'summary_large_image',
+  );
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+    'content',
+    `${baseURL}/og/${token}.png?v=1`,
+  );
+  await expect(page.locator('meta[property="og:image:width"]')).toHaveAttribute(
+    'content',
+    '1200',
+  );
+  await expect(page.locator('meta[property="og:image:height"]')).toHaveAttribute(
+    'content',
+    '630',
+  );
+  await expect(page.locator('meta[name="twitter:image:alt"]')).toHaveAttribute(
+    'content',
+    headline,
+  );
+  await expect(page.locator('meta[property="og:description"]')).toHaveAttribute(
+    'content',
+    'First fixture point',
+  );
+});
+
+test('share view without card omits twitter card and og image tags', async ({ page }) => {
+  await page.goto('/view/browser-fixture-view');
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveCount(0);
+  await expect(page.locator('meta[property="og:image"]')).toHaveCount(0);
 });

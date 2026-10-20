@@ -1,0 +1,361 @@
+# ci-templates 已迁移到 zlxlabs org；部署工作流与脚本钉到同一移动版本 tag，随上游 v2 被动升级。
+# push main 自动 build→ACR→SSH n305→探针→部署。
+#
+# 忙锁门禁 fail-closed 全链：服务侧 BusyLock 只认部署侧预建的锁文件（缺失即拒绝新任务，
+# HTTP 503）；部署脚本对同一文件申请排他锁。事前 pre-flight：对当前运行容器对账宿主/容器
+# busy.lock 的 stat -c %i；失败则 ship 不跑。事后 verify-busy-lock-inode：ship 成功后
+# 对账新容器，通过则原子写「last verified good」镜像（.deploy-state/last_verified_good，
+# 单一事实源）；对账失败则 retag 该文件记录的镜像并 compose up -d 回滚（不自动重试部署，
+# 回滚后人工判断）。双闸 + 回滚，不静默降级。
+# SSH 身份不再正则解析 ci-templates default：全部 SSH 使用处读 repo variable（见下方 env
+# 与 ship 的 ssh_user 输入，同名变量）；未配置时 pre-flight 第一步即失败并给配置指引。
+name: deploy
+on:
+  push:
+    branches: [main]            # 本仓默认分支是 main（live-recorder 先例是 master，勿抄错）
+    # 仅改 CI/文档不触发生产部署:改 workflow/文档不该扇出一次 D3 应用部署。
+    # 真实 src 改动(不在下列路径)照常部署。
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+  # 手动触发口:paths-ignore 排除了 .github/**,workflow 自身修复后需手动补发部署
+  workflow_dispatch:
+
+# 部署 run 全局串行（PR #246 gate 第 8 轮两条 major 的消解手段）:组名固定不掺分支名,
+# 跨分支互斥排队(main push 与 workflow_dispatch 不并发);不设取消语义(排队而不是取消,
+# 取消会让先到的部署静默丢失)。串行后后一 run 的 pre-flight 对账
+# 前一 run 的最终状态(锚点时序自然正确),回滚也不会与其他 run 的镜像替换并发;
+# 回滚与替换的互斥由「run 全局串行」+ ship 内 host 部署锁共同保证。
+concurrency:
+  group: video-transcript-api-deploy
+  cancel-in-progress: false
+
+# 部署 SSH 身份唯一来源：repo variable（Settings > Secrets and variables > Actions >
+# Variables，key 见下方引用处）。vars 为空时 pre-flight 守卫立即失败，不会带空用户名
+# 碰生产。workflow 级 env 同时供 pre-flight / verify 两个 job 的 SSH 使用。
+env:
+  SSH_USER: ${{ vars.VTA_DEPLOY_SSH_USER }}
+
+jobs:
+  # 替换前对当前运行容器做 inode 对账。失败 → ship 不执行（首次无挂载/inode 不一致/容器不存在均 fail-closed）。
+  pre-flight:
+    runs-on: [self-hosted, linux, x64, codex]
+    timeout-minutes: 5
+    steps:
+      - name: Set up SSH
+        env:
+          SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_DEPLOY_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Pre-flight busy.lock host/container inode
+        env:
+          DEPLOY_HOST: 100.68.21.80
+          DEPLOY_DIR: /opt/media/VideoTranscriptAPI
+          CONTAINER_NAME: video-transcript-api
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_USER:-}" ]; then
+            echo "::error::SSH_USER is empty: set the repo variable that feeds the workflow-level env block in .github/workflows/deploy.yml (Settings > Secrets and variables > Actions > Variables); value = deploy host login user"
+            exit 1
+          fi
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
+          [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
+          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20 -v"
+          # TEMP DIAGNOSTIC (run 38834509231 Host key verification failed): ssh -v + known_hosts dump before failing; remove after root cause confirmed
+          if ! ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' bash -s" <<'REMOTE'
+          set -euo pipefail
+          host_lock="${DEPLOY_DIR}/.deploy-state/busy.lock"
+          container_lock="/app/.deploy-state/busy.lock"
+          if ! docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+            echo "::error::pre-flight container missing: ${CONTAINER_NAME}"
+            exit 1
+          fi
+          if [ ! -e "$host_lock" ]; then
+            echo "::error::pre-flight host busy.lock missing: ${host_lock}"
+            exit 1
+          fi
+          if [ ! -f "$host_lock" ]; then
+            echo "::error::pre-flight host busy.lock not regular file: ${host_lock}"
+            exit 1
+          fi
+          if ! docker exec "$CONTAINER_NAME" test -e "$container_lock"; then
+            echo "::error::pre-flight container busy.lock missing: ${container_lock}"
+            exit 1
+          fi
+          if ! docker exec "$CONTAINER_NAME" test -f "$container_lock"; then
+            echo "::error::pre-flight container busy.lock not regular file: ${container_lock}"
+            exit 1
+          fi
+          host_inode="$(stat -c %i "$host_lock")"
+          container_inode="$(docker exec "$CONTAINER_NAME" stat -c %i "$container_lock")"
+          if [ -z "$host_inode" ] || [ -z "$container_inode" ]; then
+            echo "::error::pre-flight busy.lock inode empty host=${host_inode:-none} container=${container_inode:-none}"
+            exit 1
+          fi
+          if [ "$host_inode" != "$container_inode" ]; then
+            echo "::error::pre-flight busy.lock inode mismatch host=${host_inode} container=${container_inode}"
+            exit 1
+          fi
+          echo "pre-flight busy.lock inode ok ${host_inode}"
+          REMOTE
+          then
+            echo "known_hosts entries: $(wc -l < ~/.ssh/known_hosts)"
+            ssh-keygen -lf ~/.ssh/known_hosts || true
+            ssh-keyscan -T 10 100.68.21.80 2>/dev/null | ssh-keygen -lf - || true
+            ls -la ~/.ssh/
+            exit 1
+          fi
+
+  ship:
+    needs: pre-flight
+    uses: zlxlabs/ci-templates/.github/workflows/build-deploy.yml@v2
+    with:
+      image_name: video-transcript-api                  # == ACR 镜像名 == 宿主 compose 的 image(本地 tag 形态,见 docker/docker-compose.deploy.yml)
+      dockerfile: docker/Dockerfile                     # Dockerfile 在 docker/ 子目录(build_context 默认仓根:COPY 的 pyproject/uv.lock/src 都在根)
+      host: 100.68.21.80                                # n305 的 Tailscale IP
+      deploy_dir: /opt/media/VideoTranscriptAPI
+      busy_lock_file: /opt/media/VideoTranscriptAPI/.deploy-state/busy.lock   # 与容器 /app/.deploy-state/busy.lock 同 inode（compose bind mount + 本 workflow 对账）
+      busy_lock_timeout: "600"
+      runner: self                                      # self-hosted fleet;显式钉死不随上游默认漂移(该形态下 runner 内直连 tailnet 目标机,临时入网步骤整体跳过)
+      healthcheck_url: http://localhost:8200/livez      # 宿主发布端口 8200(容器内 8000);探针用 /livez 纯存活恒 200,不用深度检查的 /health(依赖下游,抖动误触发回滚)
+      healthcheck_warmup: "20"                          # 生产实测启动到 healthy 约 10-25s(startup ~10s 内完成),warmup 给 2 倍裕度
+      healthcheck_interval: "3"                         # 默认 5 次探针,末次最晚 ~35s,覆盖 25s 上界
+      ci_templates_ref: v2
+      ssh_user: ${{ vars.VTA_DEPLOY_SSH_USER }}         # 与上方 env 同一 repo variable，替代 ci-templates default 的隐式耦合
+    secrets:                                            # 逐个显式传,最小权限
+      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+      SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+      KNOWN_HOSTS: ${{ secrets.KNOWN_HOSTS }}
+      TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+      CI_TEMPLATES_PAT: ${{ secrets.CI_TEMPLATES_PAT }}
+      FEISHU_CI_WEBHOOK: ${{ secrets.FEISHU_CI_WEBHOOK }}   # 未配置时通知层打 warning 跳过,不影响部署结论
+
+  # reusable ship job 无法插入步骤；本 job 在健康探针已通过之后、workflow 宣告成功之前
+  # 对账 inode。同一 host / key / deploy_dir（新 SSH 会话）。通过 → 原子写 last_verified_good
+  # （唯一回滚事实源）；失败 → job failure，且自动 retag last_verified_good 记录的镜像并
+  # compose up -d 回滚；回滚本身失败则双重失败（workflow 红 + rollback failed 错误行），
+  # 不吞错、不自动重试部署。
+  verify-busy-lock-inode:
+    needs: ship
+    runs-on: [self-hosted, linux, x64, codex]
+    timeout-minutes: 5
+    steps:
+      - name: Set up SSH
+        env:
+          SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_DEPLOY_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Verify container image identity
+        env:
+          DEPLOY_HOST: 100.68.21.80
+          CONTAINER_NAME: video-transcript-api
+          IMAGE_NAME: video-transcript-api
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_USER:-}" ]; then
+            echo "::error::SSH_USER is empty: set the repo variable that feeds the workflow-level env block in .github/workflows/deploy.yml (Settings > Secrets and variables > Actions > Variables); value = deploy host login user"
+            exit 1
+          fi
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
+          [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
+          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20 -v" # diag: run 38834509231 host key verification
+          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "CONTAINER_NAME='$CONTAINER_NAME' IMAGE_NAME='$IMAGE_NAME' GIT_SHA='$GIT_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          running_image="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME" 2>/dev/null || true)"
+          candidate_image="$(docker inspect --format='{{.Id}}' "${IMAGE_NAME}:latest" 2>/dev/null || true)"
+          identity_ok=1
+          if [ -z "$running_image" ] || [ -z "$candidate_image" ] || [ "$running_image" != "$candidate_image" ]; then
+            identity_ok=0
+          fi
+          if [ -n "${GIT_SHA:-}" ]; then
+            short_sha="${GIT_SHA:0:12}"
+            sha_image="$(docker images --filter "reference=*${short_sha}*" --format '{{.ID}}' 2>/dev/null | head -n 1 || true)"
+            if [ -n "$sha_image" ]; then
+              case "$candidate_image" in
+                *"$sha_image"*) ;;
+                *) identity_ok=0 ;;
+              esac
+            fi
+          fi
+          if [ "$identity_ok" -ne 1 ]; then
+            echo "::error::deploy_identity_mismatch: running=${running_image:-none} candidate=${candidate_image:-none}"
+            exit 1
+          fi
+          echo "container image identity ok: ${running_image}"
+          REMOTE
+
+      - name: Verify busy.lock host/container inode
+        id: verify
+        env:
+          DEPLOY_HOST: 100.68.21.80
+          DEPLOY_DIR: /opt/media/VideoTranscriptAPI
+          CONTAINER_NAME: video-transcript-api
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_USER:-}" ]; then
+            echo "::error::SSH_USER is empty: set the repo variable that feeds the workflow-level env block in .github/workflows/deploy.yml (Settings > Secrets and variables > Actions > Variables); value = deploy host login user"
+            exit 1
+          fi
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
+          [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
+          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20 -v" # diag: run 38834509231 host key verification
+          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' bash -s" <<'REMOTE'
+          set -euo pipefail
+          host_lock="${DEPLOY_DIR}/.deploy-state/busy.lock"
+          container_lock="/app/.deploy-state/busy.lock"
+          if [ ! -e "$host_lock" ]; then
+            echo "::error::host busy.lock missing: ${host_lock}"
+            exit 1
+          fi
+          if ! docker exec "$CONTAINER_NAME" test -e "$container_lock"; then
+            echo "::error::container busy.lock missing: ${container_lock}"
+            exit 1
+          fi
+          host_inode="$(stat -c %i "$host_lock")"
+          container_inode="$(docker exec "$CONTAINER_NAME" stat -c %i "$container_lock")"
+          if [ -z "$host_inode" ] || [ -z "$container_inode" ]; then
+            echo "::error::busy.lock inode empty host=${host_inode:-none} container=${container_inode:-none}"
+            exit 1
+          fi
+          if [ "$host_inode" != "$container_inode" ]; then
+            echo "::error::busy.lock inode mismatch host=${host_inode} container=${container_inode}"
+            exit 1
+          fi
+          echo "busy.lock inode ok ${host_inode}"
+          # 对账通过 → 记录「last verified good」（唯一回滚事实源）。tmp+rename 原子写，
+          # 读侧不会看到半截文件；并发时序由 ship 的 host 部署锁串行化替换 + 各自 verify
+          # 在自己 ship 后写锚点保证：B 替换后 verify 失败，回滚到 A 写下的上一验证好版本。
+          verified_image="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME")"
+          case "$verified_image" in
+            sha256:*) ;;
+            *) echo "::error::rollback_failed: refusing to record malformed image ref: ${verified_image}"; exit 1 ;;
+          esac
+          printf '%s\n' "$verified_image" > "${DEPLOY_DIR}/.deploy-state/last_verified_good.tmp.$$"
+          mv -f "${DEPLOY_DIR}/.deploy-state/last_verified_good.tmp.$$" "${DEPLOY_DIR}/.deploy-state/last_verified_good"
+          echo "last verified good recorded: ${verified_image}"
+          REMOTE
+
+      # 对账失败 → 回滚到 last_verified_good 记录的最近验证好镜像（同一 host / key，
+      # 新 SSH 会话）。always() 保证本 step 不随前序 step 失败被跳过；是否真回滚由运行时按
+      # 对账 step 的 outcome 显式分支：failure → 回滚；success/skipped/cancelled → 空转成功
+      # （对账失败本身已让 job 变红，回滚成功也不改变结论——回滚后人工判断，不自动重试部署）。
+      # 锚点缺失/格式坏/回滚自身任何一步失败都报 rollback failed，job 双重失败，不吞错。
+      # 回滚也是容器替换（gate 第 9 轮）：替换前必须先对忙锁申请排他锁（与 ship 内
+      # ci-templates 部署脚本同一文件同一模式），拿到才替换、替换完成释放；在飞任务
+      # 持共享锁时回滚等待，600s 预算耗尽报 rollback_deferred_busy，job 失败、人工介入
+      # ——fail-loud，不静默放弃回滚、不打断任务。
+      - name: Rollback to last verified good image (post-verify failed)
+        if: always()
+        env:
+          DEPLOY_HOST: 100.68.21.80
+          DEPLOY_DIR: /opt/media/VideoTranscriptAPI
+          CONTAINER_NAME: video-transcript-api
+          IMAGE_NAME: video-transcript-api
+        run: |
+          set -euo pipefail
+          verify_outcome="${{ steps.verify.outcome }}"
+          if [ "$verify_outcome" != "failure" ]; then
+            echo "post-verify outcome=${verify_outcome}; rollback not applicable"
+            exit 0
+          fi
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid host"; exit 1; }
+          [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::invalid ssh_user"; exit 1; }
+          SSH_OPTS="-i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=20 -v" # diag: run 38834509231 host key verification
+          ssh $SSH_OPTS "${SSH_USER}@${DEPLOY_HOST}" "DEPLOY_DIR='$DEPLOY_DIR' CONTAINER_NAME='$CONTAINER_NAME' IMAGE_NAME='$IMAGE_NAME' bash -s" <<'REMOTE'
+          set -euo pipefail
+          # 回滚前置对账（gate 第 10 轮）：inode 分裂场景宿主锁与容器锁不互斥，不能安全
+          # 回滚时必须显式停机而非带伤回滚（不回滚不打断，人工介入）。
+          host_lock="${DEPLOY_DIR}/.deploy-state/busy.lock"
+          container_lock="/app/.deploy-state/busy.lock"
+          mismatch_reason=""
+          if ! docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+            mismatch_reason="container missing: ${CONTAINER_NAME}"
+          elif [ ! -f "$host_lock" ]; then
+            mismatch_reason="host busy.lock missing or not regular file: ${host_lock}"
+          elif ! docker exec "$CONTAINER_NAME" test -f "$container_lock"; then
+            mismatch_reason="container busy.lock missing or not regular file: ${container_lock}"
+          else
+            host_inode="$(stat -c %i "$host_lock" 2>/dev/null || true)"
+            container_inode="$(docker exec "$CONTAINER_NAME" stat -c %i "$container_lock" 2>/dev/null || true)"
+            if [ -z "$host_inode" ] || [ -z "$container_inode" ]; then
+              mismatch_reason="busy.lock inode empty host=${host_inode:-none} container=${container_inode:-none}"
+            elif [ "$host_inode" != "$container_inode" ]; then
+              mismatch_reason="busy.lock inode mismatch host=${host_inode} container=${container_inode}"
+            fi
+          fi
+          if [ -n "$mismatch_reason" ]; then
+            echo "::error::rollback_aborted_mount_mismatch: ${mismatch_reason}"
+            exit 1
+          fi
+          # 只读唯一事实源：最近一次对账通过时记录的镜像（tmp+rename 原子写，无半截读）。
+          last_good_file="${DEPLOY_DIR}/.deploy-state/last_verified_good"
+          if [ ! -s "$last_good_file" ]; then
+            echo "::error::rollback_failed: last good image record missing or empty: ${last_good_file}"
+            exit 1
+          fi
+          last_good="$(cat "$last_good_file")"
+          case "$last_good" in
+            sha256:*) ;;
+            *) echo "::error::rollback_failed: malformed last good image id: ${last_good}"; exit 1 ;;
+          esac
+          current="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME" 2>/dev/null || true)"
+          if [ "$current" = "$last_good" ]; then
+            echo "rollback skipped: container already on recorded last good image ${last_good}"
+            exit 0
+          fi
+          # 回滚先拿忙锁排他锁（gate 第 9 轮）：回滚也是容器替换，不绕过忙锁。
+          # 用法与上游 pull_and_deploy.sh 一致：只读 fd 打开（宿主部署用户对锁文件常只
+          # 有读权限，锁互斥作用在 inode 上，只读 fd 即可申请排他锁）；rc=1 是等待超时
+          # （任务仍持共享锁），其余非零是锁命令本身故障（配置/主机问题）。
+          exec 8<"$host_lock"
+          _frc=0; flock -w 600 -x 8 || _frc=$?
+          if [ "$_frc" -eq 1 ]; then
+            echo "::error::rollback_deferred_busy: busy lock still held by in-flight task(s) after 600s wait; rollback deferred, manual intervention required (container stays on failed candidate image)"
+            exit 1
+          elif [ "$_frc" -ne 0 ]; then
+            echo "::error::rollback_failed: flock on busy lock failed with rc=${_frc} (not a lock timeout — config or host problem)"
+            exit 1
+          fi
+          docker tag "$last_good" "${IMAGE_NAME}:latest"
+          cd "$DEPLOY_DIR"
+          docker compose up -d
+          now="$(docker inspect --format='{{.Image}}' "$CONTAINER_NAME")"
+          if [ "$now" != "$last_good" ]; then
+            flock -u 8 || true
+            echo "::error::rollback_failed: container image ${now} != last good ${last_good} after compose up"
+            exit 1
+          fi
+          flock -u 8
+          # 回滚后健康探针（gate 第 10 轮）：循环 30 次 × 间隔 2s
+          health_ok=0
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:8200/livez >/dev/null 2>&1; then
+              health_ok=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$health_ok" -ne 1 ]; then
+            echo "::error::rollback_failed: health probe timed out after rollback (service unavailable, manual intervention required)"
+            exit 1
+          fi
+          echo "rollback ok: container redeployed on last good image ${last_good}"
+          REMOTE
+

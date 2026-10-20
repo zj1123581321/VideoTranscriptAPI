@@ -15,6 +15,7 @@ import os
 import queue
 import re
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -54,6 +55,8 @@ from ...utils.llm_status import (
     NotesStatus,
     SummaryStatus,
 )
+from ...i18n import get_language, t
+from ...cache.cache_manager import language_mismatched_generation_layers
 
 logger = lazy_resource(get_logger)
 config = lazy_resource(get_config)
@@ -66,6 +69,25 @@ _NOTES_STALE_CHAPTERS_ERROR = (
     "chapters changed during notes generation, "
     "notes discarded to avoid misalignment"
 )
+
+def _provenance_layers(llm_status: Any) -> dict:
+    if not isinstance(llm_status, dict):
+        return {}
+    provenance = llm_status.get("artifact_provenance")
+    if (
+        isinstance(provenance, dict)
+        and provenance.get("schema_version") == "artifact-provenance-v1"
+        and isinstance(provenance.get("layers"), dict)
+    ):
+        return provenance["layers"]
+    return {}
+
+
+def log_language_mismatch_regenerate(layer: str, old_language: str, new_language: str) -> None:
+    """Emit the locked LANGUAGE-MISMATCH-REGENERATE warning."""
+    logger.warning(
+        f"LANGUAGE-MISMATCH-REGENERATE layer={layer} old={old_language} new={new_language}"
+    )
 
 
 def _requires_llm_title(
@@ -275,7 +297,10 @@ def process_llm_queue():
                     fail_status_written = finalize_terminal_status_and_notify(
                         submit_fail_task_id,
                         TaskStatus.FAILED,
-                        error_message=f"提交LLM任务失败: {exc}",
+                        error_message=t(
+                            "error.task_failure.llm_executor_submit_failed",
+                            error=str(exc),
+                        ),
                         url=llm_task.get("display_url") or llm_task.get("url"),
                         title=llm_task.get("video_title"),
                         channel_name=llm_task.get("notification_channel"),
@@ -402,6 +427,17 @@ def _handle_notes_generation(
     if not cache_dir:
         raise ValueError("Detailed notes task requires a valid cache directory")
 
+    notes_status_snapshot = cache_manager.get_cache(
+        platform,
+        media_id,
+        use_speaker_recognition=use_speaker_recognition,
+    )
+    for layer_name, old_language, new_language in language_mismatched_generation_layers(
+        notes_status_snapshot,
+    ):
+        if layer_name == "notes":
+            log_language_mismatch_regenerate(layer_name, old_language, new_language)
+
     chapter_count = 0
     try:
         chapters_payload = json.loads(
@@ -475,11 +511,30 @@ def _handle_notes_generation(
             ):
                 raise OSError("Failed to persist detailed notes artifact")
 
+            notes_cache = cache_manager.get_cache(
+                platform,
+                media_id,
+                use_speaker_recognition=use_speaker_recognition,
+            )
+            notes_layers = dict(
+                _provenance_layers((notes_cache or {}).get("llm_status"))
+            )
+            notes_record = notes_layers.get("notes")
+            if not isinstance(notes_record, dict):
+                notes_record = {}
+            else:
+                notes_record = dict(notes_record)
+            notes_record["language"] = get_language()
+            notes_layers["notes"] = notes_record
             cache_manager.save_llm_status(
                 platform=platform,
                 media_id=media_id,
                 use_speaker_recognition=use_speaker_recognition,
                 notes_status=NotesStatus.GENERATED,
+                artifact_provenance={
+                    "schema_version": "artifact-provenance-v1",
+                    "layers": notes_layers,
+                },
             )
         notes_outcome["notes_status"] = NotesStatus.GENERATED
         status_written = finalize_terminal_status_and_notify(
@@ -696,6 +751,31 @@ def _handle_llm_task(llm_task: dict):
                 else:
                     skip_chapters_for_coordinator = not chapters_requested
 
+                lang_cache = cache_snapshot_for_flags
+                if lang_cache is None and platform and media_id:
+                    lang_cache = cache_manager.get_cache(
+                        platform,
+                        media_id,
+                        use_speaker_recognition=use_speaker_recognition,
+                    )
+                language_mismatches = language_mismatched_generation_layers(lang_cache)
+                if not calibrate_only:
+                    for layer_name, _old_language, _new_language in language_mismatches:
+                        if layer_name == "summary" and summarize_requested:
+                            skip_summary_for_coordinator = False
+                        elif layer_name == "chapters" and chapters_requested:
+                            skip_chapters_for_coordinator = False
+                for layer_name, old_language, new_language in language_mismatches:
+                    will_generate = (
+                        layer_name == "summary" and not skip_summary_for_coordinator
+                    ) or (
+                        layer_name == "chapters" and not skip_chapters_for_coordinator
+                    )
+                    if will_generate:
+                        log_language_mismatch_regenerate(
+                            layer_name, old_language, new_language
+                        )
+
                 # Cache-side chapters seed (this-round dialogs preferred inside
                 # coordinator after calibration). Keep llm/ package pure.
                 timeline_segments_seed = None
@@ -713,8 +793,8 @@ def _handle_llm_task(llm_task: dict):
                         f"chapters timeline seed for {task_id}: kind={chapters_seed_kind}"
                     )
 
-                # 调用新架构（包含校对、总结、章节）
-                with tracker.track("llm_processing"):
+                # 调用新架构（包含校对、总结、章节）；观测名 llm_processing 锁定，用户可见 llm。
+                with tracker.track("llm_processing", publish_as="llm"):
                     coordinator_result = llm_coordinator.process(
                         content=content,
                         title=video_title,
@@ -931,7 +1011,11 @@ def _handle_llm_task(llm_task: dict):
                     fail_status_written = finalize_terminal_status_and_notify(
                         task_id,
                         TaskStatus.FAILED,
-                        error_message=fail_message,
+                        error_message=(
+                            t("error.task_failure.recalibration_failed", error=str(exc))
+                            if llm_task.get("calibrate_only")
+                            else t("error.task_failure.llm_processing_failed", error=str(exc))
+                        ),
                         url=display_url,
                         title=video_title,
                         notify_error=f"【LLM API调用异常】{exc}",
@@ -1177,6 +1261,9 @@ def _build_result_dict(coordinator_result: dict) -> dict:
         result_dict["structured_data"] = coordinator_result["structured_data"]
     if "artifact_sources" in coordinator_result:
         result_dict["artifact_sources"] = coordinator_result["artifact_sources"]
+    if "share_card" in coordinator_result:
+        result_dict["share_card"] = coordinator_result["share_card"]
+        result_dict["share_card_error"] = coordinator_result.get("share_card_error")
 
     return result_dict
 
@@ -1232,6 +1319,24 @@ def _restore_cached_summary_for_notification(result_dict: dict, merged_snapshot:
     result_dict["skip_summary"] = False
     result_dict.setdefault("stats", {})["summary_length"] = len(cached_summary_text)
     logger.info("本轮未生成总结，已从缓存回填真实总结文本用于通知")
+
+
+def _atomic_write_json(path: Path, data: dict) -> None:
+    """tmp + os.replace 原子写 JSON，避免消费方（og 卡 B 的出图接口）读到
+    写了一半的文件（og 卡 A 卡面约束；与 cache_manager._atomic_write 同一
+    模式，不在其上加间接层只因 cache_manager.py 不在本卡修改范围内）。
+
+    Raises:
+        Exception: 序列化或替换失败时原样向上抛。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(temp_path, path)
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def _should_backfill_summary(cache_data: dict, calibrate_only: bool) -> bool:
@@ -1829,12 +1934,20 @@ def _restore_real_names_after_identity_fallback(
         else (current_transcript_data or [])
     )
     current_speakers = SpeakerInferencer.extract_speaker_labels(current_dialogs)
+    # 指纹纳入元数据与裁决规则版本（card-vta-261015-speaker-evidence）：与
+    # transcription.py 分层缓存预检同源——existing_snapshot 就是
+    # cache_manager.get_cache() 的返回，title/author/description 取自同一份
+    # 缓存快照，与写侧 SpeakerInferencer.infer() 用的元数据一致。
     verified_mapping = (
         cache_manager.get_speaker_mapping(
             platform,
             media_id,
             input_fingerprint=SpeakerInferencer.input_fingerprint(
-                current_speakers, current_dialogs
+                current_speakers,
+                current_dialogs,
+                title=(existing_snapshot or {}).get("title") or "",
+                author=(existing_snapshot or {}).get("author") or "",
+                description=(existing_snapshot or {}).get("description") or "",
             ),
             speakers=current_speakers,
         )
@@ -2235,6 +2348,68 @@ def _save_llm_results(
         else:
             logger.warning(f"总结状态未知或仍在处理中({summary_status})，跳过保存总结文件: {task_id}")
 
+        # ---- share card 文案落盘（og 大图卡片，卡 A；与 llm_summary.txt 始终对应）----
+        # 保留路径（不动文件）：仅校对模式（calibrate_only 且未 backfill）、
+        # 本轮未请求总结且协调器未尝试（summary_status None）——两种情况下磁盘总结
+        # 未被触碰，旧卡仍对应当前总结。
+        # 其余（本轮真实尝试总结）先删旧卡：无论本轮总结成败，旧卡都不再保证对应
+        # 新总结（SKIPPED_SHORT 会覆盖写校对文本；FAILED 时按锁定决策
+        # 「重新总结时先删旧卡」，不留过期卡片）。
+        # 本轮 GENERATED 且协调器产出新卡时再原子写入新文件；卡片生成失败只记
+        # error 日志（带 task_id 与原因），不写文件、不改终态、不重试。
+        # 磁盘触碰前提：result_dict 带 "share_card" 键（即本轮经过 coordinator 的
+        # 生产路径）——手工构造的旧式 result_dict（无此键）不动卡片，也不为此
+        # 多探一次缓存（保持「全流程默认不探缓存」的分层缓存性能约定）。
+        share_card_data = result_dict.get("share_card")
+        share_card_error = result_dict.get("share_card_error")
+        share_card_touched = not (calibrate_only and not summary_backfill) and (
+            summarize_requested or summary_status is not None
+        )
+        if share_card_touched and "share_card" in result_dict:
+            # 设计不变式 2：卡片落盘段（探缓存、删旧卡、原子写）的任何异常都
+            # 不得冒泡——任务终态与总结落盘与卡片无关（门禁主审 F1）。隔离
+            # 范围只包本段，后面的结构化/chapters 落盘不受影响；异常必须留
+            # error 痕迹（task_id + 异常类型 + 信息 + traceback，loguru 的
+            # exc_info 等价写法是 opt(exception=True)）。
+            try:
+                artifact_cache_for_card = cache_manager.get_cache(
+                    platform, media_id,
+                    use_speaker_recognition=use_speaker_recognition,
+                )
+                if artifact_cache_for_card and artifact_cache_for_card.get("file_path"):
+                    share_card_path = (
+                        Path(artifact_cache_for_card["file_path"]) / "llm_share_card.json"
+                    )
+                    if share_card_path.exists():
+                        share_card_path.unlink()
+                        logger.info(
+                            f"removed stale share card (summary regenerated): {task_id}"
+                        )
+                    if summary_status == SummaryStatus.GENERATED and isinstance(
+                        share_card_data, dict
+                    ):
+                        _atomic_write_json(share_card_path, share_card_data)
+                        logger.info(f"share card saved: {task_id}")
+                    elif share_card_data is None and share_card_error:
+                        logger.error(
+                            f"share card generation failed, task continues without card: "
+                            f"task_id={task_id} reason={share_card_error}"
+                        )
+                else:
+                    # 缓存定位失败（get_cache 空或缺 file_path）：静默跳过会让
+                    # 已生成的卡片文案无声丢失（门禁主审 F2），必须留 error；
+                    # card_generated 区分「新卡丢失」与「无新卡只是定位不到」。
+                    logger.error(
+                        f"share card cache path unavailable, card not persisted: "
+                        f"task_id={task_id} "
+                        f"card_generated={isinstance(share_card_data, dict)}"
+                    )
+            except Exception as exc:
+                logger.opt(exception=True).error(
+                    f"share card persistence failed, task continues without card: "
+                    f"task_id={task_id} {type(exc).__name__}: {exc}"
+                )
+
         # 保存结构化数据（同样受校对层抑制保护，避免覆盖已有的真实说话人校对结果）。
         # T8 S4：落盘 gate 由仅 use_speaker_recognition 放宽为「或本轮命中 plain
         # 结构化路由」（plain_structured_active，由 _handle_llm_task 透传）。
@@ -2455,6 +2630,7 @@ def _save_llm_results(
                     "generation_kind": source.get("generation_kind", "unknown"),
                     "actual_model": "unknown",
                     "prompt_version": "unknown",
+                    "language": get_language(),
                 }
                 requested_model = source.get("requested_model")
                 if isinstance(requested_model, str) and requested_model:
@@ -2475,6 +2651,15 @@ def _save_llm_results(
                     final_artifact_layers.pop("summary", None)
                 else:
                     final_artifact_layers["summary"] = summary_record
+
+        if chapters_saved:
+            chapters_record = final_artifact_layers.get("chapters")
+            if not isinstance(chapters_record, dict):
+                chapters_record = {}
+            else:
+                chapters_record = dict(chapters_record)
+            chapters_record["language"] = get_language()
+            final_artifact_layers["chapters"] = chapters_record
 
         final_artifact_provenance = (
             {

@@ -4,6 +4,7 @@ import json
 import shutil
 import time
 from pathlib import Path
+from ..errors import EmptyTranscriptError
 from ..utils.logging import setup_logger, load_config, ensure_dir
 from .capswriter_client import CapsWriterClient, Config as ClientConfig
 
@@ -158,6 +159,9 @@ class Transcriber:
                             logger.info(f"已从文本文件提取转录文本")
                         except Exception as e:
                             logger.warning(f"读取转录文本失败: {str(e)}")
+                        else:
+                            if not result["transcript"].strip():
+                                raise EmptyTranscriptError()
 
                     # 处理 FunASR 兼容格式的 JSON 文件
                     elif file_path_str.endswith("_funasr.json"):

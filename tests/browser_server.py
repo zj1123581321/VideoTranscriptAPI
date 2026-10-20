@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import argparse
-import ast
 import base64
+import datetime
 import hashlib
 import json
 import mimetypes
 import sqlite3
+import sys
 import tempfile
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -18,34 +19,106 @@ from urllib.parse import parse_qs, urlsplit
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+import importlib.util
+
+_logger_py = ROOT / "src" / "video_transcript_api" / "utils" / "logging" / "logger.py"
+_logger_spec = importlib.util.spec_from_file_location(
+    "video_transcript_api.utils.logging.logger", _logger_py
+)
+_logger_mod = importlib.util.module_from_spec(_logger_spec)
+assert _logger_spec.loader is not None
+_logger_spec.loader.exec_module(_logger_mod)
+_logger_mod._config_cache = {}
+sys.modules["video_transcript_api.utils.logging.logger"] = _logger_mod
+
+from video_transcript_api.i18n import get_language, web_catalog_script
+from video_transcript_api.utils.logging.logger import load_config
+from video_transcript_api.api.services.view_token_resolver import (
+    build_stage_progress_display,
+)
+from video_transcript_api.utils.rendering.home_page import render_home_html
+from video_transcript_api.utils.rendering.i18n_jinja import install_i18n
 STATIC_DIR = ROOT / "src" / "web" / "static"
 TEMPLATE_DIR = ROOT / "src" / "web" / "templates"
-VIEWS_SOURCE = ROOT / "src" / "video_transcript_api" / "api" / "routes" / "views.py"
 FIXTURE_TOKEN = "browser-fixture-token"
 VIEW_TOKEN = "browser-fixture-view"
+VIEW_TOKEN_WITH_CARD = "browser-fixture-view-og"
 UPLOAD_VIEW_TOKEN = "upload_browser_fixture_view_1"
 UPLOAD_ID = "browser-fixture-upload-1"
 
-
-def read_home_page() -> str:
-    """Read the exact HTML constant used by the production `/` route."""
-    module = ast.parse(VIEWS_SOURCE.read_text(encoding="utf-8"))
-    for node in module.body:
-        if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "_HOME_HTML"
-            for target in node.targets
-        ):
-            return ast.literal_eval(node.value)
-    raise RuntimeError("Production home page constant _HOME_HTML was not found")
-
-
-HOME_HTML = read_home_page()
 TEMPLATES = Environment(
     loader=FileSystemLoader(TEMPLATE_DIR),
     autoescape=select_autoescape(["html", "xml"]),
 )
 TEMPLATES.globals["asset_v"] = "browser-test"
-FIXTURE_TRANSCRIPT = "隔离浏览器夹具中的正文，验证公开阅读与导出。"
+install_i18n(TEMPLATES)
+FIXTURE_TRANSCRIPT_ZH = "隔离浏览器夹具中的正文，验证公开阅读与导出。"
+FIXTURE_TRANSCRIPT_EN = (
+    "Isolated browser fixture body used to verify public reading and export."
+)
+_fixture_language = "zh-CN"
+load_config()["language"] = "zh-CN"
+
+
+def _fixture_transcript() -> str:
+    return FIXTURE_TRANSCRIPT_EN if _fixture_language == "en" else FIXTURE_TRANSCRIPT_ZH
+
+
+def _fixture_title() -> str:
+    return "Browser regression sample" if _fixture_language == "en" else "浏览器回归示例"
+
+
+def _fixture_summary_html() -> str:
+    if _fixture_language == "en":
+        return "<p>Sample summary shown by the original page template.</p>"
+    return "<p>这是原页面模板显示的样例总结。</p>"
+
+
+def _fixture_error_message() -> str:
+    return "Fixture failed status" if _fixture_language == "en" else "夹具失败状态"
+
+
+def _fixture_calibrated_html() -> str:
+    body = _fixture_transcript()
+    if _fixture_language == "en":
+        pending = "Unconfirmed"
+        speaker = "Speaker 1"
+    else:
+        pending = "待确认"
+        speaker = "说话人1"
+    return (
+        '<div class="dialog-container">'
+        '<div id="dlg-0" class="dialog-item">'
+        '<div class="speaker-header">'
+        f'<div class="speaker-tag" title="{pending}" data-confidence-level="{pending}">'
+        f"{speaker}"
+        f'<span class="speaker-status-badge speaker-pending" data-speaker-status="pending">{pending}</span>'
+        "</div></div>"
+        f'<div class="dialog-content"><p>{body}</p></div>'
+        "</div></div>"
+    )
+
+# Browser fixture uses the production resolver so stage labels follow the same
+# global language as the Jinja ``t()`` globals during the i18n regression.
+def _fixture_stage_progress() -> dict[str, object]:
+    started_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        seconds=83
+    )
+    display = build_stage_progress_display(
+        {
+            "stage": "download",
+            "stage_state": "running",
+            "started_at": started_at.isoformat(),
+            "stages": [
+                {"stage": "url_parse", "elapsed_ms": 2000, "state": "done"},
+                {"stage": "transcription", "elapsed_ms": 65000, "state": "done"},
+            ],
+        }
+    )
+    assert display is not None
+    return display
 
 
 def initialize_database(db_path: Path) -> None:
@@ -140,8 +213,19 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
         if path == "/__e2e__/ready":
             self.send_bytes(200, b"ready", "text/plain; charset=utf-8")
             return
+        if path == "/i18n.js":
+            self.send_bytes(
+                200,
+                web_catalog_script(get_language()).encode("utf-8"),
+                "application/javascript; charset=utf-8",
+            )
+            return
         if path == "/":
-            self.send_bytes(200, HOME_HTML.encode("utf-8"), "text/html; charset=utf-8")
+            self.send_bytes(
+                200,
+                render_home_html().encode("utf-8"),
+                "text/html; charset=utf-8",
+            )
             return
         if path == "/add_task_by_web":
             self.serve_static(STATIC_DIR / "index.html")
@@ -172,15 +256,17 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
             if "raw" in query:
                 self.send_bytes(
                     200,
-                    ("# 浏览器回归示例\n\n" + FIXTURE_TRANSCRIPT).encode("utf-8"),
+                    ("# " + _fixture_title() + "\n\n" + _fixture_transcript()).encode("utf-8"),
                     "text/plain; charset=utf-8",
                 )
                 return
             if "page" in query:
                 self.send_bytes(
                     200,
-                    ("<!doctype html><html><body><h1>浏览器回归示例</h1><p>"
-                     + FIXTURE_TRANSCRIPT
+                    ("<!doctype html><html><body><h1>"
+                     + _fixture_title()
+                     + "</h1><p>"
+                     + _fixture_transcript()
                      + "</p></body></html>").encode("utf-8"),
                     "text/html; charset=utf-8",
                 )
@@ -366,11 +452,24 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
         self.send_bytes(404, b"not found", "text/plain; charset=utf-8")
 
     def do_POST(self) -> None:
+        global _fixture_language
         path = urlsplit(self.path).path
         if path == "/__e2e__/reset":
+            _fixture_language = "zh-CN"
+            load_config()["language"] = "zh-CN"
             with sqlite3.connect(self.db_path) as db:
                 seed_database(db)
             self.send_json(200, {"ok": True})
+            return
+        if path == "/__e2e__/language":
+            payload = self.read_json()
+            language = str(payload.get("language") or "")
+            if language not in ("zh-CN", "en"):
+                self.send_json(400, {"error": "unsupported language"})
+                return
+            _fixture_language = language
+            load_config()["language"] = language
+            self.send_json(200, {"ok": True, "language": language})
             return
         if path == "/api/transcribe":
             if not self.authorized():
@@ -500,21 +599,31 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
         context: dict[str, object] = {
             "request": None,
             "view_token": view_token,
-            "title": "浏览器回归示例",
+            "title": _fixture_title(),
             "platform": "local_upload" if view_token.startswith("upload_") else "YouTube",
             "url": "https://www.youtube.com/watch?v=fixture",
             "status": status,
             "created_at": "2026-10-08T12:00:00",
-            "summary_html": '<p>这是原页面模板显示的样例总结。</p>',
+            "summary_html": _fixture_summary_html(),
             "summary_state": "generated",
-            "calibrated_html": f"<p>{FIXTURE_TRANSCRIPT}</p>",
-            "calibrated_text": FIXTURE_TRANSCRIPT,
-            "stats": {"original_length": len(FIXTURE_TRANSCRIPT), "calibrated_length": len(FIXTURE_TRANSCRIPT), "summary_length": 13},
+            "calibrated_html": _fixture_calibrated_html(),
+            "calibrated_text": _fixture_transcript(),
+            "stats": {"original_length": len(_fixture_transcript()), "calibrated_length": len(_fixture_transcript()), "summary_length": 13},
             "deep_read_prompt_presets": [],
-            "page_title": "浏览器回归示例",
-            "error_message": "夹具失败状态",
-            "message": "夹具失败状态",
+            "page_title": _fixture_title(),
+            "error_message": _fixture_error_message(),
+            "message": _fixture_error_message(),
         }
+        if status == "processing":
+            context["stage_progress"] = _fixture_stage_progress()
+        if view_token == VIEW_TOKEN_WITH_CARD:
+            port = self.server.server_address[1]
+            context["share_card"] = {
+                "headline": 'Fixture "headline" & alt',
+                "points": ["First fixture point", "Second fixture point"],
+                "generated_at": "2026-10-16T12:00:00+08:00",
+            }
+            context["og_image_url"] = f"http://127.0.0.1:{port}/og/{view_token}.png?v=1"
         html = TEMPLATES.get_template(template_name).render(**context)
         self.send_bytes(200, html.encode("utf-8"), "text/html; charset=utf-8")
 
