@@ -9,9 +9,10 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
 from ..context import (
+    ApiError,
     get_audit_logger,
     get_cache_manager,
     get_config,
@@ -117,10 +118,7 @@ def _normalize_history_status(status: Optional[str]) -> str:
     """Limit history filters to statuses represented by terminal snapshots."""
     effective_status = status or "success"
     if effective_status not in {"success", "failed", "all"}:
-        raise HTTPException(
-            status_code=422,
-            detail="status must be one of: success, failed, all",
-        )
+        raise ApiError(422, "invalid_history_status")
     return effective_status
 
 
@@ -167,7 +165,7 @@ async def get_audit_stats(days: int = 30, user_info: dict = Depends(verify_token
         )
     except Exception as exc:
         logger.exception("获取审计统计异常: {}", exc)
-        raise HTTPException(status_code=500, detail=f"获取统计信息失败: {exc}")
+        raise ApiError(500, "audit_stats_failed", error=str(exc))
 
 
 @router.get("/summary-ratio")
@@ -180,7 +178,7 @@ async def get_summary_ratio_stats(
         not user_manager.is_multi_user_mode() or user_info.get("is_legacy", False)
     )
     if not can_view_global:
-        raise HTTPException(status_code=403, detail="无权访问全局总结比例统计")
+        raise ApiError(403, "summary_ratio_permission_denied")
 
     try:
         app_config = get_config()
@@ -208,7 +206,7 @@ async def get_summary_ratio_stats(
         )
     except Exception as exc:
         logger.exception("获取总结比例统计异常: {}", exc)
-        raise HTTPException(status_code=500, detail=f"获取总结比例统计失败: {exc}")
+        raise ApiError(500, "summary_ratio_failed", error=str(exc))
 
 
 @router.get("/calls")
@@ -227,18 +225,18 @@ async def get_audit_calls(
         # 缺失越权，在本轮 /summary 修复后本地 codex review 追加发现。
         if not user_id:
             logger.error("audit calls: caller has no user_id, denying access (fail-closed)")
-            raise HTTPException(status_code=401, detail="无法确定调用方身份")
+            raise ApiError(401, "caller_identity_missing")
         recent_calls = await asyncio.to_thread(audit_logger.get_recent_calls, user_id, limit)
         return TranscribeResponse(
             code=200,
             message="获取调用记录成功",
             data={"calls": recent_calls, "user_id": user_id, "limit": limit},
         )
-    except HTTPException:
+    except ApiError:
         raise
     except Exception as exc:
         logger.exception("获取审计调用记录异常: {}", exc)
-        raise HTTPException(status_code=500, detail=f"获取调用记录失败: {exc}")
+        raise ApiError(500, "audit_calls_failed", error=str(exc))
 
 
 @router.get("/history")
@@ -264,7 +262,7 @@ async def get_history(
     api_key_masked = audit_logger._mask_api_key(api_key)
     user_id = user_info.get("user_id")
     if source not in (None, "upload", "url"):
-        raise HTTPException(status_code=400, detail="source 仅支持 upload 或 url")
+        raise ApiError(400, "invalid_history_source")
     if source == "upload":
         effective_status = _normalize_history_status(status)
 
@@ -356,10 +354,10 @@ async def get_history(
             total, items = await asyncio.to_thread(_run_upload_query)
         except sqlite3.OperationalError as exc:
             logger.error("upload history query failed: {}", exc)
-            raise HTTPException(status_code=503, detail="上传历史查询失败")
+            raise ApiError(503, "upload_history_unavailable")
         except Exception as exc:
             logger.exception("upload history query failed: {}", exc)
-            raise HTTPException(status_code=500, detail=f"上传历史查询失败: {exc}")
+            raise ApiError(500, "upload_history_failed", error=str(exc))
         return TranscribeResponse(
             code=200,
             message="获取历史记录成功",
@@ -580,13 +578,13 @@ async def get_history(
                 total, items = await asyncio.to_thread(_run_query)
             except sqlite3.OperationalError as e2:
                 logger.error("history query: database still locked after retry: {}", e2)
-                raise HTTPException(status_code=503, detail="服务暂时不可用，请稍后重试")
+                raise ApiError(503, "service_unavailable")
         else:
             logger.exception("history query failed: {}", e)
-            raise HTTPException(status_code=500, detail=f"查询失败: {e}")
+            raise ApiError(500, "audit_query_failed", error=str(e))
     except Exception as exc:
         logger.exception("history query unexpected error: {}", exc)
-        raise HTTPException(status_code=500, detail=f"查询失败: {exc}")
+        raise ApiError(500, "audit_query_failed", error=str(exc))
 
     return TranscribeResponse(
         code=200,
@@ -676,13 +674,13 @@ async def get_filter_options(user_info: dict = Depends(verify_token)):
                 webhooks, platforms, authors = await asyncio.to_thread(_run_query)
             except sqlite3.OperationalError as e2:
                 logger.error("filter-options: database still locked: {}", e2)
-                raise HTTPException(status_code=503, detail="服务暂时不可用，请稍后重试")
+                raise ApiError(503, "service_unavailable")
         else:
             logger.exception("filter-options query failed: {}", e)
-            raise HTTPException(status_code=500, detail=f"查询失败: {e}")
+            raise ApiError(500, "audit_query_failed", error=str(e))
     except Exception as exc:
         logger.exception("filter-options unexpected error: {}", exc)
-        raise HTTPException(status_code=500, detail=f"查询失败: {exc}")
+        raise ApiError(500, "audit_query_failed", error=str(exc))
 
     return TranscribeResponse(
         code=200,
@@ -879,11 +877,11 @@ async def get_task_summary(
             ViewTokenResolver(cache_manager)._local_upload_task_info, view_token
         )
         if not task_info:
-            raise HTTPException(status_code=404, detail="任务不存在或分享已关闭")
+            raise ApiError(404, "task_not_found_or_share_closed")
     else:
         task_info = await asyncio.to_thread(cache_manager.get_task_by_view_token, view_token)
         if not task_info:
-            raise HTTPException(status_code=404, detail="任务不存在")
+            raise ApiError(404, "task_not_found")
 
     # 校验归属：task_info 中暂无 user_id，通过 audit_log 反查（租户边界用
     # user_id，不用可能碰撞的 api_key_masked，见云端 CI codex gate）。
@@ -913,9 +911,9 @@ async def get_task_summary(
             )
         except Exception as e:
             logger.error("summary auth check failed, denying access (fail-closed): {}", e)
-            raise HTTPException(status_code=503, detail="归属校验暂时不可用，请稍后重试")
+            raise ApiError(503, "ownership_check_unavailable")
         if not owned:
-            raise HTTPException(status_code=403, detail="无权访问该任务")
+            raise ApiError(403, "task_access_denied")
 
     # 任务未完成。cache.db 终态仍是 success/failed；failed 但缓存有正文时
     # ViewTokenResolver 会给出 interrupted，摘要端点按产物存在性放行。
@@ -981,4 +979,4 @@ async def get_task_summary(
         )
     except Exception as exc:
         logger.exception("get summary failed for view_token={}: {}", view_token, exc)
-        raise HTTPException(status_code=500, detail=f"获取摘要失败: {exc}")
+        raise ApiError(500, "summary_fetch_failed", error=str(exc))

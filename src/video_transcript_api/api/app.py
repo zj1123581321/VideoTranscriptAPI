@@ -27,6 +27,7 @@ from .context import (
     get_runtime,
     get_static_dir,
     get_temp_manager,
+    install_api_error_handlers,
     load_and_validate_config,
     run_with_runtime,
     unbind_runtime,
@@ -315,6 +316,7 @@ def create_app(
         version="1.2.0",
         lifespan=lifespan,
     )
+    install_api_error_handlers(app)
 
     app.add_middleware(
         CORSMiddleware,

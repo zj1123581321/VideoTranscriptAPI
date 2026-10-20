@@ -20,14 +20,58 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, TypeVar
 
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from ..i18n import t
 from ..utils.logging import load_config, setup_logger, shutdown_logger
 from ..utils.task_status import TaskStatus
 
 
 class ConfigError(ValueError):
     """Raised when production configuration is missing or invalid."""
+
+
+class ApiError(HTTPException):
+    """HTTP error with a stable code and a localized string detail."""
+
+    def __init__(self, status_code: int, error_code: str, **values: str) -> None:
+        self.error_code = error_code
+        detail = t(f"error.{error_code}", **values)
+        super().__init__(status_code=status_code, detail=detail)
+
+
+def install_api_error_handlers(app) -> None:
+    """Add stable error codes to JSON API HTTP errors; leave validation 422 intact."""
+
+    @app.exception_handler(StarletteHTTPException)
+    async def handle_http_error(request: Request, exc: StarletteHTTPException):
+        if isinstance(exc, ApiError):
+            return JSONResponse(
+                {"detail": exc.detail, "error_code": exc.error_code},
+                status_code=exc.status_code,
+                headers=exc.headers,
+            )
+        if (
+            request.url.path == "/api"
+            or request.url.path.startswith("/api/")
+        ) and exc.status_code != 422:
+            error_code = {
+                404: "resource_not_found",
+                405: "method_not_allowed",
+            }.get(exc.status_code, "api_error")
+            return JSONResponse(
+                {"detail": exc.detail, "error_code": error_code},
+                status_code=exc.status_code,
+                headers=exc.headers,
+            )
+        return JSONResponse(
+            {"detail": exc.detail},
+            status_code=exc.status_code,
+            headers=exc.headers,
+        )
 
 
 # Default deep-read prompt keeps the full calibrated transcript in scope.
@@ -1762,7 +1806,7 @@ def _retry_terminal_write_pending(cache_manager, task_ids: set[str], logger) -> 
             finalize_terminal_status_and_notify(
                 task_id,
                 TaskStatus.FAILED,
-                error_message="LLM 任务提交失败，终态写入曾经失败，已由运行期维护补偿写入",
+                error_message=t("error.task_failure.llm_submit_status_recovered"),
                 cache_manager=cache_manager,
             )
         except Exception:

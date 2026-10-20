@@ -55,7 +55,7 @@ from ...utils.llm_status import (
     NotesStatus,
     SummaryStatus,
 )
-from ...i18n import get_language
+from ...i18n import get_language, t
 from ...cache.cache_manager import language_mismatched_generation_layers
 
 logger = lazy_resource(get_logger)
@@ -297,7 +297,10 @@ def process_llm_queue():
                     fail_status_written = finalize_terminal_status_and_notify(
                         submit_fail_task_id,
                         TaskStatus.FAILED,
-                        error_message=f"提交LLM任务失败: {exc}",
+                        error_message=t(
+                            "error.task_failure.llm_executor_submit_failed",
+                            error=str(exc),
+                        ),
                         url=llm_task.get("display_url") or llm_task.get("url"),
                         title=llm_task.get("video_title"),
                         channel_name=llm_task.get("notification_channel"),
@@ -1008,7 +1011,11 @@ def _handle_llm_task(llm_task: dict):
                     fail_status_written = finalize_terminal_status_and_notify(
                         task_id,
                         TaskStatus.FAILED,
-                        error_message=fail_message,
+                        error_message=(
+                            t("error.task_failure.recalibration_failed", error=str(exc))
+                            if llm_task.get("calibrate_only")
+                            else t("error.task_failure.llm_processing_failed", error=str(exc))
+                        ),
                         url=display_url,
                         title=video_title,
                         notify_error=f"【LLM API调用异常】{exc}",
