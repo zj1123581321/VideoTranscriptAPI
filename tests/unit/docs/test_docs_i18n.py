@@ -26,7 +26,10 @@ def generated_error_code_doc(*, root: Path = ROOT) -> str:
 
 
 def test_error_code_reference_matches_generator_output() -> None:
-    assert ERROR_CODE_DOC.read_text(encoding="utf-8") == generated_error_code_doc()
+    current = ERROR_CODE_DOC.read_text(encoding="utf-8")
+    expected = generated_error_code_doc()
+    if current != expected:
+        raise AssertionError("Generated API error-code reference is stale.")
 
 
 def _readme_heading_counts(path: Path) -> tuple[int, int]:
@@ -64,8 +67,10 @@ def test_readme_heading_counts_match_outside_code_fences() -> None:
 def test_both_readmes_link_language_config_and_error_code_reference() -> None:
     for readme_name in ("README.md", "README.en.md"):
         content = (ROOT / readme_name).read_text(encoding="utf-8")
-        assert '"language"' in content
-        assert "docs/guides/api/error-codes.md" in content
+        if '"language"' not in content:
+            raise AssertionError(f"{readme_name} is missing a language config example.")
+        if "docs/guides/api/error-codes.md" not in content:
+            raise AssertionError(f"{readme_name} is missing the error-code reference link.")
 
 
 def test_generator_output_changes_when_locale_text_changes(tmp_path: Path) -> None:
@@ -91,5 +96,7 @@ def test_generator_output_changes_when_locale_text_changes(tmp_path: Path) -> No
 
     regenerated = generated_error_code_doc(root=source_root)
     current_doc = ERROR_CODE_DOC.read_text(encoding="utf-8")
-    assert "(changed)" in regenerated
-    assert regenerated != current_doc
+    if "(changed)" not in regenerated:
+        raise AssertionError("Generator did not read the changed locale entry.")
+    if regenerated == current_doc:
+        raise AssertionError("Changed locale text did not change generated Markdown.")
