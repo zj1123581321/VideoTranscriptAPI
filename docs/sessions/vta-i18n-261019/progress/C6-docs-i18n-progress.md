@@ -62,3 +62,10 @@
 - 本段结论：`uv run --frozen pytest -q tests/unit/docs` 退出码 0（9 项通过），`make test` 退出码 0（全套收集进度到 100%，3 项跳过）；新增 Python 文件通过 `py_compile`，`git diff --check` 与卡面 scope 检查通过。前三项修复按结构断言、响应语义、AST fail-closed 顺序分别提交并逐次推送，远端每步均经 `git ls-remote` 核实。
 - 关键决策与已否决方案：pytest 的双重 quiet 配置未输出总数，仅报告实际进程退出码与进度输出；不为未配置的类型检查工具引入依赖，使用仓内可用验证与编译检查。
 - 下一步唯一动作：提交本段进度与最终验收报告，并复核远端 tip 和工作区状态。
+
+### 里程碑 10：`data.error` fallback 语义校准
+
+- 当前阶段：completed
+- 本段结论：逐行核对 `get_task_status` 后，将生成文档与 skill 说明细化为「失败文案文本，通常在失败写入时按服务端语言本地化；无存储文案时使用当前语言的通用失败文案」，并明确非 locale key、不稳定、不可分支；最终窄测 9 项通过。最终再次运行 `make test` 时，唯一失败为 `test_local_capacity_probe_exercises_real_http_payload_and_loopback_overlap`，错误为 `controlled_url_download_did_not_overlap_upload_receiving`。
+- 关键决策与已否决方案：不把 fallback 描述成持久化文案，因为 `tasks.py:547` 在缺失 `error_message` 时调用当前语言的 `error.task_failed`；全量探针红与进度里程碑 5 记录的同一失败标识一致，但派发基线不可用，继承红仍标为未能判定。
+- 下一步唯一动作：提交这次准确性补充，完成最终 scope、远端 tip 与工作区核验并写报告。

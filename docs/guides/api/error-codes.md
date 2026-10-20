@@ -87,9 +87,9 @@ HTTP 状态来自生产代码中的 `ApiError(status, error_code)` 调用。`dyn
 
 ## 任务失败原因 / Task failure reasons
 
-`GET /api/task/{task_id}` 响应的 `data.error` 是任务失败时写入的本地化文本，不是 locale key；它可能随服务端语言和失败内容变化，因此不稳定、不可用于客户端分支。表中 key 仅供对照文案，不是 API 返回值。
+`GET /api/task/{task_id}` 响应的 `data.error` 是失败文案文本（通常在失败写入时按服务端语言本地化；没有已存文案时使用当前语言的通用失败文案），不是 locale key；它可能随语言和失败内容变化，因此不稳定、不可用于客户端分支。表中 key 仅供对照文案，不是 API 返回值。
 
-In `GET /api/task/{task_id}`, `data.error` is the localized text stored when the task fails, not a locale key. It can vary with the server language and failure details, so it is unstable and must not be used for client branching. The keys in this table are for looking up the corresponding text only; they are not API response values.
+In `GET /api/task/{task_id}`, `data.error` contains failure text (normally localized with the server language when the failure is written; if no text was stored, it uses the generic failure text in the current language), not a locale key. It can vary with language and failure details, so it is unstable and must not be used for client branching. The keys in this table are for looking up the corresponding text only; they are not API response values.
 
 | key | zh-CN 文案 | en 文案 |
 |---|---|---|
