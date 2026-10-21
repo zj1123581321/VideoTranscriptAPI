@@ -131,7 +131,6 @@ function buildHistoryItemHTML(task) {
     const timeStr = escapeHTML(new Date(task.timestamp).toLocaleString(dateLocale));
     const originalTextPreview = task.original_text ?
         (task.original_text.length > 100 ? task.original_text.substring(0, 100) + '...' : task.original_text) : '';
-    const showUrl = task.url && (!task.original_text || task.original_text.trim() !== task.url.trim());
     const isUpload = task.source === 'upload';
     const retentionBadge = task.retention ? `<span class="feature-tag">• ${window.t('web.js.kept')} ${escapeHTML(task.retention)}</span>` : '';
     return `
@@ -143,7 +142,7 @@ function buildHistoryItemHTML(task) {
                     <span class="original-text-content">${escapeHTML(originalTextPreview)}</span>
                 </div>
             ` : ''}
-            ${showUrl ? `<div class="history-url">${escapeHTML(task.url)}</div>` : ''}
+            ${task.url && (!task.original_text || task.original_text.trim() !== task.url.trim()) ? `<div class="history-url">${escapeHTML(task.url)}</div>` : ''}
             <div class="history-meta">
                 <span>${timeStr}</span>
                 ${isUpload ? `<span class="feature-tag">• ${window.t('web.js.local_upload')}</span>` : ''}
