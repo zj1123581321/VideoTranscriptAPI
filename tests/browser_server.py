@@ -47,6 +47,10 @@ VIEW_TOKEN = "browser-fixture-view"
 VIEW_TOKEN_WITH_CARD = "browser-fixture-view-og"
 UPLOAD_VIEW_TOKEN = "upload_browser_fixture_view_1"
 UPLOAD_ID = "browser-fixture-upload-1"
+LAYOUT_UPLOAD_ID = "browser-layout-overflow-upload"
+LAYOUT_VIEW_TOKEN = "browser-layout-overflow"
+LAYOUT_LONG_URL = "https://x.com/" + "L" * 220
+LAYOUT_LONG_TITLE = "LongTitle" + "T" * 220
 
 TEMPLATES = Environment(
     loader=FileSystemLoader(TEMPLATE_DIR),
@@ -171,6 +175,24 @@ def seed_database(db: sqlite3.Connection) -> None:
             "2026-10-08T12:00:00",
             hashlib.sha256(b"fixture-seed-bytes").hexdigest(),
             18,
+        ),
+    )
+    db.execute(
+        "INSERT INTO uploads VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, 'accepted', NULL, ?, ?)",
+        (
+            LAYOUT_UPLOAD_ID,
+            "layout-overflow-idempotency-key",
+            "task-layout-overflow",
+            "upload_layout_overflow_view",
+            LAYOUT_LONG_URL + ".mp4",
+            1024,
+            LAYOUT_LONG_TITLE,
+            LAYOUT_LONG_URL,
+            "30d",
+            json.dumps({"calibrate": True, "summarize": True, "infer_speaker_names": False, "chapters": True}),
+            "2026-10-08T13:00:00",
+            hashlib.sha256(b"layout-overflow-fixture-bytes").hexdigest(),
+            31,
         ),
     )
 
@@ -599,9 +621,9 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
         context: dict[str, object] = {
             "request": None,
             "view_token": view_token,
-            "title": _fixture_title(),
+            "title": LAYOUT_LONG_TITLE if view_token == LAYOUT_VIEW_TOKEN else _fixture_title(),
             "platform": "local_upload" if view_token.startswith("upload_") else "YouTube",
-            "url": "https://www.youtube.com/watch?v=fixture",
+            "url": LAYOUT_LONG_URL if view_token == LAYOUT_VIEW_TOKEN else "https://www.youtube.com/watch?v=fixture",
             "status": status,
             "created_at": "2026-10-08T12:00:00",
             "summary_html": _fixture_summary_html(),
