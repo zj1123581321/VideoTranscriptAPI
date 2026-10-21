@@ -175,6 +175,7 @@ def _raw_upload(
     # Hold the final chunk until the media fixture observes GET so overlap
     # is guaranteed by construction rather than scheduling luck.
     if not download_started.wait(timeout=15):
+        connection.close()
         raise ExperimentFailure("controlled_url_download_never_started_during_upload")
     connection.send(payload[last_begin:])
     response = connection.getresponse()
