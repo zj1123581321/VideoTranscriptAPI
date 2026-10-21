@@ -73,6 +73,7 @@
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
     line-height: 1.6;
+    overflow-wrap: anywhere;
     color: var(--text-primary);
     background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
     min-height: 100vh;
@@ -301,9 +302,6 @@ body {
     border-radius: 4px;
     font-size: 0.9rem;
     max-width: 400px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .url-score {
@@ -635,7 +633,6 @@ body {
     font-size: 0.85rem;
     color: var(--text-secondary);
     line-height: 1.4;
-    word-break: break-word;
 }
 
 .history-meta {
@@ -922,7 +919,6 @@ body {
     .url-display {
         max-width: 100%;
         font-size: 0.85rem;
-        word-break: break-all;
     }
     
     .url-score {
@@ -959,7 +955,6 @@ body {
     
     .history-url {
         font-size: 0.8rem;
-        word-break: break-all;
         line-height: 1.2;
     }
     
@@ -1237,4 +1232,14 @@ body {
     .stat-value {
         font-size: 1.35rem;
     }
+}
+
+/* Shared wrapping and sizing baseline for third-party text and action controls. */
+button,
+.btn,
+.history-btn,
+.page-btn,
+.site-nav-link {
+    white-space: nowrap;
+    flex-shrink: 0;
 }

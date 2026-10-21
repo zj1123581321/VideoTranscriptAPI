@@ -142,7 +142,7 @@ function buildHistoryItemHTML(task) {
                     <span class="original-text-content">${escapeHTML(originalTextPreview)}</span>
                 </div>
             ` : ''}
-            ${task.url ? `<div class="history-url">${escapeHTML(task.url)}</div>` : ''}
+            ${task.url && (!task.original_text || task.original_text.trim() !== task.url.trim()) ? `<div class="history-url">${escapeHTML(task.url)}</div>` : ''}
             <div class="history-meta">
                 <span>${timeStr}</span>
                 ${isUpload ? `<span class="feature-tag">• ${window.t('web.js.local_upload')}</span>` : ''}

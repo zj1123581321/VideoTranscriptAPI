@@ -67,12 +67,18 @@
     position: relative;
     z-index: 1;
     display: block;
+}
+.notes-generation-placeholder-title {
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+.notes-generation-placeholder-time {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    color: var(--text-secondary, #666);
+    font-size: 0.85rem;
 }
-.notes-generation-placeholder-title { margin-bottom: 8px; font-weight: 600; }
-.notes-generation-placeholder-time { color: var(--text-secondary, #666); font-size: 0.85rem; }
 .notes-generation-placeholder-line {
     height: 10px;
     margin-top: 14px;
@@ -99,13 +105,11 @@
 .status-interrupted .interrupted-reason {
     margin-top: 8px;
     color: var(--text-secondary, #666);
-    overflow-wrap: anywhere;
 }
 .status-interrupted .interrupted-at {
     margin-top: 8px;
     color: var(--text-secondary, #666);
     font-size: 0.85rem;
-    overflow-wrap: anywhere;
 }
 
 /* Recalibrate button */
@@ -328,11 +332,11 @@
         width: 100%;
     }
     .dialog-actions { justify-content: stretch; }
-    .dialog-actions .dialog-btn { flex: 1 1 120px; }
+    .dialog-actions .dialog-btn { flex: 1 1 120px; flex-shrink: 0; }
 }
 
 /* Inline recalibrate status (replaces button during processing) */
-.recalibrate-status { font-size: 0.85rem; color: var(--text-secondary, #888); white-space: nowrap; }
+.recalibrate-status { font-size: 0.85rem; color: var(--text-secondary, #888); }
 .recalibrate-done { color: #5cb85c; }
 .recalibrate-error { color: #d9534f; }
 

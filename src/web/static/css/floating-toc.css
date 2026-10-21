@@ -658,6 +658,7 @@ body.toc-wide-margin {
     flex: 1 1 auto;
     min-width: 0;
     display: flex;
+    white-space: normal;
     align-items: baseline;
     gap: 8px;
     width: 100%;
@@ -690,6 +691,13 @@ body.toc-wide-margin {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.toc-chapter-main:hover .toc-chapter-title,
+.toc-chapter-main:focus-visible .toc-chapter-title {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
 }
 
 /* 摘要全文：不截断、无展开交互，文档级行距；
@@ -727,7 +735,6 @@ body.toc-wide-margin {
     font-size: 0.82em;
     font-weight: 500;
     text-decoration: none;
-    white-space: nowrap;
 }
 
 .notes-source-link:hover,
@@ -763,9 +770,8 @@ body.toc-wide-margin {
 .chapter-sticky-bar-label {
     flex: 1;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     text-align: left;
 }
 
