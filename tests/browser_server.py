@@ -190,7 +190,7 @@ def seed_database(db: sqlite3.Connection) -> None:
             LAYOUT_LONG_URL,
             "30d",
             json.dumps({"calibrate": True, "summarize": True, "infer_speaker_names": False, "chapters": True}),
-            "2026-10-08T13:00:00",
+            "2026-10-08T11:00:00",
             hashlib.sha256(b"layout-overflow-fixture-bytes").hexdigest(),
             31,
         ),
@@ -626,7 +626,11 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
             "url": LAYOUT_LONG_URL if view_token == LAYOUT_VIEW_TOKEN else "https://www.youtube.com/watch?v=fixture",
             "status": status,
             "created_at": "2026-10-08T12:00:00",
-            "summary_html": _fixture_summary_html(),
+            "summary_html": (
+                f"<p>{LAYOUT_LONG_URL}</p>"
+                if view_token == LAYOUT_VIEW_TOKEN
+                else _fixture_summary_html()
+            ),
             "summary_state": "generated",
             "calibrated_html": _fixture_calibrated_html(),
             "calibrated_text": _fixture_transcript(),

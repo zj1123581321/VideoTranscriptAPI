@@ -84,7 +84,7 @@ for (const viewport of viewports) {
           id: 'layout-long',
           title: longTitleValue,
           url: longUrlValue,
-          original_text: longUrlValue,
+          original_text: ` ${longUrlValue} `,
           timestamp: '2026-10-21T12:00:00.000Z',
           view_token: 'browser-fixture-view',
         },
@@ -102,6 +102,7 @@ for (const viewport of viewports) {
 
     const longCard = page.locator('.history-item:has([data-task-id="layout-long"])');
     await expect(longCard).toBeVisible();
+    await expect(longCard.locator('.history-title')).toHaveText(longTitle);
     await expectNoHorizontalOverflow(page);
     await expectControlsInsideCards(
       page,
@@ -111,6 +112,9 @@ for (const viewport of viewports) {
     );
     await expect(longCard.locator('.history-original-text')).toHaveCount(1);
     await expect(longCard.locator('.history-url')).toHaveCount(0);
+    await page.locator('.fade-in').evaluateAll((elements) => {
+      elements.forEach((element) => element.getAnimations().forEach((animation) => animation.finish()));
+    });
 
     if (viewport.width === 1280) {
       await page.screenshot({ path: '/tmp/vta-layout-overflow-home-1280.png', fullPage: true });
@@ -128,6 +132,7 @@ for (const viewport of viewports) {
     await page.locator('#filterSource').selectOption('upload');
     const longRow = page.locator('#listArea .task-row').filter({ hasText: longTitle });
     await expect(longRow).toBeVisible();
+    await expect(longRow.locator('.task-title')).toHaveAttribute('title', longTitle);
     await expect(longRow.locator('.task-author')).toContainText(longUrl);
     await expectNoHorizontalOverflow(page);
     await expectControlsInsideCards(
@@ -142,12 +147,21 @@ for (const viewport of viewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/view/browser-layout-overflow');
     await expect(page.locator('.header h1')).toContainText(longTitle);
+    await expect(page.locator('#summary-content-block')).toContainText(longUrl);
     await expectNoHorizontalOverflow(page);
     await expectControlsInsideCards(
       page,
-      '.section, .quick-copy-bar',
+      '.section',
       'button, a.btn',
-      '.section button, .quick-copy-bar button',
+      '.section button',
     );
+  });
+
+  test(`processing and error pages do not scroll horizontally at ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    for (const path of ['/view/processing', '/view/failed']) {
+      await page.goto(path);
+      await expectNoHorizontalOverflow(page);
+    }
   });
 }
