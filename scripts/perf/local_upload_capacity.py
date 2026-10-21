@@ -47,6 +47,7 @@ class QuietMediaHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         started = time.monotonic()
+        type(self).download_started.set()
         time.sleep(0.5)
         super().do_GET()
         with self.requests_guard:
@@ -135,7 +136,13 @@ def _write_synthetic_config(root: Path, *, api_port: int, asr_port: int) -> tupl
     return config_path, users_path
 
 
-def _raw_upload(base_url: str, token: str, payload: bytes, starts: threading.Barrier) -> dict:
+def _raw_upload(
+    base_url: str,
+    token: str,
+    payload: bytes,
+    starts: threading.Barrier,
+    download_started: threading.Event,
+) -> dict:
     key = f"{int(datetime.now(timezone.utc).timestamp() * 1000)}-{uuid.uuid4()}"
     metadata = {
         "filename": "bounded-synthetic.wav",
@@ -161,9 +168,15 @@ def _raw_upload(base_url: str, token: str, payload: bytes, starts: threading.Bar
     starts.wait(timeout=5)
     started = time.monotonic()
     chunk_bytes = 64 * 1024
-    for offset in range(0, len(payload), chunk_bytes):
+    last_begin = (len(payload) - 1) // chunk_bytes * chunk_bytes
+    for offset in range(0, last_begin, chunk_bytes):
         connection.send(payload[offset : offset + chunk_bytes])
         time.sleep(0.003)
+    # Hold the final chunk until the media fixture observes GET so overlap
+    # is guaranteed by construction rather than scheduling luck.
+    if not download_started.wait(timeout=15):
+        raise ExperimentFailure("controlled_url_download_never_started_during_upload")
+    connection.send(payload[last_begin:])
     response = connection.getresponse()
     body = response.read()
     elapsed = time.monotonic() - started
@@ -339,6 +352,8 @@ def run_experiment(duration_seconds: int) -> int:
                 def __init__(self, *args, **kwargs):
                     super().__init__(*args, directory=str(root), **kwargs)
 
+            download_started = threading.Event()
+            SandboxMediaHandler.download_started = download_started
             media_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), SandboxMediaHandler)
             media_thread = threading.Thread(target=media_server.serve_forever, daemon=True)
             cleanup.callback(media_thread.join, 5)
@@ -397,6 +412,7 @@ def run_experiment(duration_seconds: int) -> int:
                             "sandbox-token-never-use-outside-this-run",
                             payload,
                             starts,
+                            download_started,
                         )
                         for _ in range(2)
                     ]
