@@ -82,8 +82,9 @@
             font-weight: 600;
         }
 
-        .public-language-switch { display: flex; justify-content: center; gap: 12px; margin-top: 8px; font-size: 0.9rem; }
-        .public-language-switch a { color: inherit; }
+        .header-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 12px; }
+        .public-language-switch { display: flex; align-items: center; gap: 12px; margin: 0; font-size: 0.9rem; }
+        .public-language-switch a { display: flex; align-items: center; min-height: 44px; color: inherit; }
         .public-language-switch a[aria-current="page"] { font-weight: 700; }
         
         .header .meta {
@@ -540,9 +541,6 @@
 
         /* 主题切换按钮样式 */
         .theme-toggle {
-            position: absolute;
-            top: 20px;
-            right: 20px;
             background: rgba(255, 255, 255, 0.2);
             border: 1px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
@@ -557,6 +555,8 @@
             color: var(--header-text);
             font-size: 1.2rem;
         }
+
+        .header-actions .theme-toggle { position: static; flex-shrink: 0; }
 
         .theme-toggle:hover {
             background: rgba(255, 255, 255, 0.3);
@@ -1138,9 +1138,18 @@
             </a>
         </div>
         <div class="header">
-            <button id="theme-toggle" class="theme-toggle" title="{{ t('web.theme.to_light') }}">
-                ☀️
-            </button>
+            <div class="header-actions">
+                {% if language_switch_zh and language_switch_en %}
+                <nav class="public-language-switch" aria-label="{{ t('web.transcript.language_switch_aria') }}">
+                    <a href="{{ language_switch_zh }}" lang="zh-CN"{% if ui_language == 'zh-CN' %} aria-current="page"{% endif %}>中文</a>
+                    <a href="{{ language_switch_en }}" lang="en"{% if ui_language == 'en' %} aria-current="page"{% endif %}>English</a>
+                </nav>
+                {% endif %}
+                {% block header_actions %}{% endblock %}
+                <button id="theme-toggle" class="theme-toggle" title="{{ t('web.theme.to_light') }}">
+                    ☀️
+                </button>
+            </div>
             {% block site_nav %}
             <nav class="site-nav">
                 <a href="/add_task_by_web" class="site-nav-link">{{ t('web.nav.submit') }}</a>
@@ -1148,12 +1157,6 @@
             </nav>
             {% endblock %}
             <h1>{{ title or t('web.viewer.default_title') }}</h1>
-            {% if language_switch_zh and language_switch_en %}
-            <nav class="public-language-switch" aria-label="{{ t('web.transcript.language_switch_aria') }}">
-                <a href="{{ language_switch_zh }}" lang="zh-CN"{% if ui_language == 'zh-CN' %} aria-current="page"{% endif %}>中文</a>
-                <a href="{{ language_switch_en }}" lang="en"{% if ui_language == 'en' %} aria-current="page"{% endif %}>English</a>
-            </nav>
-            {% endif %}
             {% if author or url %}
             <div class="meta">
                 {% if author %}👤 {{ author }}{% endif %}

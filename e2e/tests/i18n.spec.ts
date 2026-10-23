@@ -239,6 +239,56 @@ test('public share page switches UI language while preserving original content a
   await expect(page.locator('#calibrated-content-block')).toContainText('隔离浏览器夹具中的正文');
 });
 
+test('public share toolbar stays clear of long titles on desktop and mobile', async ({ page }) => {
+  mkdirSync(resolve(process.cwd(), '../data/vta-language-toolbar-261023'), { recursive: true });
+  for (const viewport of [{ name: 'desktop', width: 1280 }, { name: 'mobile', width: 375 }]) {
+    await page.setViewportSize({ width: viewport.width, height: 900 });
+    await page.goto('/view/browser-layout-overflow?source=share');
+    const toolbar = page.locator('.header-actions');
+    await expect(toolbar).toBeVisible();
+    const controls = await page.locator('.public-language-switch, #ownerMenu, #theme-toggle').evaluateAll((items) =>
+      items.map((item) => { const { left, right, top, bottom } = item.getBoundingClientRect(); return { left, right, top, bottom }; }),
+    );
+    expect(controls).toHaveLength(3);
+    expect(controls[0].left >= 0 && controls[2].right <= viewport.width).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(controls[1].left).toBeGreaterThanOrEqual(controls[0].right);
+    expect(controls[2].left).toBeGreaterThanOrEqual(controls[1].right);
+    expect(controls[0].top).toBe(controls[1].top);
+    expect(controls[0].top).toBe(controls[2].top);
+    const toolbarBox = await toolbar.boundingBox();
+    const title = page.getByRole('heading', { level: 1 });
+    await expect(title).toBeVisible();
+    const titleBox = await title.boundingBox();
+    expect(toolbarBox).not.toBeNull();
+    expect(titleBox!.y).toBeGreaterThanOrEqual(toolbarBox!.y + toolbarBox!.height);
+    await expect(page.getByRole('link', { name: '中文' })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('link', { name: 'English' })).toHaveAttribute('href', /source=share&lang=en$/);
+    const screenshotBase = resolve(process.cwd(), `../data/vta-language-toolbar-261023/${viewport.name}`);
+    await page.screenshot({ path: `${screenshotBase}-closed.png`, fullPage: true });
+    const ownerMenu = page.locator('#ownerMenu');
+    await ownerMenu.locator('summary').click();
+    const ownerPanel = ownerMenu.locator('.owner-menu-panel');
+    await expect(ownerPanel).toBeVisible();
+    await expect(ownerPanel.locator('.site-nav-link')).toHaveCount(2);
+    await expect(ownerPanel.locator('.public-language-switch')).toHaveCount(0);
+    const panelBox = await ownerPanel.boundingBox();
+    expect(panelBox?.x).toBeGreaterThanOrEqual(0);
+    expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(viewport.width);
+    await page.screenshot({ path: `${screenshotBase}-open.png`, fullPage: true });
+    await ownerMenu.locator('summary').click();
+    const originalTheme = await page.locator('html').getAttribute('data-theme');
+    await page.locator('#theme-toggle').click();
+    await expect(page.locator('html')).not.toHaveAttribute('data-theme', originalTheme ?? 'dark');
+    await page.locator('#theme-toggle').click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', originalTheme ?? 'dark');
+    await page.getByRole('link', { name: 'English' }).click();
+    await expect(page).toHaveURL(/source=share&lang=en$/);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    expect(await page.evaluate(() => { const toolbar = document.querySelector('.header-actions')!.getBoundingClientRect(); const title = document.querySelector('h1')!.getBoundingClientRect(); return title.top >= toolbar.bottom && toolbar.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth; })).toBe(true);
+  }
+});
+
 test('history processing and failed badges use the active catalog', async ({ page, request }) => {
   await setLanguage(request, 'en');
   await page.goto('/static/history.html');

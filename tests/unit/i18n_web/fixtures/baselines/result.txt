@@ -5,12 +5,12 @@ VideoTranscriptAPI
 ·
 by
 张立行
-☀️
 ⚙
 📝 提交任务
 📋 任务历史
 设置/更换访问令牌
 清除访问令牌
+☀️
 Fixture Title
 👤 Fixture Author
 🔗
