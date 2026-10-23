@@ -12,7 +12,7 @@
     <meta name="twitter:image:alt" content="{{ share_card.headline }}">
 {% endif %}{% endblock %}
 
-{% block site_nav %}
+{% block header_actions %}
 {# Transcript page: fold owner actions into a gear menu; theme toggle stays outside. #}
 <details class="owner-menu" id="ownerMenu">
     <summary class="owner-menu-summary" aria-label="{{ t('web.transcript.auth_owner_menu') }}">
@@ -34,6 +34,8 @@
     </div>
 </details>
 {% endblock %}
+
+{% block site_nav %}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/floating-toc.css?v={{ asset_v }}">
@@ -153,14 +155,8 @@
 .protected-action-auth-tools .dialog-status { flex: 1 1 100%; margin-top: 0; }
 
 /* Owner gear menu in transcript header (details/summary, same pattern as export/LLM panels). */
-/* Gear + theme toggle are absolutely positioned; keep h1 clear of that row on all widths. */
-.header h1 {
-    margin-top: 52px;
-}
 .owner-menu {
-    position: absolute;
-    top: 20px;
-    right: 72px;
+    position: relative;
     z-index: 5;
     text-align: left;
 }
