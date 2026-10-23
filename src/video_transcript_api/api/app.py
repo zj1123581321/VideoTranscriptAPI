@@ -364,7 +364,7 @@ def create_app(
             except ValueError:
                 return Response(
                     content=translate_catalog_text(
-                        get_language(), "error.invalid_public_language"
+                        get_language(), "web.error.invalid_public_language"
                     ),
                     status_code=400,
                     headers={"Cache-Control": "private, no-store"},

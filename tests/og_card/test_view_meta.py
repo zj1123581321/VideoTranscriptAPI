@@ -146,7 +146,7 @@ class TestViewShareCardMeta:
         parsed = urlparse(image_url)
         assert image_url.startswith(SITE_URL)
         assert parsed.path == f"/og/{token}.png"
-        assert parse_qs(parsed.query) == {"v": [expected_v]}
+        assert parse_qs(parsed.query) == {"v": [expected_v], "lang": ["zh-CN"]}
         assert expected_v.isdigit()
 
     def test_missing_card_omits_share_tags(self, view_client):
