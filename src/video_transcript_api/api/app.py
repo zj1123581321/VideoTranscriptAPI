@@ -347,14 +347,35 @@ def create_app(
         )
 
     @app.get("/i18n.js", include_in_schema=False)
-    async def i18n_catalog_script() -> Response:
+    async def i18n_catalog_script(lang: str | None = None) -> Response:
         """Inject ``window.I18N`` (web.* catalog subset) for static pages."""
-        from ..i18n import get_language, web_catalog_script
+        from ..i18n import (
+            get_language,
+            translate_catalog_text,
+            validate_language,
+            web_catalog_script,
+        )
+
+        language = get_language()
+        headers = {"Cache-Control": "no-cache"}
+        if lang is not None:
+            try:
+                language = validate_language(lang)
+            except ValueError:
+                return Response(
+                    content=translate_catalog_text(
+                        get_language(), "web.error.invalid_public_language"
+                    ),
+                    media_type="text/plain; charset=utf-8",
+                    status_code=400,
+                    headers={"Cache-Control": "private, no-store"},
+                )
+            headers["Cache-Control"] = "private, no-store"
 
         return Response(
-            content=web_catalog_script(get_language()),
+            content=web_catalog_script(language),
             media_type="application/javascript; charset=utf-8",
-            headers={"Cache-Control": "no-cache"},
+            headers=headers,
         )
 
     # 调试中间件：记录 /view/ 请求的详细信息，用于排查外部 AI 工具的访问问题

@@ -476,12 +476,12 @@
     <!-- 一键复制常用链接 -->
     {% if view_token %}
     <div class="quick-copy-bar">
-        <button class="quick-copy-btn" data-path="/view/{{ view_token }}?raw=calibrated" title="{{ t('web.transcript.copy_raw_title') }}">
+        <button class="quick-copy-btn" data-path="/view/{{ view_token }}?raw=calibrated&amp;lang={{ ui_language }}" title="{{ t('web.transcript.copy_raw_title') }}">
             <span class="quick-copy-label">{{ t('web.transcript.copy_raw_label') }}</span>
             <span class="quick-copy-action">{{ t('web.transcript.copy_url') }}</span>
             <span class="quick-copy-desc">{{ t('web.transcript.copy_raw_desc') }}</span>
         </button>
-        <button class="quick-copy-btn" data-path="/view/{{ view_token }}?page=calibrated" title="{{ t('web.transcript.copy_html_title') }}">
+        <button class="quick-copy-btn" data-path="/view/{{ view_token }}?page=calibrated&amp;lang={{ ui_language }}" title="{{ t('web.transcript.copy_html_title') }}">
             <span class="quick-copy-label">{{ t('web.transcript.copy_html_label') }}</span>
             <span class="quick-copy-action">{{ t('web.transcript.copy_url') }}</span>
             <span class="quick-copy-desc">{{ t('web.transcript.copy_html_desc') }}</span>
@@ -496,10 +496,10 @@
         {% if calibrated_html %}
         {% for preset in deep_read_prompt_presets %}
         <button class="quick-copy-btn deep-read-prompt-btn"
-                data-path="/view/{{ view_token }}?raw=calibrated"
+                data-path="/view/{{ view_token }}?raw=calibrated&amp;lang={{ ui_language }}"
                 data-template='{{ preset.template|tojson|forceescape }}'
-                title="{{ preset.label|forceescape }}">
-            <span class="quick-copy-label">{{ preset.label|forceescape }}</span>
+                title="{% if preset.builtin %}{{ t('web.transcript.default_prompt_label') }}{% else %}{{ preset.label|forceescape }}{% endif %}">
+            <span class="quick-copy-label">{% if preset.builtin %}{{ t('web.transcript.default_prompt_label') }}{% else %}{{ preset.label|forceescape }}{% endif %}</span>
             <span class="quick-copy-action">{{ t('web.transcript.copy_prompt') }}</span>
             <span class="quick-copy-desc">{{ t('web.transcript.copy_prompt_desc') }}</span>
         </button>
@@ -519,30 +519,30 @@
             <div class="export-group">
                 <span class="export-group-label">{{ t('web.transcript.export_raw_group') }}</span>
                 <span class="export-group-items">
-                    <a href="/view/{{ view_token }}?raw=calibrated" title="{{ t('web.transcript.export_raw_calibrated_title') }}">{{ t('web.transcript.export_calibrated') }}</a>
+                    <a href="/view/{{ view_token }}?raw=calibrated&amp;lang={{ ui_language }}" title="{{ t('web.transcript.export_raw_calibrated_title') }}">{{ t('web.transcript.export_calibrated') }}</a>
                     <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?raw=summary" title="{{ t('web.transcript.export_raw_summary_title') }}">{{ t('web.transcript.export_summary') }}</a>
+                    <a href="/view/{{ view_token }}?raw=summary&amp;lang={{ ui_language }}" title="{{ t('web.transcript.export_raw_summary_title') }}">{{ t('web.transcript.export_summary') }}</a>
                     {% if notes_html is defined and notes_html %}
                     <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?raw=notes" title="{{ t('web.transcript.export_raw_notes_title') }}">{{ t('web.transcript.export_notes') }}</a>
+                    <a href="/view/{{ view_token }}?raw=notes&amp;lang={{ ui_language }}" title="{{ t('web.transcript.export_raw_notes_title') }}">{{ t('web.transcript.export_notes') }}</a>
                     {% endif %}
                     <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?raw=transcript" title="{{ t('web.transcript.export_raw_transcript_title') }}">{{ t('web.transcript.export_transcript') }}</a>
+                    <a href="/view/{{ view_token }}?raw=transcript&amp;lang={{ ui_language }}" title="{{ t('web.transcript.export_raw_transcript_title') }}">{{ t('web.transcript.export_transcript') }}</a>
                 </span>
                 <span class="export-hint">{{ t('web.transcript.export_raw_hint') }}</span>
             </div>
             <div class="export-group">
                 <span class="export-group-label">{{ t('web.transcript.export_html_group') }}</span>
                 <span class="export-group-items">
-                    <a href="/view/{{ view_token }}?page=calibrated" title="{{ t('web.transcript.export_page_calibrated_title') }}">{{ t('web.transcript.export_calibrated') }}</a>
+                    <a href="/view/{{ view_token }}?page=calibrated&amp;lang={{ ui_language }}" title="{{ t('web.transcript.export_page_calibrated_title') }}">{{ t('web.transcript.export_calibrated') }}</a>
                     <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?page=summary" title="{{ t('web.transcript.export_page_summary_title') }}">{{ t('web.transcript.export_summary') }}</a>
+                    <a href="/view/{{ view_token }}?page=summary&amp;lang={{ ui_language }}" title="{{ t('web.transcript.export_page_summary_title') }}">{{ t('web.transcript.export_summary') }}</a>
                     {% if notes_html is defined and notes_html %}
                     <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?page=notes" title="{{ t('web.transcript.export_page_notes_title') }}">{{ t('web.transcript.export_notes') }}</a>
+                    <a href="/view/{{ view_token }}?page=notes&amp;lang={{ ui_language }}" title="{{ t('web.transcript.export_page_notes_title') }}">{{ t('web.transcript.export_notes') }}</a>
                     {% endif %}
                     <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?page=transcript" title="{{ t('web.transcript.export_page_transcript_title') }}">{{ t('web.transcript.export_transcript') }}</a>
+                    <a href="/view/{{ view_token }}?page=transcript&amp;lang={{ ui_language }}" title="{{ t('web.transcript.export_page_transcript_title') }}">{{ t('web.transcript.export_transcript') }}</a>
                 </span>
                 <span class="export-hint">{{ t('web.transcript.export_html_hint') }}</span>
             </div>
@@ -1181,7 +1181,7 @@
         if (summaryShareOriginalUrl) {
             shareLines.push(window.t('web.transcript.share_original', {url: summaryShareOriginalUrl}));
         }
-        shareLines.push('', window.t('web.transcript.share_view', {url: window.location.origin + '/view/' + encodeURIComponent(summaryShareViewToken)}));
+        shareLines.push('', window.t('web.transcript.share_view', {url: window.location.origin + '/view/' + encodeURIComponent(summaryShareViewToken) + '?lang={{ ui_language }}'}));
         var summaryParagraph = readSummaryFirstParagraph();
         if (summaryParagraph) shareLines.push('', summaryParagraph);
         return shareLines.join('\n');

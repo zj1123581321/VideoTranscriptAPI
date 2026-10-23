@@ -149,6 +149,7 @@
   "web.error.message_failed": "任务处理失败",
   "web.error.message_token": "view_token 无效或已过期",
   "web.error.message_view": "查看页面失败，请稍后重试",
+  "web.error.invalid_public_language": "公开页面语言参数无效，仅支持 zh-CN 或 en",
   "web.error.refresh_retry": "🔄 刷新页面重试",
   "web.error.reload": "🔄 重新加载",
   "web.error.retry_submit": "📝 重新提交转录任务",
@@ -519,6 +520,8 @@
   "web.transcript.copy_html_title": "复制 HTML 校对页面 URL",
   "web.transcript.copy_notes_title": "复制详细笔记正文",
   "web.transcript.copy_prompt": "复制 Prompt",
+  "web.transcript.default_prompt_label": "复制深度阅读 Prompt",
+  "web.transcript.language_switch_aria": "分享页面语言",
   "web.transcript.copy_prompt_desc": "复制带校对稿 URL 的深度阅读指令",
   "web.transcript.copy_raw_desc": "纯文本，粘贴到 ChatGPT / Claude 直接读取",
   "web.transcript.copy_raw_label": "Raw 校对文本",
@@ -599,5 +602,6 @@
   "web.viewer.og_description": "多平台视频转录与 AI 校对服务",
   "web.viewer.og_result_desc": "{title} 的转录校对结果",
   "web.viewer.transcript_title": "视频转录",
-  "web.viewer.view_original": "查看原视频"
+  "web.viewer.view_original": "查看原视频",
+  "prompt.deep_read.default_template": "请读取下面 URL 的播客校对稿全文，按时间顺序分主题做详细笔记，保留人名、数字、时间点和原话，使用分层 bullets，关键论断加粗；不要浓缩省略。\n\n{url}\n"
 }

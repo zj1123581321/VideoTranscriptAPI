@@ -137,6 +137,8 @@ Copy `config/config.example.jsonc` to `config/config.jsonc` and adjust at least 
 
 Set the top-level `"language"` value to `"zh-CN"` or `"en"`; it defaults to `"zh-CN"`, and any other value makes startup fail. This switches the Web interface, generated summaries/detailed notes/chapters, API error response `detail`, task failure reasons, and task-status response `message`.
 
+Public result pages also accept `/view/{token}?lang=en` or `?lang=zh-CN` to switch only that visitor's interface. The page switcher, exports, and copied links carry the selected language. Existing titles, transcripts, and summaries stay in their original language, and the built-in deep-read prompt continues to follow the site's `language` setting.
+
 It does not switch the fixed wording of WeCom/Feishu notifications or translate user content such as titles and transcript bodies. Exception text inserted into a failure reason remains unchanged, and previously stored failure reasons are not migrated or retranslated.
 
 After changing the language, existing cached artifacts in the old language remain visible. When processed again, summaries, detailed notes and chapters are regenerated in the new language; the proofread transcript is not rerun because of the language change.

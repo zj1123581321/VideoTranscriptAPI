@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from ..i18n import t
+from ..i18n import get_language, translate_catalog_text, t
 from ..utils.logging import load_config, setup_logger, shutdown_logger
 from ..utils.task_status import TaskStatus
 
@@ -73,26 +73,24 @@ def install_api_error_handlers(app) -> None:
         )
 
 
-# Default deep-read prompt keeps the full calibrated transcript in scope.
-DEFAULT_DEEP_READ_PROMPT_LABEL = "复制深度阅读 Prompt"
-DEFAULT_DEEP_READ_PROMPT_TEMPLATE = (
-    "请读取下面 URL 的播客校对稿全文，按时间顺序分主题做详细笔记，"
-    "保留人名、数字、时间点和原话，使用分层 bullets，关键论断加粗；"
-    "不要浓缩省略。\n\n{url}\n"
-)
-DEFAULT_DEEP_READ_PROMPTS = (
-    {
-        "label": DEFAULT_DEEP_READ_PROMPT_LABEL,
-        "template": DEFAULT_DEEP_READ_PROMPT_TEMPLATE,
-    },
-)
+def _default_deep_read_prompt(language: str) -> dict[str, str | bool]:
+    """Build the built-in deep-read instruction in the configured site language."""
+    return {
+        "label": translate_catalog_text(
+            language, "web.transcript.default_prompt_label"
+        ),
+        "template": translate_catalog_text(
+            language, "prompt.deep_read.default_template", url="{url}"
+        ),
+        "builtin": True,
+    }
 
 
 def get_deep_read_prompt_presets(
     config: dict | None = None,
     *,
     warning_logger: Any | None = None,
-) -> list[dict[str, str]]:
+) -> list[dict[str, str | bool]]:
     """Return valid deep-read prompt presets, falling back to the built-in preset."""
     if config is None:
         config = get_config()
@@ -106,14 +104,14 @@ def get_deep_read_prompt_presets(
         else None
     )
     if configured_presets is None:
-        return [dict(preset) for preset in DEFAULT_DEEP_READ_PROMPTS]
+        return [_default_deep_read_prompt(get_language())]
     if not isinstance(configured_presets, list):
         warning_logger.warning(
             "Invalid deep_read_prompt configuration skipped: deep_read_prompts must be an array"
         )
-        return [dict(preset) for preset in DEFAULT_DEEP_READ_PROMPTS]
+        return [_default_deep_read_prompt(get_language())]
 
-    valid_presets: list[dict[str, str]] = []
+    valid_presets: list[dict[str, str | bool]] = []
     for preset in configured_presets:
         if not isinstance(preset, dict):
             warning_logger.warning(
@@ -143,7 +141,7 @@ def get_deep_read_prompt_presets(
         warning_logger.warning(
             "No valid deep_read_prompt presets configured; using default deep_read_prompt preset"
         )
-        return [dict(preset) for preset in DEFAULT_DEEP_READ_PROMPTS]
+        return [_default_deep_read_prompt(get_language())]
     return valid_presets
 
 

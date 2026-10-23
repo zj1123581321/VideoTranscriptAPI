@@ -1216,3 +1216,147 @@ def test_local_upload_funasr_branch_observes_source_only_before_llm(
         assert llm_queue.get_nowait()["transcription_data"]["segments"]
     finally:
         cache.close()
+
+
+@pytest.mark.parametrize("page_status", ["processing", "failed", "file_cleaned"])
+def test_public_status_pages_keep_language_switch(lifecycle_client, page_status):
+    client, cache, _, _ = lifecycle_client
+    upload = _make_upload(cache, include_summary=False, complete=False)
+    if page_status != "processing":
+        transcript = Path(cache.get_cache(
+            platform="local_upload", media_id=upload["media_id"],
+            use_speaker_recognition=False,
+        )["file_path"]) / "transcript_capswriter.txt"
+        transcript.unlink()
+    root_status = "success" if page_status == "file_cleaned" else page_status
+    cache.update_task_status(
+        upload["root_task_id"], root_status,
+        platform="local_upload", media_id=upload["media_id"],
+    )
+    stored = cache.get_local_upload_by_id(upload["upload_id"])
+    assert stored["root_status"] == root_status
+    view_data = ViewTokenResolver(cache).get_view_data_by_token(upload["view_token"])
+    assert view_data["status"] == page_status
+    assert "view_token" not in view_data
+
+    response = client.get(f"/view/{upload['view_token']}?lang=en&source=keep")
+    assert response.status_code == 200
+    assert f'href="/view/{upload["view_token"]}?source=keep&amp;lang=zh-CN"' in response.text
+    assert f'href="/view/{upload["view_token"]}?source=keep&amp;lang=en"' in response.text
+
+
+def test_public_view_language_isolated_across_concurrent_requests(lifecycle_client):
+    client, cache, _llm_queue, _user = lifecycle_client
+    from video_transcript_api.utils.logging.logger import load_config
+
+    config = load_config()
+    old_language = config.get("language")
+    old_web = config.get("web")
+    config["language"] = "zh-CN"
+    config["web"] = {"deep_read_prompts": []}
+    try:
+        upload = _make_upload(cache, title="中文原始标题")
+        cache.save_llm_result(
+            platform="local_upload",
+            media_id=upload["media_id"],
+            use_speaker_recognition=False,
+            llm_type="calibrated",
+            content="中文校对正文，原样保留。",
+        )
+        cache.save_llm_result(
+            platform="local_upload",
+            media_id=upload["media_id"],
+            use_speaker_recognition=False,
+            llm_type="summary",
+            content="原始摘要保持中文。",
+        )
+        token = upload["view_token"]
+        view_data = ViewTokenResolver(cache).get_view_data_by_token(token)
+        cache_dir = Path(view_data["cache_dir"])
+        (cache_dir / "llm_processed.json").write_text(
+            json.dumps(
+                {
+                    "dialogs": [
+                        {
+                            "segment_id": "seg_1", "speaker": "说话人1",
+                            "speaker_id": "S1", "text": "中文校对正文，原样保留。",
+                        },
+                    ],
+                    "speaker_inference_meta": {"S1": {"applied": False}},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        card_path = cache_dir / "llm_share_card.json"
+        card_path.write_text(json.dumps({
+            "version": 1,
+            "headline": "分享卡标题",
+            "points": ["分享卡要点"],
+            "generated_at": "2026-10-15T12:00:00+00:00",
+        }), encoding="utf-8")
+        for language, image_bytes in (("zh-CN", b"zh-card-bytes"), ("en", b"en-card-bytes")):
+            (cache_dir / f"og_card.{language}.png").write_bytes(image_bytes)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            english_future = pool.submit(client.get, f"/view/{token}?lang=en&source=keep")
+            chinese_future = pool.submit(client.get, f"/view/{token}?lang=zh-CN")
+            english = english_future.result()
+            chinese = chinese_future.result()
+
+        assert english.status_code == chinese.status_code == 200
+        assert 'lang="en"' in english.text
+        assert "Summary" in english.text
+        assert "中文原始标题" in english.text
+        assert "中文校对正文，原样保留。" in english.text
+        assert 'data-speaker-status="pending">Unconfirmed</span>' in english.text
+        assert "说话人1" in english.text
+        assert "Copy deep-read prompt" in english.text
+        assert r"\u8bf7\u8bfb\u53d6\u4e0b\u9762 URL" in english.text
+        assert f"/view/{token}?source=keep&amp;lang=zh-CN" in english.text
+        assert f"/og/{token}.png?v=" in english.text and "&amp;lang=en" in english.text
+        assert chinese.status_code == 200 and 'lang="zh-CN"' in chinese.text
+
+        og_english = client.get(f"/og/{token}.png?lang=en")
+        og_chinese = client.get(f"/og/{token}.png")
+        assert og_english.content == b"en-card-bytes"
+        assert og_chinese.content == b"zh-card-bytes"
+        assert og_english.headers["Cache-Control"] == "private, no-store"
+
+        raw = client.get(f"/view/{token}?raw=calibrated&lang=en")
+        raw_bytes = raw.content
+        assert raw.status_code == 200
+        assert raw.headers["Cache-Control"] == "private, no-store"
+        assert "中文原始标题".encode() in raw_bytes
+        assert "中文校对正文，原样保留。".encode() in raw_bytes
+
+        page = client.get(f"/view/{token}?page=summary&lang=en")
+        page_bytes = page.content
+        assert page.status_code == 200
+        assert page.headers["Cache-Control"] == "private, no-store"
+        assert b'<html lang="en">' in page_bytes
+        assert b'property="og:locale" content="en"' in page_bytes
+        assert "原始摘要保持中文。".encode() in page_bytes
+
+        invalid_empty = client.get(f"/view/{token}?lang=")
+        invalid_tag = client.get(f"/view/{token}?lang=fr")
+        invalid_og = client.get(f"/og/{token}.png?lang=fr")
+        assert invalid_empty.status_code == invalid_tag.status_code == invalid_og.status_code == 400
+        assert invalid_empty.headers["Cache-Control"] == "private, no-store"
+        assert invalid_empty.headers["Content-Type"] == "text/plain; charset=utf-8"
+        assert invalid_empty.content == "公开页面语言参数无效，仅支持 zh-CN 或 en".encode("utf-8")
+        assert invalid_og.headers["Content-Type"] == "text/plain; charset=utf-8"
+        assert invalid_og.content == invalid_empty.content
+
+        after_parallel = client.get(f"/view/{token}")
+        assert 'lang="zh-CN"' in after_parallel.text
+        assert "内容总结" in after_parallel.text
+    finally:
+        if old_language is None:
+            config.pop("language", None)
+        else:
+            config["language"] = old_language
+        if old_web is None:
+            config.pop("web", None)
+        else:
+            config["web"] = old_web

@@ -28,6 +28,8 @@ only requires changing the config value, not clearing this cache.
 """
 
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +44,10 @@ _LOCALES_DIR = Path(__file__).resolve().parent / "locales"
 
 # Loaded catalogs, keyed by language tag. Read-only after first load.
 _catalogs: dict[str, dict[str, str]] = {}
+
+# Only public view requests bind this value. ContextVar isolates async requests
+# and is copied into asyncio.to_thread workers used by the renderer.
+_ui_language: ContextVar[str | None] = ContextVar("vta_ui_language", default=None)
 
 
 def validate_language(value: Any) -> str:
@@ -78,6 +84,27 @@ def get_language() -> str:
     return validate_language(load_config().get("language", DEFAULT_LANGUAGE))
 
 
+def get_ui_language() -> str:
+    """Return request UI language, or the configured language outside a view."""
+    language = _ui_language.get()
+    return get_language() if language is None else language
+
+
+def resolve_requested_language(language: str | None) -> str:
+    """Resolve an optional public-page language without changing site config."""
+    return get_language() if language is None else validate_language(language)
+
+
+@contextmanager
+def ui_language_scope(language: str):
+    """Bind translations to one request and restore the prior value on exit."""
+    token = _ui_language.set(validate_language(language))
+    try:
+        yield
+    finally:
+        _ui_language.reset(token)
+
+
 def _catalog(language: str) -> dict[str, str]:
     """Return the catalog for ``language``, loading it on first use."""
     catalog = _catalogs.get(language)
@@ -103,11 +130,18 @@ def t(key: str, **kwargs: Any) -> str:
         KeyError: ``key`` is absent from the catalog, or a placeholder in the
             template has no matching keyword argument.
     """
-    language = get_language()
+    return translate_catalog_text(get_ui_language(), key, **kwargs)
+
+
+def translate_catalog_text(catalog_language: str, key: str, **kwargs: Any) -> str:
+    """Render one catalog string in an explicit language, independent of UI scope."""
+    catalog_language = validate_language(catalog_language)
     try:
-        template = _catalog(language)[key]
+        template = _catalog(catalog_language)[key]
     except KeyError:
-        raise KeyError(f"missing i18n key {key!r} for language {language!r}") from None
+        raise KeyError(
+            f"missing i18n key {key!r} for language {catalog_language!r}"
+        ) from None
     return template.format(**kwargs)
 
 

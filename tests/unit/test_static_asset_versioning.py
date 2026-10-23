@@ -170,3 +170,19 @@ class TestStaticNoCacheHeader:
         )
         assert second.status_code == 304
         assert second.headers["Cache-Control"] == "no-cache"
+
+    def test_i18n_script_accepts_explicit_language_and_rejects_bad_values(self, client):
+        english = client.get("/i18n.js?lang=en")
+        default = client.get("/i18n.js")
+        empty = client.get("/i18n.js?lang=")
+        unsupported = client.get("/i18n.js?lang=fr")
+
+        assert english.status_code == 200
+        assert 'window.__VTA_LANG__ = "en"' in english.text
+        assert english.headers["Cache-Control"] == "private, no-store"
+        assert default.status_code == 200
+        assert 'window.__VTA_LANG__ = "zh-CN"' in default.text
+        assert empty.status_code == unsupported.status_code == 400
+        assert empty.headers["Cache-Control"] == "private, no-store"
+        assert empty.headers["Content-Type"] == "text/plain; charset=utf-8"
+        assert empty.content == "公开页面语言参数无效，仅支持 zh-CN 或 en".encode("utf-8")

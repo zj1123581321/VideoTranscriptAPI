@@ -1401,6 +1401,8 @@ function buildRow(item, readSet) {
     const isCompleted = item.status === 'success';
     const isRead = isCompleted && item.view_token && readSet.has(item.view_token);
     const canClick = isCompleted && item.view_token;
+    const statusKey = ({ success: 'web.history.status_success', processing: 'web.history.status_processing', failed: 'web.history.status_failed' })[item.status];
+    const statusLabel = statusKey ? window.t(statusKey) : item.status;
 
     const time = item.request_time
         ? item.request_time.replace('T', ' ').slice(0, 16)
@@ -1409,7 +1411,7 @@ function buildRow(item, readSet) {
     const titleHtml = item.title
         ? `<div class="task-title" title="${esc(item.title)}">${esc(item.title)}</div><div class="task-author" title="${esc(item.author || '')}">${esc(item.author || '')}</div>`
         : `<div class="task-title" title="${esc(item.video_url || t('web.history.no_title'))}" style="color:var(--text-tertiary)">${esc(item.video_url || t('web.history.no_title'))}</div>
-           ${!isCompleted ? `<div class="task-author"><span class="task-status-badge status-${esc(item.status)}">${esc(item.status)}</span></div>` : ''}`;
+           ${!isCompleted ? `<div class="task-author"><span class="task-status-badge status-${esc(item.status)}">${esc(statusLabel)}</span></div>` : ''}`;
 
     const platformLabel = esc(item.platform ? (PLATFORM_LABELS[item.platform] || item.platform) : '—');
     const webhookLabel = item.wechat_webhook ? shortWebhook(item.wechat_webhook) : '—';

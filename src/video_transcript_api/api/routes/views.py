@@ -6,7 +6,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
@@ -35,7 +35,12 @@ from ...utils.rendering.og_card import (
     png_filename,
     render_og_card,
 )
-from ...i18n import get_language, t
+from ...i18n import (
+    get_ui_language,
+    resolve_requested_language,
+    t,
+    ui_language_scope,
+)
 from ...utils.rendering.home_page import render_home_html
 from ...utils.rendering.i18n_jinja import install_i18n
 from ...utils.timeutil import format_datetime_for_display
@@ -347,7 +352,7 @@ def _build_page_html(
             platform=platform,
         )
     )
-    html_lang = get_language()
+    html_lang = get_ui_language()
     og_loc = "en" if html_lang == "en" else "zh_CN"
 
     return f"""\
@@ -1365,12 +1370,56 @@ def _prepare_success_view(view_data: Dict[str, Any]) -> Dict[str, Any]:
     return stats
 
 
+def _language_switch_url(request: Request, language: str) -> str:
+    """Keep existing public-page query state when switching interface language."""
+    query = [
+        (key, value)
+        for key, value in request.query_params.multi_items()
+        if key != "lang"
+    ]
+    query.append(("lang", language))
+    return f"{request.url.path}?{urlencode(query)}"
+
+
+def _public_language_context(request: Request, language: str) -> Dict[str, str]:
+    """Provide the active public language and query-preserving switch links."""
+    return {
+        "ui_language": language,
+        "language_switch_zh": _language_switch_url(request, "zh-CN"),
+        "language_switch_en": _language_switch_url(request, "en"),
+    }
+
+
 @router.get("/view/{view_token}", response_class=HTMLResponse)
 async def view_transcript(
     view_token: str,
     request: Request,
     raw: Optional[str] = None,
     page: Optional[str] = None,
+    lang: Optional[str] = None,
+):
+    try:
+        ui_language = resolve_requested_language(lang)
+    except ValueError:
+        return Response(
+            content=t("web.error.invalid_public_language"),
+            media_type="text/plain; charset=utf-8",
+            status_code=400,
+            headers={"Cache-Control": "private, no-store"},
+        )
+    with ui_language_scope(ui_language):
+        response = await _render_view_transcript(view_token, request, raw, page, ui_language)
+    if lang is not None:
+        response.headers["Cache-Control"] = "private, no-store"
+    return response
+
+
+async def _render_view_transcript(
+    view_token: str,
+    request: Request,
+    raw: Optional[str],
+    page: Optional[str],
+    ui_language: str,
 ):
     try:
         # 同步 SQLite + 文件读取，线程池执行避免阻塞事件循环
@@ -1395,6 +1444,8 @@ async def view_transcript(
                     {
                         "request": request,
                         "message": t("web.error.message_token"),
+                        "view_token": view_token,
+                        **_public_language_context(request, ui_language),
                     },
                 )
 
@@ -1421,6 +1472,7 @@ async def view_transcript(
                 {
                     "request": request,
                     **view_data,
+                    **_public_language_context(request, ui_language),
                     "page_title": t(
                         "web.processing.page_title",
                         title=view_data.get("title") or t("web.processing.default_title"),
@@ -1434,12 +1486,17 @@ async def view_transcript(
                     "request": request,
                     "message": view_data.get("error_message", t("web.error.message_failed")),
                     **view_data,
+                    **_public_language_context(request, ui_language),
                 },
             )
         if view_data["status"] == "file_cleaned":
             return templates.TemplateResponse(
                 "cleaned.html",
-                {"request": request, **view_data},
+                {
+                    "request": request,
+                    **view_data,
+                    **_public_language_context(request, ui_language),
+                },
             )
         stats: Dict[str, Any] = {"original_length": 0, "calibrated_length": 0, "summary_length": 0}
         if view_data["status"] in _CONTENT_VIEW_STATUSES:
@@ -1482,7 +1539,10 @@ async def view_transcript(
                 "view_token": view_token,
                 "stats": stats,
                 "share_card": share_card,
-                "og_image_url": og_image_url,
+                "og_image_url": (
+                    f"{og_image_url}&lang={ui_language}" if og_image_url else None
+                ),
+                **_public_language_context(request, ui_language),
             },
         )
 
@@ -1493,12 +1553,14 @@ async def view_transcript(
             {
                 "request": request,
                 "message": t("web.error.message_view"),
+                "view_token": view_token,
+                **_public_language_context(request, ui_language),
             },
         )
 
 
 @router.get("/og/{view_token}.png", include_in_schema=False)
-async def og_share_card(view_token: str):
+async def og_share_card(view_token: str, lang: Optional[str] = None):
     """Serve the 1200x630 share-card PNG for a view token (X/Twitter card).
 
     404 when the token is unknown or the task has no contract-valid
@@ -1506,6 +1568,34 @@ async def og_share_card(view_token: str):
     cached per UI language and reused while it is not older than the card JSON;
     a regenerated card JSON triggers a re-render. Old og_card.png is ignored.
     """
+    try:
+        ui_language = resolve_requested_language(lang)
+    except ValueError:
+        return Response(
+            content=t("web.error.invalid_public_language"),
+            media_type="text/plain; charset=utf-8",
+            status_code=400,
+            headers={"Cache-Control": "private, no-store"},
+        )
+    try:
+        with ui_language_scope(ui_language):
+            response = await _render_og_share_card(view_token, ui_language)
+    except HTTPException as exc:
+        if lang is None:
+            raise
+        headers = dict(exc.headers or {})
+        headers["Cache-Control"] = "private, no-store"
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.detail,
+            headers=headers,
+        ) from exc
+    if lang is not None:
+        response.headers["Cache-Control"] = "private, no-store"
+    return response
+
+
+async def _render_og_share_card(view_token: str, ui_language: str) -> Response:
     cache_data = await asyncio.to_thread(
         ViewTokenResolver(cache_manager).get_cache_by_view_token, view_token
     )
@@ -1518,7 +1608,7 @@ async def og_share_card(view_token: str):
         raise HTTPException(status_code=404, detail="share card not found")
 
     json_path = cache_dir / CARD_FILENAME
-    png_path = cache_dir / png_filename()
+    png_path = cache_dir / png_filename(ui_language)
 
     def _cache_is_fresh() -> bool:
         if not png_path.is_file():

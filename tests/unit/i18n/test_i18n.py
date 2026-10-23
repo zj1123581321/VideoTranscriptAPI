@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import sys
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,7 @@ from video_transcript_api.i18n import (
     SUPPORTED_LANGUAGES,
     get_language,
     t,
+    ui_language_scope,
 )
 from video_transcript_api.utils.logging.logger import load_config
 
@@ -179,6 +181,37 @@ def test_t_formats_named_placeholders(language_config):
 
     with pytest.raises(KeyError):
         t("common.language_selected")
+
+
+def test_ui_language_scope_is_request_local_and_reaches_worker_threads(language_config):
+    """Public-page labels follow each request without changing global language."""
+    language_config("zh-CN")
+
+    async def read_label(language):
+        with ui_language_scope(language):
+            await asyncio.sleep(0)
+            return await asyncio.to_thread(t, "common.language_name")
+
+    async def run_requests():
+        return await asyncio.gather(read_label("en"), read_label("zh-CN"))
+
+    english, chinese = asyncio.run(run_requests())
+
+    assert english == "English"
+    assert chinese == "中文"
+    assert get_language() == "zh-CN"
+    assert t("common.language_name") == "中文"
+
+
+def test_ui_language_scope_resets_after_exception(language_config):
+    language_config("zh-CN")
+
+    with pytest.raises(RuntimeError, match="render failed"):
+        with ui_language_scope("en"):
+            assert t("common.language_name") == "English"
+            raise RuntimeError("render failed")
+
+    assert t("common.language_name") == "中文"
 
 
 def _minimal_config(tmp_path):
