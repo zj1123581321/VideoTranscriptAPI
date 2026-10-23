@@ -14,7 +14,7 @@
 - 扩展 i18n/deep-read/cache/route 窄测：通过；H1 修复的 3 个原失败节点 + catalog/deep-read：24 passed。
 - `npm run test:web`：188 passed。
 - `npm run test:browser`：33 passed；包含真实 Chromium、复制 payload、raw/page 文件字节和响应语言切换。
-- H1 完整 `make test`（代码提交 H1）：退出 2。4,449 项收集；捕获 3 个 skip、1 个失败，故 4,445 passed 为按收集数推得。失败是 `tests/unit/web/test_frontend_nav.py` 的旧 URL 断言及缺少 `ui_language` fixture。修正后最终窄测 44 passed；没有因纯测试 fixture 更新再跑完整本地套件。详见 `/tmp/vta-share-i18n-261023-h1-make-test-summary.txt` 与 collection 记录。
+- H1 完整 `make test`（代码提交 H1）：退出 2，唯一失败是 `tests/unit/web/test_frontend_nav.py` 的旧 URL 断言及缺少 `ui_language` fixture。修正后最终窄测 44 passed；没有因纯测试 fixture 更新再跑完整本地套件。详见 `/tmp/vta-share-i18n-261023-h1-make-test-summary.txt`。
 - H0 完整套件运行在约 21% 时收到 SIGINT，退出 130；不计为完整验证。
 - 隔离 worktree 红验：将 `/view` 显式语言响应缓存头变成 `public, max-age=3600` 后，真实 route 集成用例在 raw 响应头断言失败：期望 `private, no-store`，实际 `public, max-age=3600`。
 - 最终提交后由 CI 对最终 HEAD 执行完整套件；未在本轮合并或部署。
