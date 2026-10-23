@@ -16,6 +16,7 @@
   "error.caller_identity_missing": "The caller identity could not be determined",
   "error.invalid_history_source": "Source must be upload or url",
   "error.invalid_history_status": "status must be one of: success, failed, all",
+  "error.invalid_public_language": "Invalid public page language; supported values are zh-CN and en",
   "error.invalid_url": "The video URL is required",
   "error.llm_queue_full": "The LLM queue is full. Please try again later.{note}",
   "error.notes_already_exists": "Detailed notes already exist",
@@ -519,6 +520,8 @@
   "web.transcript.copy_html_title": "Copy HTML proofread-page URL",
   "web.transcript.copy_notes_title": "Copy detailed notes",
   "web.transcript.copy_prompt": "Copy prompt",
+  "web.transcript.default_prompt_label": "Copy deep-read prompt",
+  "web.transcript.language_switch_aria": "Share page language",
   "web.transcript.copy_prompt_desc": "Copy a deep-read prompt with the proofread URL",
   "web.transcript.copy_raw_desc": "Plain text for ChatGPT / Claude",
   "web.transcript.copy_raw_label": "Raw proofread text",
@@ -599,5 +602,6 @@
   "web.viewer.og_description": "Multi-platform video transcription with AI proofreading",
   "web.viewer.og_result_desc": "Proofread transcript of {title}",
   "web.viewer.transcript_title": "Transcript",
-  "web.viewer.view_original": "Open original video"
+  "web.viewer.view_original": "Open original video",
+  "prompt.deep_read.default_template": "Read the full proofread podcast transcript at the URL below. Create detailed notes organized by topic in chronological order. Preserve names, numbers, timestamps, and direct quotes. Use nested bullet points and bold key claims. Do not summarize or omit details.\n\n{url}\n"
 }

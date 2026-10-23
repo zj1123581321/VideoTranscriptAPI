@@ -16,6 +16,7 @@
   "error.caller_identity_missing": "无法确定调用方身份",
   "error.invalid_history_source": "source 仅支持 upload 或 url",
   "error.invalid_history_status": "status must be one of: success, failed, all",
+  "error.invalid_public_language": "公开页面语言参数无效，仅支持 zh-CN 或 en",
   "error.invalid_url": "视频URL不能为空",
   "error.llm_queue_full": "LLM 队列已满，请稍后重试{note}",
   "error.notes_already_exists": "详细笔记已存在，无需重复生成",
@@ -519,6 +520,8 @@
   "web.transcript.copy_html_title": "复制 HTML 校对页面 URL",
   "web.transcript.copy_notes_title": "复制详细笔记正文",
   "web.transcript.copy_prompt": "复制 Prompt",
+  "web.transcript.default_prompt_label": "复制深度阅读 Prompt",
+  "web.transcript.language_switch_aria": "分享页面语言",
   "web.transcript.copy_prompt_desc": "复制带校对稿 URL 的深度阅读指令",
   "web.transcript.copy_raw_desc": "纯文本，粘贴到 ChatGPT / Claude 直接读取",
   "web.transcript.copy_raw_label": "Raw 校对文本",
@@ -599,5 +602,6 @@
   "web.viewer.og_description": "多平台视频转录与 AI 校对服务",
   "web.viewer.og_result_desc": "{title} 的转录校对结果",
   "web.viewer.transcript_title": "视频转录",
-  "web.viewer.view_original": "查看原视频"
+  "web.viewer.view_original": "查看原视频",
+  "prompt.deep_read.default_template": "请读取下面 URL 的播客校对稿全文，按时间顺序分主题做详细笔记，保留人名、数字、时间点和原话，使用分层 bullets，关键论断加粗；不要浓缩省略。\n\n{url}\n"
 }

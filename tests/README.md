@@ -22,6 +22,12 @@ uv sync
 | `tests/test_*.py` | 位于 `tests/` 根目录的补充测试。 |
 | `scripts/perf/concurrent_load.py` | 手工并发压测脚本，不属于 pytest 回归测试。 |
 
+公开分享页双语回归位于 `tests/unit/i18n/test_i18n.py`、
+`tests/integration/test_local_upload_lifecycle.py`、
+`tests/unit/test_static_asset_versioning.py` 与 `e2e/tests/i18n.spec.ts`；运行
+`uv run --frozen pytest -q tests/unit/i18n/test_i18n.py tests/unit/test_deep_read_prompt_config.py tests/unit/test_static_asset_versioning.py tests/integration/test_local_upload_lifecycle.py`
+和仓库阻断式 Chromium 浏览器回归可验证请求语言隔离、导出 bytes、复制内容及混合语言页面。
+
 ## 常用命令
 
 ```bash

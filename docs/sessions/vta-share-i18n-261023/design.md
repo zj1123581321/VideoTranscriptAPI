@@ -22,7 +22,7 @@
 ## 方案要点与已否决方案
 
 - **要点**：
-  1. 只让公开 `/view/{token}`（含处理中、失败、已清理等视图）、其 `?raw=` / `?page=` 输出、`/og/{token}.png` 和页面引用的 `/i18n.js` 接受 `lang=zh-CN|en`。参数缺省取站点 `language`；显式空值或不支持值返回 HTTP 400，不静默退回。参数在 URL 上，自然区分页面、导出和 OG 的共享缓存键。
+  1. 只让公开 `/view/{token}`（含处理中、失败、已清理等视图）、其 `?raw=` / `?page=` 输出、`/og/{token}.png` 和页面引用的 `/i18n.js` 接受 `lang=zh-CN|en`。参数缺省取站点 `language`；显式空值或不支持值返回 HTTP 400，不静默退回。显式语言响应设置 `Cache-Control: private, no-store`，不依赖未核实的代理 query cache key。
   2. 结果页提供中文 / English 切换链接，保留 token 与当前页面选择参数；结果页脚本词典、`<html lang>`、OG locale/image、复制的分享 URL 和全部站内 Raw/HTML 导出链接使用相同有效 UI 语言。手工分享的 `/view` URL 可把 `lang` 传给收件者。分享预览图片单独校验该参数并选择现有的按语言命名图片。
   3. 保持 `get_language()` 的站点配置含义。公开 view handler 在请求范围内建立并于 `finally` 恢复 UI 翻译语言上下文；Jinja `t()`、`html_lang()`、`og_locale()` 以及结果渲染器读该上下文。禁止逐请求改共享 `env.globals`。`asyncio.to_thread` 下游需用并发行为测试确认上下文传播，确保两个并发中英请求互不串语。
   4. `i18n.js` 对公开页通过带 `lang` 的 URL 取词典；静态首页和历史继续使用站点语言。API 参数错误沿用站点语言。原文内容与生成内容不进入 UI 翻译。
@@ -32,17 +32,17 @@
 
 ## 关键不变式
 
-1. [契约，待实现验证] 没有 `lang` 的 `/view`、导出和 OG 与当前全局语言行为一致；中文默认 UI 与内置中文 Prompt 字节保持既有值。实现位置：`i18n/__init__.py`、`api/routes/views.py`、`api/app.py`；由路由/Chromium 回归锁定。
-2. [契约，待实现验证] 显式 `lang=en` 只改变公开页 UI、导出元数据和分享预览语言；原始标题、转录及总结正文内容不变。由真实 Chromium 页面、clipboard payload 与 Raw/HTML 响应字节锁定。
-3. [契约，待实现验证] 同一进程并发请求 `lang=zh-CN` 和 `lang=en` 时，各自响应、脚本目录与 OG 图片不串语；异常或请求结束后后续无参请求仍使用站点默认。由生产 app/route 并发客户端测试锁定。
-4. [契约，待实现验证] `lang=` 与 `lang=fr` 均为 400；缺参与显式空参可区分。不接受值不静默回落。
-5. [契约，待实现验证] 深度阅读内置中文 Prompt 保持逐字不变，英文站点产生英文任务模板；访客只切 UI 后复制模板仍跟站点语言；自定义预设保持配置原文。由真实剪贴板行为锁定。
-6. [契约，待实现验证] 历史状态徽标在中英页面显示对应文案，API 状态枚举和过滤仍使用 canonical status。
+1. [契约，待实现验证] 没有 `lang` 的 `/view`、导出和 OG 与当前全局语言行为一致；中文默认 UI 与内置中文 Prompt 字节保持既有值。代码：`src/video_transcript_api/i18n/__init__.py`、`src/video_transcript_api/api/routes/views.py`、`src/video_transcript_api/api/app.py`；断言：`tests/integration/test_local_upload_lifecycle.py`、`tests/unit/test_static_asset_versioning.py`。
+2. [契约，待实现验证] 显式 `lang=en` 只改变公开页 UI、导出元数据和分享预览语言；原始标题、转录及总结正文内容不变。代码：`src/web/templates/base.html`、`src/web/templates/transcript.html`；断言：`e2e/tests/i18n.spec.ts`、`tests/integration/test_local_upload_lifecycle.py`。
+3. [契约，待实现验证] 同一进程并发请求 `lang=zh-CN` 和 `lang=en` 时，各自响应、脚本目录与 OG 图片不串语；异常或请求结束后后续无参请求仍使用站点默认。代码：`src/video_transcript_api/i18n/__init__.py`、`src/video_transcript_api/api/routes/views.py`；断言：`tests/unit/i18n/test_i18n.py`、`tests/integration/test_local_upload_lifecycle.py`。
+4. [契约，待实现验证] `lang=` 与 `lang=fr` 均为 400；缺参与显式空参可区分。不接受值不静默回落。代码：`src/video_transcript_api/api/routes/views.py`、`src/video_transcript_api/api/app.py`；断言：`tests/integration/test_local_upload_lifecycle.py`、`tests/unit/test_static_asset_versioning.py`、`e2e/tests/i18n.spec.ts`。
+5. [契约，待实现验证] 深度阅读内置中文 Prompt 保持逐字不变，英文站点产生英文任务模板；访客只切 UI 后复制模板仍跟站点语言；自定义预设保持配置原文。代码：`src/video_transcript_api/api/context.py`、`src/web/templates/transcript.html`；断言：`tests/unit/test_deep_read_prompt_config.py`、`e2e/tests/i18n.spec.ts`。
+6. [契约，待实现验证] 历史状态徽标在中英页面显示对应文案，API 状态枚举和过滤仍使用 canonical status。代码：`src/web/static/history.html`；断言：`e2e/tests/i18n.spec.ts`。
 
 ## 待验证前提
 
-1. [推断] 用 `ContextVar` 作为单请求 UI 语言上下文能覆盖 `asyncio.to_thread` 中的 `dialog_renderer`，且模板和 renderer 无上下文外延迟执行；在实现卡用并发 HTTP 回归验证。若不能，改用显式 translator 参数传播，不修改共享 Jinja 环境。
-2. [推断] 公开页 `lang` 查询参数与现有反代/应用缓存键一致；上线前核部署代理规则。如代理忽略 query 缓存键，必须调整该路径缓存规则或为这些响应禁用共享缓存。
+1. [代码契约，待并发回归验证] `ContextVar` 经 `asyncio.to_thread` 的传播由并发 HTTP 回归覆盖；公开路由不修改共享 Jinja globals。
+2. [部署侧未验证] 代理 query cache key 无仓内证据；显式 `lang` 响应因此使用 `private, no-store`，未改代理层。
 
 ## 验收路径
 

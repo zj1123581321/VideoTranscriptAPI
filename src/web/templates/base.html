@@ -81,6 +81,10 @@
             font-size: 1.8rem;
             font-weight: 600;
         }
+
+        .public-language-switch { display: flex; justify-content: center; gap: 12px; margin-top: 8px; font-size: 0.9rem; }
+        .public-language-switch a { color: inherit; }
+        .public-language-switch a[aria-current="page"] { font-weight: 700; }
         
         .header .meta {
             margin-top: 10px;
@@ -1144,6 +1148,12 @@
             </nav>
             {% endblock %}
             <h1>{{ title or t('web.viewer.default_title') }}</h1>
+            {% if view_token and language_switch_zh and language_switch_en %}
+            <nav class="public-language-switch" aria-label="{{ t('web.transcript.language_switch_aria') }}">
+                <a href="{{ language_switch_zh }}" lang="zh-CN"{% if ui_language == 'zh-CN' %} aria-current="page"{% endif %}>中文</a>
+                <a href="{{ language_switch_en }}" lang="en"{% if ui_language == 'en' %} aria-current="page"{% endif %}>English</a>
+            </nav>
+            {% endif %}
             {% if author or url %}
             <div class="meta">
                 {% if author %}👤 {{ author }}{% endif %}
@@ -1166,7 +1176,7 @@
         </div>
     </div>
     
-    <script src="/i18n.js"></script>
+    <script src="/i18n.js?lang={{ html_lang() }}"></script>
     <script src="/static/js/i18n.js?v={{ asset_v }}"></script>
     <script src="/static/js/auth-storage.js?v={{ asset_v }}"></script>
     {% block extra_js %}{% endblock %}

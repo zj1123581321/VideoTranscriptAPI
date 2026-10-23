@@ -1,21 +1,21 @@
 """Install C1 catalog helpers onto a Jinja2 environment.
 
 Templates call ``t(key, **kwargs)``, ``html_lang()`` and ``og_locale()``.
-The callables re-read the global language on every render so a language
-switch does not require rebuilding the environment.
+The callables read the request-scoped public-page language when set and the
+configured site language otherwise; the shared Jinja environment is unchanged.
 """
 
-from ...i18n import get_language, t
+from ...i18n import get_ui_language, t
 
 
 def html_lang() -> str:
     """Return the current UI language tag for ``<html lang>``."""
-    return get_language()
+    return get_ui_language()
 
 
 def og_locale() -> str:
     """Return the Open Graph locale (``zh_CN`` / ``en``)."""
-    return "en" if get_language() == "en" else "zh_CN"
+    return "en" if get_ui_language() == "en" else "zh_CN"
 
 
 def install_i18n(env) -> None:

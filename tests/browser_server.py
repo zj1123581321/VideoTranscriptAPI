@@ -14,7 +14,7 @@ import tempfile
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -33,7 +33,13 @@ _logger_spec.loader.exec_module(_logger_mod)
 _logger_mod._config_cache = {}
 sys.modules["video_transcript_api.utils.logging.logger"] = _logger_mod
 
-from video_transcript_api.i18n import get_language, web_catalog_script
+from video_transcript_api.i18n import (
+    get_language,
+    ui_language_scope,
+    validate_language,
+    web_catalog_script,
+)
+from video_transcript_api.api.context import get_deep_read_prompt_presets
 from video_transcript_api.utils.logging.logger import load_config
 from video_transcript_api.api.services.view_token_resolver import (
     build_stage_progress_display,
@@ -159,6 +165,11 @@ def seed_database(db: sqlite3.Connection) -> None:
             "https://www.youtube.com/watch?v=fixture",
         ),
     )
+    for token, status in (("browser-fixture-processing", "processing"), ("browser-fixture-failed", "failed")):
+        db.execute(
+            "INSERT INTO history VALUES (?, '', ?, ?, ?)",
+            (token, "2026-10-08T11:00:00", status, "https://example.com/status-fixture"),
+        )
     db.execute(
         "INSERT INTO uploads VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, 'accepted', NULL, ?, ?)",
         (
@@ -236,9 +247,15 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
             self.send_bytes(200, b"ready", "text/plain; charset=utf-8")
             return
         if path == "/i18n.js":
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            try:
+                language = validate_language(query["lang"][0]) if "lang" in query else get_language()
+            except ValueError:
+                self.send_bytes(400, b"invalid language", "text/plain; charset=utf-8")
+                return
             self.send_bytes(
                 200,
-                web_catalog_script(get_language()).encode("utf-8"),
+                web_catalog_script(language).encode("utf-8"),
                 "application/javascript; charset=utf-8",
             )
             return
@@ -268,7 +285,16 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
             return
         if path.startswith("/view/"):
             view_token = path.removeprefix("/view/")
-            query = parse_qs(parsed.query)
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            try:
+                ui_language = (
+                    validate_language(query["lang"][0])
+                    if "lang" in query
+                    else get_language()
+                )
+            except ValueError:
+                self.send_bytes(400, b"invalid language", "text/plain; charset=utf-8")
+                return
             if view_token.startswith("upload_"):
                 with sqlite3.connect(self.db_path) as db:
                     row = db.execute("SELECT share_active FROM uploads WHERE view_token = ?", (view_token,)).fetchone()
@@ -283,9 +309,10 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
                 )
                 return
             if "page" in query:
+                page_lang = "en" if ui_language == "en" else "zh_CN"
                 self.send_bytes(
                     200,
-                    ("<!doctype html><html><body><h1>"
+                    (f'<!doctype html><html lang="{ui_language}"><head><meta property="og:locale" content="{page_lang}"></head><body><h1>'
                      + _fixture_title()
                      + "</h1><p>"
                      + _fixture_transcript()
@@ -298,7 +325,7 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
                 status = "failed"
             elif path.endswith("cleaned"):
                 status = "file_cleaned"
-            self.serve_view(status, view_token)
+            self.serve_view(status, view_token, ui_language, parsed.query)
             return
         if path == "/api/uploads/capabilities":
             if not self.authorized():
@@ -612,7 +639,13 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
             content_type += "; charset=utf-8"
         self.send_bytes(200, path.read_bytes(), content_type)
 
-    def serve_view(self, status: str, view_token: str = VIEW_TOKEN) -> None:
+    def serve_view(
+        self,
+        status: str,
+        view_token: str = VIEW_TOKEN,
+        ui_language: str = "zh-CN",
+        query_string: str = "",
+    ) -> None:
         template_name = {
             "processing": "processing.html",
             "failed": "error.html",
@@ -635,13 +668,14 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
             "calibrated_html": _fixture_calibrated_html(),
             "calibrated_text": _fixture_transcript(),
             "stats": {"original_length": len(_fixture_transcript()), "calibrated_length": len(_fixture_transcript()), "summary_length": 13},
-            "deep_read_prompt_presets": [],
+            "deep_read_prompt_presets": get_deep_read_prompt_presets({"web": {}}),
             "page_title": _fixture_title(),
             "error_message": _fixture_error_message(),
             "message": _fixture_error_message(),
         }
         if status == "processing":
-            context["stage_progress"] = _fixture_stage_progress()
+            with ui_language_scope(ui_language):
+                context["stage_progress"] = _fixture_stage_progress()
         if view_token == VIEW_TOKEN_WITH_CARD:
             port = self.server.server_address[1]
             context["share_card"] = {
@@ -649,8 +683,13 @@ class BrowserFixtureHandler(BaseHTTPRequestHandler):
                 "points": ["First fixture point", "Second fixture point"],
                 "generated_at": "2026-10-16T12:00:00+08:00",
             }
-            context["og_image_url"] = f"http://127.0.0.1:{port}/og/{view_token}.png?v=1"
-        html = TEMPLATES.get_template(template_name).render(**context)
+            context["og_image_url"] = f"http://127.0.0.1:{port}/og/{view_token}.png?v=1&lang={ui_language}"
+        context["ui_language"] = ui_language
+        query = [(key, value) for key, values in parse_qs(query_string, keep_blank_values=True).items() if key != "lang" for value in values]
+        context["language_switch_zh"] = f"/view/{view_token}?{urlencode(query + [('lang', 'zh-CN')])}"
+        context["language_switch_en"] = f"/view/{view_token}?{urlencode(query + [('lang', 'en')])}"
+        with ui_language_scope(ui_language):
+            html = TEMPLATES.get_template(template_name).render(**context)
         self.send_bytes(200, html.encode("utf-8"), "text/html; charset=utf-8")
 
 

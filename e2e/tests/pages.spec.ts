@@ -91,14 +91,14 @@ test('public reading page displays transcript and opens a working text export', 
   const exportMenu = page.locator('.export-links-details');
   await exportMenu.locator('summary').click();
   const rawExport = page.getByTitle('导出校对文本（纯文本）');
-  await expect(rawExport).toHaveAttribute('href', '/view/browser-fixture-view?raw=calibrated');
+  await expect(rawExport).toHaveAttribute('href', '/view/browser-fixture-view?raw=calibrated&lang=zh-CN');
   await rawExport.click();
   await expect(page.locator('body')).toContainText('隔离浏览器夹具中的正文，验证公开阅读与导出。');
 
   await page.goto('/view/browser-fixture-view');
   await page.locator('.export-links-details summary').click();
   const htmlExport = page.getByTitle('导出校对文本（HTML 页面）');
-  await expect(htmlExport).toHaveAttribute('href', '/view/browser-fixture-view?page=calibrated');
+  await expect(htmlExport).toHaveAttribute('href', '/view/browser-fixture-view?page=calibrated&lang=zh-CN');
   await htmlExport.click();
   await expect(page.getByRole('heading', { name: '浏览器回归示例' })).toBeVisible();
   await expect(page.locator('body')).toContainText('隔离浏览器夹具中的正文，验证公开阅读与导出。');
@@ -164,7 +164,7 @@ test('share view with card emits twitter large image and og tags', async ({ page
   );
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
     'content',
-    `${baseURL}/og/${token}.png?v=1`,
+    `${baseURL}/og/${token}.png?v=1&lang=zh-CN`,
   );
   await expect(page.locator('meta[property="og:image:width"]')).toHaveAttribute(
     'content',
