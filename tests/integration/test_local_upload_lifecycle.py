@@ -1218,6 +1218,33 @@ def test_local_upload_funasr_branch_observes_source_only_before_llm(
         cache.close()
 
 
+@pytest.mark.parametrize("page_status", ["processing", "failed", "file_cleaned"])
+def test_public_status_pages_keep_language_switch(lifecycle_client, page_status):
+    client, cache, _, _ = lifecycle_client
+    upload = _make_upload(cache, include_summary=False, complete=False)
+    if page_status != "processing":
+        transcript = Path(cache.get_cache(
+            platform="local_upload", media_id=upload["media_id"],
+            use_speaker_recognition=False,
+        )["file_path"]) / "transcript_capswriter.txt"
+        transcript.unlink()
+    root_status = "success" if page_status == "file_cleaned" else page_status
+    cache.update_task_status(
+        upload["root_task_id"], root_status,
+        platform="local_upload", media_id=upload["media_id"],
+    )
+    stored = cache.get_local_upload_by_id(upload["upload_id"])
+    assert stored["root_status"] == root_status
+    view_data = ViewTokenResolver(cache).get_view_data_by_token(upload["view_token"])
+    assert view_data["status"] == page_status
+    assert "view_token" not in view_data
+
+    response = client.get(f"/view/{upload['view_token']}?lang=en&source=keep")
+    assert response.status_code == 200
+    assert f'href="/view/{upload["view_token"]}?source=keep&amp;lang=zh-CN"' in response.text
+    assert f'href="/view/{upload["view_token"]}?source=keep&amp;lang=en"' in response.text
+
+
 def test_public_view_language_isolated_across_concurrent_requests(lifecycle_client):
     client, cache, _llm_queue, _user = lifecycle_client
     from video_transcript_api.utils.logging.logger import load_config
@@ -1313,8 +1340,13 @@ def test_public_view_language_isolated_across_concurrent_requests(lifecycle_clie
 
         invalid_empty = client.get(f"/view/{token}?lang=")
         invalid_tag = client.get(f"/view/{token}?lang=fr")
-        assert invalid_empty.status_code == invalid_tag.status_code == 400
+        invalid_og = client.get(f"/og/{token}.png?lang=fr")
+        assert invalid_empty.status_code == invalid_tag.status_code == invalid_og.status_code == 400
         assert invalid_empty.headers["Cache-Control"] == "private, no-store"
+        assert invalid_empty.headers["Content-Type"] == "text/plain; charset=utf-8"
+        assert invalid_empty.content == "公开页面语言参数无效，仅支持 zh-CN 或 en".encode("utf-8")
+        assert invalid_og.headers["Content-Type"] == "text/plain; charset=utf-8"
+        assert invalid_og.content == invalid_empty.content
 
         after_parallel = client.get(f"/view/{token}")
         assert 'lang="zh-CN"' in after_parallel.text

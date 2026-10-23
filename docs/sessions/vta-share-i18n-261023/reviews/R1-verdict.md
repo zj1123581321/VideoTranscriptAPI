@@ -7,3 +7,4 @@ failure-visibility: p2-only
 - 原剩余 P2：缺少真实 `DialogRenderer` 说话人 badge 的路由级语言断言。最终补充测试 fixture 使用结构化校对产物，在 `?lang=en` 检查 `Unconfirmed` 且保留原说话人名；该补测为 H1 之后增量，未纳入 R1 原审范围。
 - 另一个接受项：字体/模板异常通用 500 没有 `no-store`；正文无语言差异，保持 fail-fast，不新增通用 catch。
 - Reviewer 未运行测试；行为证据来自实现与 CI。结论不阻断交付。
+- H2 OCR 续修发生在 R1 之后；本 verdict 不代表该增量已审，后续主审负责复核。

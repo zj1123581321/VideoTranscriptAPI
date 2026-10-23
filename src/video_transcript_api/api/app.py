@@ -366,6 +366,7 @@ def create_app(
                     content=translate_catalog_text(
                         get_language(), "web.error.invalid_public_language"
                     ),
+                    media_type="text/plain; charset=utf-8",
                     status_code=400,
                     headers={"Cache-Control": "private, no-store"},
                 )

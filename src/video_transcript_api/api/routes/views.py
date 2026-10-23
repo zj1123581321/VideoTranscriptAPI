@@ -1403,6 +1403,7 @@ async def view_transcript(
     except ValueError:
         return Response(
             content=t("web.error.invalid_public_language"),
+            media_type="text/plain; charset=utf-8",
             status_code=400,
             headers={"Cache-Control": "private, no-store"},
         )
@@ -1572,6 +1573,7 @@ async def og_share_card(view_token: str, lang: Optional[str] = None):
     except ValueError:
         return Response(
             content=t("web.error.invalid_public_language"),
+            media_type="text/plain; charset=utf-8",
             status_code=400,
             headers={"Cache-Control": "private, no-store"},
         )

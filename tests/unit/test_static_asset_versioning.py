@@ -184,3 +184,5 @@ class TestStaticNoCacheHeader:
         assert 'window.__VTA_LANG__ = "zh-CN"' in default.text
         assert empty.status_code == unsupported.status_code == 400
         assert empty.headers["Cache-Control"] == "private, no-store"
+        assert empty.headers["Content-Type"] == "text/plain; charset=utf-8"
+        assert empty.content == "公开页面语言参数无效，仅支持 zh-CN 或 en".encode("utf-8")

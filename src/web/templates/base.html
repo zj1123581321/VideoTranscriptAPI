@@ -1148,7 +1148,7 @@
             </nav>
             {% endblock %}
             <h1>{{ title or t('web.viewer.default_title') }}</h1>
-            {% if view_token and language_switch_zh and language_switch_en %}
+            {% if language_switch_zh and language_switch_en %}
             <nav class="public-language-switch" aria-label="{{ t('web.transcript.language_switch_aria') }}">
                 <a href="{{ language_switch_zh }}" lang="zh-CN"{% if ui_language == 'zh-CN' %} aria-current="page"{% endif %}>中文</a>
                 <a href="{{ language_switch_en }}" lang="en"{% if ui_language == 'en' %} aria-current="page"{% endif %}>English</a>
