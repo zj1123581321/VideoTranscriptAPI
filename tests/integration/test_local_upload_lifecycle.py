@@ -1246,6 +1246,21 @@ def test_public_view_language_isolated_across_concurrent_requests(lifecycle_clie
         token = upload["view_token"]
         view_data = ViewTokenResolver(cache).get_view_data_by_token(token)
         cache_dir = Path(view_data["cache_dir"])
+        (cache_dir / "llm_processed.json").write_text(
+            json.dumps(
+                {
+                    "dialogs": [
+                        {
+                            "segment_id": "seg_1", "speaker": "说话人1",
+                            "speaker_id": "S1", "text": "中文校对正文，原样保留。",
+                        },
+                    ],
+                    "speaker_inference_meta": {"S1": {"applied": False}},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
         card_path = cache_dir / "llm_share_card.json"
         card_path.write_text(json.dumps({
             "version": 1,
@@ -1267,6 +1282,8 @@ def test_public_view_language_isolated_across_concurrent_requests(lifecycle_clie
         assert "Summary" in english.text
         assert "中文原始标题" in english.text
         assert "中文校对正文，原样保留。" in english.text
+        assert 'data-speaker-status="pending">Unconfirmed</span>' in english.text
+        assert "说话人1" in english.text
         assert "Copy deep-read prompt" in english.text
         assert r"\u8bf7\u8bfb\u53d6\u4e0b\u9762 URL" in english.text
         assert f"/view/{token}?source=keep&amp;lang=zh-CN" in english.text

@@ -48,6 +48,7 @@ def _base_context(**overrides) -> dict:
         "calibrated_html": "<p>This is the calibrated transcript body text.</p>",
         "use_speaker_recognition": False,
         "view_token": "test-view-token-123",
+        "ui_language": "zh-CN",
         "stats": {
             "original_length": 100,
             "calibrated_length": 90,
@@ -164,7 +165,7 @@ class TestDeepReadPromptButtonsInTranscriptPage:
         assert html.count('class="quick-copy-btn deep-read-prompt-btn"') == 2
         assert "Read deeply" in html
         assert "Ask for details" in html
-        assert 'data-path="/view/test-view-token-123?raw=calibrated"' in html
+        assert 'data-path="/view/test-view-token-123?raw=calibrated&amp;lang=zh-CN"' in html
         assert "Read the full transcript at" in html
         assert "{url}" in html
 
